@@ -1,0 +1,457 @@
+"use client";
+import NotificationDropdown from "@/components/header/NotificationDropdown";
+import UserDropdown from "@/components/header/UserDropdown";
+import { useSidebar } from "@/context/SidebarContext";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { fetchWithAuth } from "@/utils/fetchWithAuth";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogFooter,
+    DialogTitle,
+    DialogDescription,
+} from "@/components/ui/dialog";
+
+interface AppHeaderProps {
+    pageTitle?: string;
+}
+
+const AppHeader: React.FC<AppHeaderProps> = ({ pageTitle }) => {
+    const [isModalOpen, setModalOpen] = useState(false);
+    const [editingPatientId, setEditingPatientId] = useState<number | null>(null);
+    const { toggleSidebar } = useSidebar();
+    const inputRef = useRef<HTMLInputElement>(null);
+    const router = useRouter();
+
+    const [formData, setFormData] = useState({
+        firstName: "",
+        middleName: "",
+        lastName: "",
+        gender: "",
+        dateOfBirth: "",
+        phoneNumber: "",
+        email: "",
+        smsConsent: true,  // SMS consent is checked by default
+        emailConsent: true, // Email consent is checked by default
+        voicemailConsent: true, // Voicemail consent is checked by default
+    });
+
+    const [errorMessage, setErrorMessage] = useState("");
+    const [searchTerm, setSearchTerm] = useState("");
+
+    const resetForm = () => {
+        setFormData({
+            firstName: "",
+            middleName: "",
+            lastName: "",
+            gender: "",
+            dateOfBirth: "",
+            phoneNumber: "",
+            email: "",
+            smsConsent: true,
+            emailConsent: true,
+            voicemailConsent: true,
+        });
+        setEditingPatientId(null);
+        setErrorMessage("");
+    };
+
+    const handleInputChange = (
+        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    ) => {
+        const { name, value, type, checked } = e.target as HTMLInputElement;
+        setFormData((prev) => ({
+            ...prev,
+            [name]: type === "checkbox" ? checked : value,
+        }));
+    };
+
+    const handleSave = async () => {
+        try {
+            let response: Response;
+            const payload = { ...formData };
+
+            if (editingPatientId) {
+                response = await fetchWithAuth(
+                    `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${editingPatientId}`,
+                    {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ ...payload, id: editingPatientId }),
+                    }
+                );
+            } else {
+                response = await fetchWithAuth(
+                    `${process.env.NEXT_PUBLIC_API_URL}/api/patients`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload),
+                    }
+                );
+            }
+
+            const res = await response.json();
+            if (res.success) {
+                setModalOpen(false);
+                resetForm();
+                router.refresh();
+            } else {
+                setErrorMessage(res.message || "Failed to save patient");
+            }
+        } catch {
+            setErrorMessage("Something went wrong.");
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!editingPatientId) return;
+        if (!confirm("Are you sure you want to delete this patient?")) return;
+
+        try {
+            const response = await fetchWithAuth(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${editingPatientId}`,
+                { method: "DELETE" }
+            );
+            const res = await response.json();
+            if (res.success) {
+                setModalOpen(false);
+                resetForm();
+                router.refresh();
+            } else {
+                setErrorMessage(res.message || "Failed to delete patient");
+            }
+        } catch {
+            setErrorMessage("Something went wrong.");
+        }
+    };
+
+    const runSearch = useCallback(() => {
+        if (searchTerm.trim()) {
+            router.push(`/patients?search=${encodeURIComponent(searchTerm.trim())}`);
+        }
+    }, [searchTerm, router]);
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+                event.preventDefault();
+                inputRef.current?.focus();
+            }
+            if (event.key === "Enter" && document.activeElement === inputRef.current) {
+                event.preventDefault();
+                runSearch();
+            }
+        };
+
+        document.addEventListener("keydown", handleKeyDown);
+
+        return () => {
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [runSearch, searchTerm]);
+
+    return (
+        <header className="sticky top-0 flex w-full bg-white border-b border-gray-200 z-50 dark:bg-gray-900">
+            <div className="flex items-center justify-between w-full px-4 py-2">
+                {/* Left section: sidebar + title */}
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={toggleSidebar}
+                        className="flex items-center justify-center h-11 w-11 rounded-xl border border-gray-200 bg-white shadow-sm hover:bg-gray-50 text-gray-600"
+                    >
+                        <svg
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                    </button>
+                    {pageTitle && <h1 className="text-lg font-semibold">{pageTitle}</h1>}
+                </div>
+
+                {/* Right section: search + actions grouped together */}
+                <div className="flex items-center gap-3 flex-1 justify-end">
+                    {/* Search box */}
+                    <div className="max-w-md w-full">
+                        <div className="relative">
+        <span className="absolute inset-y-0 left-3 flex items-center">
+          <svg
+              className="w-4 h-4 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+          >
+            <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 21l-4.35-4.35M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"
+            />
+          </svg>
+        </span>
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="Search or type command..."
+                                className="h-11 w-full rounded-lg border border-gray-200 pl-9 pr-14 text-sm text-gray-800 shadow-sm focus:ring-2 focus:ring-blue-500"
+                            />
+                            <button
+                                onClick={runSearch}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-500"
+                            >
+                                ⌘ K
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Patient button */}
+                    <button
+                        onClick={() => {
+                            resetForm();
+                            setModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-blue-100 text-blue-700 px-3 py-1.5 text-sm font-medium hover:bg-blue-200"
+                    >
+                        <span className="text-xl font-bold">+</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30" className="w-5 h-5">
+                            <path
+                                className="stroke-[#6C3DB7]"
+                                d="M24,28H6c-1.1,0-2-0.9-2-2v0c0-3.9,3.1-7,7-7h8c3.9,0,7,3.1,7,7v0C26,27.1,25.1,28,24,28z"
+                            />
+                            <circle className="fill-[#6EBAFF]" cx="15" cy="9" r="6" />
+                        </svg>
+                    </button>
+
+                    {/* Appointment button */}
+                    <button
+                        onClick={() => window.dispatchEvent(new Event("open-appointment-modal"))}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-blue-100 text-blue-700 px-3 py-1.5 text-sm font-medium hover:bg-blue-200"
+                    >
+                        <span className="text-xl font-bold">+</span>
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-7 w-7"
+                            viewBox="0 0 26 26"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                        >
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                            <line x1="3" y1="10" x2="21" y2="10" />
+                            <line x1="8" y1="2" x2="8" y2="6" />
+                            <line x1="16" y1="2" x2="16" y2="6" />
+                        </svg>
+                    </button>
+
+                    <NotificationDropdown />
+                    <UserDropdown />
+                </div>
+            </div>
+
+            <Dialog open={isModalOpen} onOpenChange={setModalOpen}>
+                <DialogContent
+                    className="max-w-2xl"
+                    onClose={() => {
+                        setModalOpen(false);
+                        resetForm();
+                    }}
+                >
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-semibold">
+                            {editingPatientId ? "Edit Patient" : "Create Patient"}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Fill out the patient details below.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <form className="space-y-6">
+                        <div className="grid grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">
+                                    <span className="text-red-500">*</span> First Name
+                                </label>
+                                <input
+                                    name="firstName"
+                                    required
+                                    placeholder="First name"
+                                    value={formData.firstName}
+                                    onChange={handleInputChange}
+                                    className="w-full p-2 border rounded"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">
+                                    <span className="text-red-500">*</span> Middle Name
+                                </label>
+                                <input
+                                    name="middleName"
+                                    required
+                                    placeholder="Middle name"
+                                    value={formData.middleName}
+                                    onChange={handleInputChange}
+                                    className="w-full p-2 border rounded"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">
+                                    <span className="text-red-500">*</span> Last Name
+                                </label>
+                                <input
+                                    name="lastName"
+                                    required
+                                    placeholder="Last name"
+                                    value={formData.lastName}
+                                    onChange={handleInputChange}
+                                    className="w-full p-2 border rounded"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">
+                                    <span className="text-red-500">*</span> Phone Number
+                                </label>
+                                <input
+                                    name="phoneNumber"
+                                    required
+                                    placeholder="(555) 123-4567"
+                                    value={formData.phoneNumber}
+                                    onChange={handleInputChange}
+                                    className="w-full p-2 border rounded"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Include country code if outside your region.
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">
+                                    <span className="text-red-500">*</span> Gender
+                                </label>
+                                <select
+                                    name="gender"
+                                    required
+                                    value={formData.gender}
+                                    onChange={handleInputChange}
+                                    className="w-full p-2 border rounded"
+                                >
+                                    <option value="">Select gender</option>
+                                    <option value="male">Male</option>
+                                    <option value="female">Female</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">
+                                    <span className="text-red-500">*</span> Date of Birth
+                                </label>
+                                <input
+                                    type="date"
+                                    name="dateOfBirth"
+                                    required
+                                    value={formData.dateOfBirth}
+                                    onChange={handleInputChange}
+                                    className="w-full p-2 border rounded"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Email</label>
+                                <input
+                                    type="email"
+                                    name="email"
+                                    placeholder="name@example.com"
+                                    value={formData.email}
+                                    onChange={handleInputChange}
+                                    className="w-full p-2 border rounded"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Consent to receive notifications</label>
+                            <div className="flex items-center gap-4">
+                                <div>
+                                    <input
+                                        type="checkbox"
+                                        id="emailConsent"
+                                        name="emailConsent"
+                                        checked={formData.emailConsent}
+                                        onChange={handleInputChange}
+                                    />
+                                    <label htmlFor="emailConsent" className="ml-2">Email</label>
+                                </div>
+                                <div>
+                                    <input
+                                        type="checkbox"
+                                        id="smsConsent"
+                                        name="smsConsent"
+                                        checked={formData.smsConsent}
+                                        onChange={handleInputChange}
+                                    />
+                                    <label htmlFor="smsConsent" className="ml-2">SMS/Text</label>
+                                </div>
+                                <div>
+                                    <input
+                                        type="checkbox"
+                                        id="voicemailConsent"
+                                        name="voicemailConsent"
+                                        checked={formData.voicemailConsent}
+                                        onChange={handleInputChange}
+                                    />
+                                    <label htmlFor="voicemailConsent" className="ml-2">Voicemail</label>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+
+
+                    {errorMessage && (
+                        <p className="text-red-600 text-sm mt-3">{errorMessage}</p>
+                    )}
+
+                    <DialogFooter className="flex justify-between items-center mt-6">
+                        <div className="flex gap-2">
+                            {editingPatientId && (
+                                <button
+                                    onClick={handleDelete}
+                                    className="px-3 py-1.5 bg-red-500 text-white rounded hover:bg-red-600"
+                                >
+                                    Delete
+                                </button>
+                            )}
+                            <button
+                                onClick={() => {
+                                    setModalOpen(false);
+                                    resetForm();
+                                }}
+                                className="px-3 py-1.5 bg-gray-200 rounded hover:bg-gray-300"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSave}
+                                className="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700"
+                            >
+                                {editingPatientId ? "Update" : "Save"}
+                            </button>
+                        </div>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </header>
+    );
+};
+
+
+export default AppHeader;

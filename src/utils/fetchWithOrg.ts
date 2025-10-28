@@ -1,0 +1,72 @@
+// export function apiBase() {
+//     return process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
+// }
+//
+// export async function fetchWithOrg(input: string, init: RequestInit = {}) {
+//     const headers = new Headers(init.headers || {});
+//     const orgId = typeof window !== "undefined" ? localStorage.getItem("orgId") : null;
+//     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+//
+//     headers.set("Content-Type", "application/json");
+//     if (orgId) headers.set("orgId", String(orgId));          // 👈 EXACT header name
+//     if (token) headers.set("Authorization", `Bearer ${token}`);
+//
+//     const url = input.startsWith("http") ? input : `${apiBase()}${input}`;
+//     return fetch(url, { ...init, headers, cache: "no-store" });
+// }
+
+
+
+
+
+
+
+
+// utils/fetchWithOrg.ts
+export async function fetchWithOrg(input: RequestInfo, init: RequestInit = {}) {
+    const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
+    // Build the final URL only if input is relative
+    const url =
+        typeof input === "string" && !/^https?:\/\//i.test(input)
+            ? `${base}${input.startsWith("/") ? "" : "/"}${input}`
+            : (input as string);
+
+    const headers = new Headers(init.headers || {});
+    headers.set("Accept", "application/json");
+    // only set Content-Type for requests with a body
+    if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+
+    // X-Tenant-Name header (NEW - replaces orgId)
+    const selectedTenant = typeof window !== "undefined" ? localStorage.getItem("selectedTenant") : null;
+    if (selectedTenant) {
+        headers.set("X-Tenant-Name", selectedTenant);
+    }
+
+    // orgId header (DEPRECATED - kept for backward compatibility)
+    const orgId = typeof window !== "undefined" ? localStorage.getItem("orgId") : null;
+    if (orgId) headers.set("orgId", String(orgId));
+
+    // Authorization header — only if the token looks valid (JWT format)
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (token && /\S+\.\S+\.\S+/.test(token)) {
+        headers.set("Authorization", `Bearer ${token}`);
+    } else {
+        headers.delete("Authorization");
+    }
+
+    return fetch(url, {
+        ...init,
+        headers,
+        cache: "no-store",
+        credentials: "include", // safe if your API ever uses cookies
+    });
+
+
+
+}
+
+
+
+
+
