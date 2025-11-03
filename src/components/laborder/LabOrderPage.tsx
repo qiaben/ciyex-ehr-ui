@@ -1,317 +1,763 @@
 "use client";
 
-import { useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { fetchWithAuth } from "@/utils/fetchWithAuth";
+import { handleLabOrderPrint } from "@/components/laborder/LabOrderForm";
+
+/* ---------------- Types ---------------- */
+ 
 
 type LabOrder = {
-    orderNumber: string;
-    reporting: string;
-    type: string;
-    qualifier: string;
-    procedure: string;
-    icd10: string;
-    modifier: string;
-    category: string;
-    diagnostic: string;
-    service: string;
-    status: string;
-    date: string;
+  id?: number;
+  patientId: number;
+  patientFirstName: string;
+  patientLastName: string;
+  patientHomePhone: string;
+  mrn: string;
+  testCode: string;
+  orderName: string;
+  testDisplay: string;
+  status: string;        // draft | active | pending | completed | cancelled | revoked
+  priority: string;      // routine | urgent | stat
+  orderDateTime: string; // ISO
+  orderDate: string;     // YYYY-MM-DD
+  labName: string;
+  orderNumber: string;
+  orderingProvider: string;
+  physicianName: string;
+  specimenId: string;
+  notes: string;
+  diagnosisCode?: string;
+  result: string;        // Pending | Partial | Final
+  procedureCode?: string;
 };
 
-export default function LabOrdersPage() {
-    const [orders, setOrders] = useState<LabOrder[]>([
-        {
-            orderNumber: "12345",
-            reporting: "Diagnosis X",
-            type: "Standard",
-            qualifier: "Primary",
-            procedure: "CPT4-99213",
-            icd10: "A10",
-            modifier: "None",
-            category: "Laboratory",
-            diagnostic: "Yes",
-            service: "Blood Test",
-            status: "Pending",
-            date: "2025-09-06",
-        },
-    ]);
+/* ---------------- Response Normalizer ---------------- */
+// Backend may return in different shapes (after recent changes):
+// 1. { success:true, data:[...] }
+// 2. [ ... ] (raw array)
+// 3. { content:[...], success?:bool }
+// 4. { items:[...]} or { records:[...] }
+// This helper extracts an array of orders or returns [].
+function normalizeOrders(payload: unknown): LabOrder[] {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload as LabOrder[];
+  if (typeof payload === 'object') {
+    const obj = payload as Record<string, unknown>;
+    const keys = ['data','content','items','records','result'];
+    for (const k of keys) {
+      if (Array.isArray(obj[k])) return obj[k] as LabOrder[];
+    }
+  }
+  return [];
+}
 
-    const [form, setForm] = useState<LabOrder>({
-        orderNumber: "",
-        reporting: "",
-        type: "Standard",
-        qualifier: "All",
-        procedure: "",
-        icd10: "",
-        modifier: "",
-        category: "Unassigned",
-        diagnostic: "",
-        service: "",
-        status: "Pending",
-        date: new Date().toISOString().slice(0, 10),
-    });
+// (Create/Edit handled on standalone page)
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setForm((prev) => ({ ...prev, [name]: value }));
-    };
+/* ---------------- Helpers ---------------- */
 
-    const handleSave = () => {
-        if (!form.orderNumber) {
-            alert("Order Number is required");
-            return;
-        }
-        setOrders([...orders, form]);
-        setForm({
-            orderNumber: "",
-            reporting: "",
-            type: "Standard",
-            qualifier: "All",
-            procedure: "",
-            icd10: "",
-            modifier: "",
-            category: "Unassigned",
-            diagnostic: "",
-            service: "",
-            status: "Pending",
-            date: new Date().toISOString().slice(0, 10),
-        });
-    };
+function FieldRow({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="grid gap-1 text-sm">
+      <div className="text-gray-900">{label}</div>
+      {children}
+    </div>
+  );
+}
 
-    const handleCancel = () => {
-        setForm({
-            orderNumber: "",
-            reporting: "",
-            type: "Standard",
-            qualifier: "All",
-            procedure: "",
-            icd10: "",
-            modifier: "",
-            category: "Unassigned",
-            diagnostic: "",
-            service: "",
-            status: "Pending",
-            date: new Date().toISOString().slice(0, 10),
-        });
-    };
+function statusBadgeClasses(status?: string) {
+  const s = (status || "").toLowerCase();
+  if (s === "active")  return "bg-green-100 text-green-800 ring-1 ring-green-200";
+  if (s === "pending") return "bg-red-100 text-red-800 ring-1 ring-red-200";
+  return "bg-gray-100 text-gray-800 ring-1 ring-gray-200";
+}
 
-    return (
-        <div className="p-8 max-w-7xl mx-auto space-y-8">
-            {/* Page Header */}
-            <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold">Lab Orders – Medical Coding</h1>
-            </div>
+function resolveOrgId(): string {
+  if (typeof window !== "undefined") {
+    const fromLS = window.localStorage.getItem("orgId");
+    if (fromLS && fromLS.trim()) return fromLS.trim();
+  }
+  if (process.env.NEXT_PUBLIC_ORG_ID) return String(process.env.NEXT_PUBLIC_ORG_ID);
+  return "1";
+}
 
-            {/* Entry Form */}
-            <div className="bg-white shadow rounded-lg p-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                <div className="flex flex-col">
-                    <label className="text-sm font-semibold">Order Number *</label>
-                    <input
-                        type="text"
-                        name="orderNumber"
-                        value={form.orderNumber}
-                        onChange={handleChange}
-                        placeholder="Enter Order #"
-                        className="border rounded p-2 text-sm"
-                    />
-                </div>
+// user display name resolution now done on form page
 
-                <div className="flex flex-col">
-                    <label className="text-sm font-semibold">Reporting / Relate To</label>
-                    <input
-                        type="text"
-                        name="reporting"
-                        value={form.reporting}
-                        onChange={handleChange}
-                        placeholder="Diagnosis / Service Code"
-                        className="border rounded p-2 text-sm"
-                    />
-                </div>
+function formatMrn(mrn?: string) {
+  if (!mrn) return "—";
+  const trimmed = String(mrn).trim();
+  if (/^mrn\b/i.test(trimmed)) return trimmed;
+  return `MRN ${trimmed}`;
+}
 
-                <div className="flex flex-col">
-                    <label className="text-sm font-semibold">Type</label>
-                    <select
-                        name="type"
-                        value={form.type}
-                        onChange={handleChange}
-                        className="border rounded p-2 text-sm"
-                    >
-                        <option>Standard</option>
-                        <option>Custom</option>
-                    </select>
-                </div>
+// order number generation handled in standalone form component
 
-                <div className="flex flex-col">
-                    <label className="text-sm font-semibold">Qualifier</label>
-                    <select
-                        name="qualifier"
-                        value={form.qualifier}
-                        onChange={handleChange}
-                        className="border rounded p-2 text-sm"
-                    >
-                        <option>All</option>
-                        <option>Primary</option>
-                        <option>Secondary</option>
-                    </select>
-                </div>
+/* ---------------- Toast ---------------- */
 
-                <div className="flex flex-col">
-                    <label className="text-sm font-semibold">Procedure / Service</label>
-                    <input
-                        type="text"
-                        name="procedure"
-                        value={form.procedure}
-                        onChange={handleChange}
-                        placeholder="CPT4 / HCPCS"
-                        className="border rounded p-2 text-sm"
-                    />
-                </div>
+type ToastState = { type: "success" | "error" | "info"; text: string } | null;
 
-                <div className="flex flex-col">
-                    <label className="text-sm font-semibold">ICD10 Diagnosis</label>
-                    <input
-                        type="text"
-                        name="icd10"
-                        value={form.icd10}
-                        onChange={handleChange}
-                        placeholder="ICD-10 Code"
-                        className="border rounded p-2 text-sm"
-                    />
-                </div>
+function Toast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
+  if (!toast) return null;
+  const base =
+    "fixed top-4 right-4 z-[60] rounded-lg shadow-lg border px-4 py-3 text-sm flex items-center gap-3";
+  const styles =
+    toast.type === "success"
+      ? "bg-green-50 border-green-200 text-green-900"
+      : toast.type === "error"
+      ? "bg-red-50 border-red-200 text-red-900"
+      : "bg-blue-50 border-blue-200 text-blue-900";
+  const icon = toast.type === "success" ? "✔" : toast.type === "error" ? "⚠" : "ℹ";
+  return (
+    <div className={`${base} ${styles}`}>
+      <span>{icon}</span>
+      <span>{toast.text}</span>
+      <button onClick={onClose} className="ml-2 p-1 rounded hover:bg-black/5" aria-label="Close">
+        ✕
+      </button>
+    </div>
+  );
+}
 
-                <div className="flex flex-col">
-                    <label className="text-sm font-semibold">Code Modifier</label>
-                    <input
-                        type="text"
-                        name="modifier"
-                        value={form.modifier}
-                        onChange={handleChange}
-                        placeholder="Modifier"
-                        className="border rounded p-2 text-sm"
-                    />
-                </div>
+/* ---------------- Modal ---------------- */
 
-                <div className="flex flex-col">
-                    <label className="text-sm font-semibold">Category</label>
-                    <select
-                        name="category"
-                        value={form.category}
-                        onChange={handleChange}
-                        className="border rounded p-2 text-sm"
-                    >
-                        <option>Unassigned</option>
-                        <option>Preventive</option>
-                        <option>Emergency</option>
-                        <option>Laboratory</option>
-                    </select>
-                </div>
+function Modal({
+  title,
+  open,
+  onClose,
+  children,
+  footer,
+  wide = true,
+}: {
+  title: string;
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  wide?: boolean;
+}) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    if (open) document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
-                <div className="flex flex-col">
-                    <label className="text-sm font-semibold">Diagnostic Reporting</label>
-                    <input
-                        type="text"
-                        name="diagnostic"
-                        value={form.diagnostic}
-                        onChange={handleChange}
-                        placeholder="Yes / No"
-                        className="border rounded p-2 text-sm"
-                    />
-                </div>
+  if (!open) return null;
 
-                <div className="flex flex-col">
-                    <label className="text-sm font-semibold">Service</label>
-                    <input
-                        type="text"
-                        name="service"
-                        value={form.service}
-                        onChange={handleChange}
-                        placeholder="Service name"
-                        className="border rounded p-2 text-sm"
-                    />
-                </div>
-
-                <div className="flex flex-col">
-                    <label className="text-sm font-semibold">Status</label>
-                    <select
-                        name="status"
-                        value={form.status}
-                        onChange={handleChange}
-                        className="border rounded p-2 text-sm"
-                    >
-                        <option>Pending</option>
-                        <option>In Progress</option>
-                        <option>Completed</option>
-                    </select>
-                </div>
-            </div>
-
-            {/* Form Actions */}
-            <div className="flex gap-3">
-                <button
-                    onClick={handleSave}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                    Save
-                </button>
-                <button
-                    onClick={handleCancel}
-                    className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
-                >
-                    Cancel
-                </button>
-            </div>
-
-            {/* Dashboard Table */}
-            <div>
-                <h2 className="text-xl font-bold mb-4">Lab Orders Dashboard</h2>
-                <div className="overflow-x-auto bg-white shadow rounded-lg">
-                    <table className="w-full text-sm border-collapse">
-                        <thead className="bg-gray-100">
-                        <tr>
-                            <th className="border p-2">Order #</th>
-                            <th className="border p-2">Reporting</th>
-                            <th className="border p-2">Type</th>
-                            <th className="border p-2">Qualifier</th>
-                            <th className="border p-2">Procedure</th>
-                            <th className="border p-2">ICD10</th>
-                            <th className="border p-2">Modifier</th>
-                            <th className="border p-2">Category</th>
-                            <th className="border p-2">Diagnostic</th>
-                            <th className="border p-2">Service</th>
-                            <th className="border p-2">Status</th>
-                            <th className="border p-2">Date</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {orders.map((o, i) => (
-                            <tr key={i}>
-                                <td className="border p-2">{o.orderNumber}</td>
-                                <td className="border p-2">{o.reporting}</td>
-                                <td className="border p-2">{o.type}</td>
-                                <td className="border p-2">{o.qualifier}</td>
-                                <td className="border p-2">{o.procedure}</td>
-                                <td className="border p-2">{o.icd10}</td>
-                                <td className="border p-2">{o.modifier}</td>
-                                <td className="border p-2">{o.category}</td>
-                                <td className="border p-2">{o.diagnostic}</td>
-                                <td className="border p-2">{o.service}</td>
-                                <td
-                                    className={`border p-2 ${
-                                        o.status === "Pending"
-                                            ? "text-yellow-600"
-                                            : o.status === "Completed"
-                                                ? "text-green-600"
-                                                : "text-blue-600"
-                                    }`}
-                                >
-                                    {o.status}
-                                </td>
-                                <td className="border p-2">{o.date}</td>
-                            </tr>
-                        ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="absolute inset-0 flex items-center justify-center overflow-y-auto">
+        <div
+          className={`${wide ? "w-[min(1120px,96vw)]" : "w-[min(720px,96vw)]"} max-h-[82vh] rounded-lg bg-white shadow-xl border flex flex-col mx-4`}
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-6 py-4 border-b">
+            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+            <button onClick={onClose} className="p-1 rounded hover:bg-gray-100" aria-label="Close">✕</button>
+          </div>
+          <div className="px-6 py-4 grow overflow-y-auto">{children}</div>
+          <div className="px-6 py-4 border-t flex justify-end gap-2">{footer}</div>
         </div>
-    );
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Page ---------------- */
+
+export default function LabOrdersPage() {
+  const router = useRouter();
+  const [orders, setOrders] = useState<LabOrder[]>([]);
+  const [selected, setSelected] = useState<LabOrder | null>(null);
+
+  // filters
+  const [query, setQuery] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
+  const debounceRef = useRef<number | null>(null);
+  const lastQueryRef = useRef<string>("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  // pagination
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // modals (create/edit removed – now separate page). Keep view modal for read-only.
+  const [viewOpen, setViewOpen] = useState(false);
+  // view modal only (editing done on separate route)
+
+  // toast
+  const [toast, setToast] = useState<ToastState>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Load all orders on first mount (empty search). Don't show an error toast if none exist.
+  useEffect(() => {
+      // initial load – directly hit /search with blank query (controller returns all org orders filtered in backend)
+      fetchOrdersByQuery("", false);
+    // Show cross-page toast if set by form or deletion redirect
+    if (typeof window !== 'undefined') {
+      const flag = sessionStorage.getItem('labOrderToast');
+      if (flag === 'saved') setToast({ type: 'success', text: 'Saved successfully' });
+      if (flag === 'deleted') setToast({ type: 'success', text: 'Deleted successfully' });
+      if (flag) sessionStorage.removeItem('labOrderToast');
+    }
+  }, []);
+
+  // All create/edit form logic removed (handled in LabOrderForm component on /labs/orders/new)
+
+  // (search & patient/provider helpers removed; not needed on listing page)
+
+  /* ---------- filtering ---------- */
+  const filtered = useMemo(() => {
+    return orders.filter((o) => {
+      const hay = [
+        o.orderNumber, o.orderName, o.testCode,
+        o.patientFirstName, o.patientLastName, o.mrn, String(o.patientId),
+      ].filter(Boolean).join(" ").toLowerCase();
+      const q = query.toLowerCase().trim();
+      const digitsOnly = /^\d+$/.test(q);
+      const matchesQ = digitsOnly
+        ? (String(o.patientId) === q || String(o.mrn) === q || hay.includes(q))
+        : hay.includes(q);
+      const matchesS = statusFilter === "all" || o.status === statusFilter;
+      const matchesP = priorityFilter === "all" || o.priority === priorityFilter;
+      return matchesQ && matchesS && matchesP;
+    });
+  }, [orders, query, statusFilter, priorityFilter]);
+
+  useEffect(() => { setPage(1); }, [query, statusFilter, priorityFilter, searchDraft, orders]);
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+
+  const startIndex = (page - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, total);
+  const pageItems = filtered.slice(startIndex, endIndex);
+
+  /* ---------- Backend fetch helpers ---------- */
+
+  // returns number of orders loaded (used in handleSearch)
+  async function fetchOrdersForPatient(patientId: number): Promise<number> {
+    try {
+      const org = resolveOrgId();
+      const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/lab-order/${patientId}`, {
+        method: "GET",
+        headers: { orgId: org, 'X-Org-Id': org },
+      });
+      const text = await res.text();
+      let parsed: unknown = null; try { parsed = text ? JSON.parse(text) : null; } catch {/*ignore*/}
+      const arr = normalizeOrders(parsed);
+      if (res.ok && arr.length) {
+        setOrders(arr);
+        setToast(null);
+        return arr.length;
+      }
+      setOrders([]);
+      if (res.status === 401) {
+        setToast({ type: 'error', text: 'Unauthorized (401). Please login again.' });
+      } else {
+        setToast({ type: "error", text: `No orders found for patient ${patientId}` });
+      }
+      return 0;
+    } catch (e) {
+      console.error("fetchOrdersForPatient error", e);
+      setToast({ type: "error", text: "Error connecting to backend" });
+      return 0;
+    }
+  }
+
+  // fetch by free-text query. If showToastOnEmpty is false, don't show an error toast when no results
+  async function fetchOrdersByQuery(q: string, showToastOnEmpty = true, triedRelative = false) {
+    try {
+      const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
+      if (!base) {
+        if (showToastOnEmpty) setToast({ type: "error", text: "API base URL not configured (NEXT_PUBLIC_API_URL)." });
+        setOrders([]);
+        return;
+      }
+      const url = `${base}/api/lab-order/search?q=${encodeURIComponent(q)}`;
+      const org = resolveOrgId();
+      // always send only orgId header (controller expects 'orgId'); X-Org-Id kept by fetchWithAuth already if localStorage has it
+      const res = await fetchWithAuth(url, { method: "GET", headers: { orgId: org } });
+      const text = await res.text();
+      let jsonUnknown: unknown = null; try { jsonUnknown = text ? JSON.parse(text) : null; } catch { /* ignore parse errors */ }
+      const arr = normalizeOrders(jsonUnknown);
+
+      if (res.ok && arr.length > 0) {
+        setOrders(arr);
+        setToast(null);
+        return;
+      }
+
+      // Removed fallback calls to non-existing endpoints to avoid extra 401 noise.
+
+      // Empty / none found cases
+      if (res.ok && arr.length === 0) {
+        setOrders([]);
+        if (showToastOnEmpty) setToast({ type: 'info', text: 'No lab orders found.' });
+        return;
+      }
+
+      // Error status
+      setOrders([]);
+      if (res.status === 401) {
+        if (showToastOnEmpty) setToast({ type: 'error', text: 'Unauthorized (401). Please login again.' });
+      } else if (showToastOnEmpty) {
+        setToast({ type: 'error', text: `Failed loading orders${res.status ? ` (HTTP ${res.status})` : ''}` });
+      }
+    } catch (e: unknown) {
+      // Network level error (e.g., ECONNREFUSED) – attempt relative fallback once
+      interface ErrorLike { message?: string }
+      const msg = (() => {
+        if (typeof e === 'string') return e;
+        if (e && typeof e === 'object') {
+          const maybe = e as ErrorLike;
+          if (typeof maybe.message === 'string') return maybe.message;
+        }
+        return String(e);
+      })();
+      const isConnRefused = /Failed to fetch|ECONNREFUSED|NetworkError/i.test(msg);
+      if (isConnRefused && !triedRelative) {
+        try {
+          const relUrl = `/api/lab-order/search?q=${encodeURIComponent(q)}`;
+          const org = resolveOrgId();
+          const relRes = await fetchWithAuth(relUrl, { method: 'GET', headers: { orgId: org } });
+          const text = await relRes.text();
+            let jsonUnknown: unknown = null; try { jsonUnknown = text ? JSON.parse(text) : null; } catch {}
+            const arr = normalizeOrders(jsonUnknown);
+            if (relRes.ok) {
+              setOrders(arr);
+              if (arr.length === 0 && showToastOnEmpty) setToast({ type: 'info', text: 'No lab orders found.' });
+              return; // success (even if empty)
+            }
+        } catch (inner) {
+          console.warn('Relative fallback also failed', inner);
+        }
+      }
+      console.error("fetchOrdersByQuery error", e);
+      if (showToastOnEmpty) {
+        setToast({ type: "error", text: isConnRefused ? "Backend unreachable. Ensure Spring Boot is running on the configured port." : "Error connecting to backend" });
+      }
+    }
+  }
+
+  // Called when user explicitly triggers search (button / Enter)
+  async function handleSearch() {
+    const q = searchDraft.trim();
+    setQuery(q);
+
+    if (/^\d+$/.test(q)) {
+      const count = await fetchOrdersForPatient(Number(q));
+      if (count === 0) {
+        // fallback so numeric MRNs (or any numeric query) still work
+        await fetchOrdersByQuery(q);
+      }
+      return;
+    }
+
+    await fetchOrdersByQuery(q);
+  }
+
+  // Auto-search debounced when user types (no need to click Search)
+  useEffect(() => {
+    const raw = searchDraft.trim();
+    // Always show all if empty
+    const target = raw;
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(async () => {
+      if (lastQueryRef.current === target) return; // avoid duplicate fetch
+      lastQueryRef.current = target;
+      setQuery(target);
+      if (/^\d+$/.test(target)) {
+        const count = await fetchOrdersForPatient(Number(target));
+        if (count === 0) await fetchOrdersByQuery(target, false); // fallback
+      } else {
+        await fetchOrdersByQuery(target, false);
+      }
+    }, 350) as unknown as number;
+    return () => { if (debounceRef.current) window.clearTimeout(debounceRef.current); };
+  }, [searchDraft]);
+
+  // (create/edit CRUD removed)
+
+  async function deleteOrder(o: LabOrder) {
+    if (!o?.id) { setToast({ type: "error", text: "Order ID missing" }); return; }
+    if (!confirm("Are you sure you want to delete this order?")) return;
+    try {
+      const org = resolveOrgId();
+      const res = await fetchWithAuth(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/lab-order/${o.patientId}/${o.id}`,
+        { method: "DELETE", headers: { orgId: org, 'X-Org-Id': org } }
+      );
+      const json = await res.json();
+      if (json?.success) {
+        setOrders((p) => p.filter((x) => x.id !== o.id));
+        if (selected?.id === o.id) setSelected(null);
+        setViewOpen(false);
+        setToast({ type: "success", text: "Deleted successfully" });
+      } else {
+        setToast({ type: "error", text: `Failed to delete: ${json?.message ?? "Unknown error"}` });
+      }
+    } catch (e) {
+      console.error("delete error", e);
+      setToast({ type: "error", text: "Error connecting to backend" });
+    }
+  }
+
+  /* ---------- Action handlers referenced in JSX ---------- */
+
+  // openCreateModal removed – navigation used instead
+
+  function openEditModal(o: LabOrder) {
+    router.push(`/labs/orders/new?editId=${o.id}&patientId=${o.patientId}`);
+  }
+
+  function openView(o: LabOrder) {
+    setSelected(o);
+    setViewOpen(true);
+  }
+
+  function printSelected() {
+    if (!selected) return;
+    // Build draft-like object expected by print helper
+    type PrintDraft = {
+      orderNumber: string; patientFirstName: string; patientLastName: string;
+      orderDate: string; orderDateTime: string; labName: string; orderName: string;
+      testCode: string; testDisplay: string; status: string; priority: string;
+      orderingProvider: string; physicianName: string; specimenId: string; notes: string;
+      diagnosisCode?: string; result: string; procedureCode?: string;
+    };
+    const draftLike: PrintDraft = {
+      orderNumber: selected.orderNumber,
+      patientFirstName: selected.patientFirstName,
+      patientLastName: selected.patientLastName,
+      orderDate: selected.orderDate,
+      orderDateTime: selected.orderDateTime,
+      labName: selected.labName,
+      orderName: selected.orderName,
+      testCode: selected.testCode,
+      testDisplay: selected.testDisplay,
+      status: selected.status,
+      priority: selected.priority,
+      orderingProvider: selected.orderingProvider,
+      physicianName: selected.physicianName,
+      specimenId: selected.specimenId,
+      notes: selected.notes,
+      diagnosisCode: selected.diagnosisCode,
+      result: selected.result,
+      procedureCode: selected.procedureCode,
+    };
+    // Derive procedure rows from stored procedureCode / diagnosisCode for richer printout
+    const procCodes = (selected.procedureCode || "")
+      .split(",")
+      .map(c => c.trim())
+      .filter(Boolean);
+    const diagList = (selected.diagnosisCode || "")
+      .split(/[;,]/)
+      .map(c => c.trim())
+      .filter(Boolean);
+    const procRows = procCodes.length > 0 ? procCodes.map((code, idx) => ({
+      test: code,
+      testCode: code,
+      diagnosisCodes: idx === 0 ? diagList : [],
+    })) : [];
+    handleLabOrderPrint(draftLike, procRows, false);
+  }
+
+  /* ---------------- UI ---------------- */
+
+  return (
+    <div className="p-6 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div />
+        <button
+          onClick={() => router.push('/labs/orders/new')}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+        >
+          <span className="text-lg leading-none">＋</span> New Order
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="grid md:grid-cols-6 gap-3 items-end">
+        <div className="md:col-span-2">
+          <input
+            className="w-full border rounded-lg px-3 py-2 text-sm text-gray-800 bg-white"
+            placeholder="Order #, test, patient, MRN"
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+          />
+        </div>
+        <div className="md:col-span-1">
+          <button
+            onClick={handleSearch}
+            className="w-full border rounded-lg px-3 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700"
+          >
+            Search
+          </button>
+        </div>
+        <div className="md:col-span-1">
+          <FieldRow label="Status">
+            <select
+              className="border rounded-lg px-3 py-2 text-sm w-full text-gray-800 bg-white"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All</option>
+              <option value="draft">Draft</option>
+              <option value="active">Active</option>
+              <option value="pending">Pending</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="revoked">Revoked</option>
+            </select>
+          </FieldRow>
+        </div>
+        <div className="md:col-span-1">
+          <FieldRow label="Priority">
+            <select
+              className="border rounded-lg px-3 py-2 text-sm w-full text-gray-800 bg-white"
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+            >
+              <option value="all">All</option>
+              <option value="routine">Routine</option>
+              <option value="urgent">Urgent</option>
+              <option value="stat">STAT</option>
+            </select>
+          </FieldRow>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="rounded-lg border bg-white overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr className="text-gray-700">
+                <th className="text-left px-4 py-3 font-semibold">Order #</th>
+                <th className="text-left px-4 py-3 font-semibold">Patient</th>
+                <th className="text-left px-4 py-3 font-semibold">Test</th>
+                <th className="text-left px-4 py-3 font-semibold">Priority</th>
+                <th className="text-left px-4 py-3 font-semibold">Status</th>
+                <th className="text-left px-4 py-3 font-semibold">Ordered date</th>
+                <th className="text-left px-4 py-3 font-semibold">Provider</th>
+                <th className="text-right px-4 py-3 font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageItems.map((o) => (
+                <tr key={o.id ?? `${o.orderNumber}-${o.patientId}`} className="border-t hover:bg-gray-50">
+                  <td className="px-4 py-3 font-mono text-xs text-gray-900">{o.orderNumber}</td>
+                  <td className="px-4 py-3 text-gray-900">
+                    <div>{o.patientFirstName} {o.patientLastName}</div>
+                    <div className="text-xs text-gray-500">{formatMrn(o.mrn)}</div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-900">
+                    <div className="font-medium">{o.orderName}</div>
+                    <div className="text-xs text-gray-500">{o.testCode}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="inline-block text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-900">
+                      {o.priority?.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-block text-xs px-2 py-1 rounded-full ${statusBadgeClasses(o.status)}`}>
+                      {o.status?.toUpperCase()}
+                    </span>
+                  </td>
+                  
+                  <td className="px-4 py-3 text-gray-900">
+                    <div>{o.orderDate}</div>
+                    <div className="text-xs text-gray-500">{o.orderDateTime?.slice(11, 16)}</div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-900">{o.orderingProvider}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={() => openView(o)} title="View" className="p-2 rounded-md hover:bg-blue-50 text-blue-700">👁</button>
+                      <button onClick={() => openEditModal(o)} title="Edit" className="p-2 rounded-md hover:bg-blue-50 text-blue-700">✏️</button>
+                      <button onClick={() => deleteOrder(o)} title="Delete" className="p-2 rounded-md hover:bg-blue-50 text-blue-700">🗑</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
+                    No orders yet. Click <b>New Order</b> to create one.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Pagination controls */}
+      <div className="flex items-center justify-between px-2 py-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="px-3 py-1 border rounded bg-white hover:bg-gray-50"
+            disabled={page <= 1}
+          >
+            Prev
+          </button>
+          <div className="text-sm text-gray-600">Page {page} of {totalPages}</div>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="px-3 py-1 border rounded bg-white hover:bg-gray-50"
+            disabled={page >= totalPages}
+          >
+            Next
+          </button>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-gray-600">Showing {startIndex + 1}-{endIndex} of {total}</div>
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="border rounded px-2 py-1 text-sm"
+          >
+            <option value={5}>5</option>
+            <option value={10}>10</option>
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+          </select>
+        </div>
+      </div>
+
+          {/* Create/Edit modal removed in favor of standalone page */}
+
+      {/* Procedure builder modal removed */}
+
+      {/* Code picker removed (handled on standalone form) */}
+
+      {/* VIEW MODAL (read-only) */}
+      <Modal
+        title={selected ? `Order ${selected.orderNumber}` : "Order"}
+        open={viewOpen}
+        onClose={() => setViewOpen(false)}
+        footer={
+          selected && (
+            <>
+              <button onClick={() => setViewOpen(false)} className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300">
+                Close
+              </button>
+              <button onClick={printSelected} className="px-4 py-2 rounded-lg bg-slate-600 text-white hover:bg-slate-700">
+                Print
+              </button>
+              <button onClick={() => openEditModal(selected)} className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50">
+                ✏️ Edit
+              </button>
+              <button onClick={() => deleteOrder(selected)} className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700">
+                Delete
+              </button>
+            </>
+          )
+        }
+        wide
+      >
+        {selected ? (
+          <div className="space-y-6">
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* Order details */}
+              <div className="space-y-3">
+                <div className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                  <span>🧪</span><span>Order details</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  <span className="text-gray-500">Order #</span>
+                  <span className="font-mono text-gray-900">{selected.orderNumber}</span>
+                  <span className="text-gray-500">Order name</span>
+                  <span className="text-gray-900">{selected.orderName}</span>
+                  <span className="text-gray-500">Test code</span>
+                  <span className="text-gray-900">{selected.testCode}{selected.testDisplay ? ` (${selected.testDisplay})` : ""}</span>
+                  <span className="text-gray-500">Priority</span>
+                  <span><span className="inline-block text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-900">{selected.priority?.toUpperCase()}</span></span>
+                  <span className="text-gray-500">Status</span>
+                  <span>
+                    <span className={`inline-block text-xs px-2 py-1 rounded-full ${statusBadgeClasses(selected.status)}`}>
+                      {selected.status?.toUpperCase()}
+                    </span>
+                  </span>
+                  <span className="text-gray-500">Ordered date</span>
+                  <span className="text-gray-900">
+                    {selected.orderDate}{selected.orderDateTime ? ` • ${selected.orderDateTime.slice(11,16)}` : ""}
+                  </span>
+                  <span className="text-gray-500">Lab</span>
+                  <span className="text-gray-900">{selected.labName || "—"}</span>
+                </div>
+              </div>
+
+              {/* Specimen & clinical */}
+              <div className="space-y-3">
+                <div className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                  <span>📑</span><span>Specimen &amp; clinical</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  <span className="text-gray-500">Specimen ID</span>
+                  <span className="text-gray-900">{selected.specimenId || "—"}</span>
+                  {(() => {
+                    const op = (selected.orderingProvider || "").trim();
+                    const pn = (selected.physicianName || "").trim();
+                    if (!op && !pn) {
+                      return (
+                        <>
+                          <span className="text-gray-500">Ordering provider</span>
+                          <span className="text-gray-900">—</span>
+                        </>
+                      );
+                    }
+                    if (op && pn && op === pn) {
+                      // collapse into one row when identical
+                      return (
+                        <>
+                          <span className="text-gray-500">Provider</span>
+                          <span className="text-gray-900">{op}</span>
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        <span className="text-gray-500">Ordering provider</span>
+                        <span className="text-gray-900">{op || "—"}</span>
+                        <span className="text-gray-500">Physician name</span>
+                        <span className="text-gray-900">{pn || "—"}</span>
+                      </>
+                    );
+                  })()}
+                  <span className="text-gray-500">Diagnosis code</span>
+                  <span className="text-gray-900">{(selected.diagnosisCode || "").toString().split(/[;,]/).map(s => s.trim()).filter(Boolean).join('; ') || "—"}</span>
+                  <span className="text-gray-500">Procedure</span>
+                  <span className="text-gray-900">{(selected.procedureCode || "").split(',').map(s => s.trim()).filter(Boolean).join(', ') || "—"}</span>
+                  <span className="text-gray-500">Notes</span>
+                  <span className="text-gray-900">{selected.notes || "—"}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-gray-500">No order selected.</div>
+        )}
+      </Modal>
+
+      {/* Toast */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
+    </div>
+  );
 }
