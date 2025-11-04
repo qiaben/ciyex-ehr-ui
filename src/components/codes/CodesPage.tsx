@@ -499,25 +499,39 @@ export default function CodesPage() {
       </div>
 
       {/* Pagination footer */}
-      <div className="flex justify-between items-center mt-3 text-sm text-gray-600 dark:text-gray-400">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap gap-4 justify-between items-center mt-3 text-sm text-gray-600 dark:text-gray-400">
+        <div className="flex items-center gap-3">
           <button
             disabled={page === 1}
-            onClick={() => setPage((p) => p - 1)}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
             className="px-3 py-1 border rounded disabled:opacity-50 dark:border-gray-600"
           >
             Prev
           </button>
+          <span>
+            Page {page} of {totalPages}
+          </span>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="px-3 py-1 border rounded disabled:opacity-50 dark:border-gray-600"
+          >
+            Next
+          </button>
         </div>
-
-        <div>
-          Page {page} of {totalPages}
-        </div>
-
-        <div className="ml-auto flex items-center gap-3">
-          <div>
-            Showing {codes.length} of {totalCount || codes.length}{totalCount && totalCount > codes.length ? ` (page size ${pageSize})` : ""}
-          </div>
+        <div className="flex items-center gap-3 ml-auto">
+          {(() => {
+            const hasData = totalCount > 0;
+            const firstItem = hasData ? (page - 1) * pageSize + 1 : 0;
+            const lastItem = hasData ? firstItem + codes.length - 1 : 0;
+            return (
+              <div>
+                {hasData
+                  ? `Showing ${firstItem}-${lastItem} of ${totalCount}`
+                  : `Showing 0 of 0`}
+              </div>
+            );
+          })()}
           <select
             value={pageSize}
             onChange={(e) => {
@@ -532,13 +546,6 @@ export default function CodesPage() {
               </option>
             ))}
           </select>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            className="px-3 py-1 border rounded disabled:opacity-50 dark:border-gray-600"
-          >
-            Next
-          </button>
         </div>
       </div>
 
