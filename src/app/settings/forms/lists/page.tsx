@@ -47,59 +47,39 @@ const asBool = (v: unknown): boolean => {
     return s === "true" || s === "1" || s === "y" || s === "yes";
 };
 
-function safeParseXml(text: string): Document {
-    const trimmed = (text ?? "").trim();
-    const wrapped =
-        trimmed.startsWith("<") && !trimmed.startsWith("<?xml")
-            ? `<root>${trimmed}</root>`
-            : trimmed || "<root/>";
-    const doc = new DOMParser().parseFromString(wrapped, "application/xml");
-    if (!doc.querySelector("parsererror")) return doc;
-    const fallback = new DOMParser().parseFromString(`<root>${text}</root>`, "application/xml");
-    if (fallback.querySelector("parsererror")) throw new Error("Failed to parse XML response");
-    return fallback;
-}
+
 
 function extractListIdsFromResponseText(text: string): string[] {
     try {
         const data = JSON.parse(text) as unknown;
 
-        const pick = (x: UnknownRecord): unknown =>
-            x["listId"] ??
-            x["list_id"] ??
-            x["id"] ??
-            x["optionListId"] ??
-            x["option_list_id"] ??
-            x["code"] ??
-            x["name"];
-
         if (Array.isArray(data)) {
-            return (data as UnknownRecord[]).map((x) => asString(pick(x))).filter(Boolean);
+            // Extract unique listId values from the array of ListOptionDto objects
+            const listIds = (data as UnknownRecord[])
+                .map((x) => asString(x["listId"] ?? x["list_id"] ?? ""))
+                .filter(Boolean);
+            
+            // Return unique values
+            return Array.from(new Set(listIds)).sort();
         }
 
         if (data && typeof data === "object") {
             const obj = data as UnknownRecord;
             const items = Array.isArray(obj.items) ? (obj.items as UnknownRecord[]) : [];
-            if (items.length) return items.map((x) => asString(pick(x))).filter(Boolean);
+            if (items.length) {
+                const listIds = items
+                    .map((x) => asString(x["listId"] ?? x["list_id"] ?? ""))
+                    .filter(Boolean);
+                return Array.from(new Set(listIds)).sort();
+            }
         }
     } catch {
-        // fall through to XML parsing
+        // Fallback: return empty array if JSON parsing fails
+        return [];
     }
-    const doc = safeParseXml(text);
-    const items = Array.from(doc.querySelectorAll("List > item, item, row, Row, option"));
-    const pickXml = (el: Element, sels: string[]) => {
-        for (const s of sels) {
-            const n = el.querySelector(s);
-            const val = (n?.textContent ?? "").trim();
-            if (val) return val;
-        }
-        return "";
-    };
-    return items
-        .map((it) =>
-            pickXml(it, ["listId", "list_id", "id", "optionListId", "option_list_id", "code", "name"])
-        )
-        .filter(Boolean);
+    
+    // Remove XML parsing fallback since we're using JSON API
+    return [];
 }
 
 function parseListOptionsFlexible(text: string): Row[] {
@@ -112,13 +92,9 @@ function parseListOptionsFlexible(text: string): Row[] {
             if (typeof idRaw === "number" || typeof idRaw === "string") id = idRaw;
             else if (idRaw != null) id = String(idRaw);
 
-            const optionIdRaw =
-                x["option_id"] ?? x["optionId"] ?? x["optionid"] ?? x["code"] ?? x["value"] ?? x["id"] ?? "";
-
-            const seqRaw =
-                x["order"] ?? x["seq"] ?? x["sort"] ?? x["sequence"] ?? x["position"] ?? x["index"];
-            const isDefaultRaw = x["def"] ?? x["isDefault"] ?? x["default"];
-            const activeRaw = x["active"] ?? x["activity"] ?? x["isActive"] ?? x["enabled"];
+            const optionIdRaw = x["optionId"] ?? x["option_id"] ?? x["optionid"] ?? x["code"] ?? x["value"] ?? x["id"] ?? "";
+            const seqRaw = x["seq"] ?? x["order"] ?? x["sort"] ?? x["sequence"] ?? x["position"] ?? x["index"];
+            const isDefaultRaw = x["isDefault"] ?? x["def"] ?? x["default"];
 
             return {
                 id,
@@ -126,12 +102,9 @@ function parseListOptionsFlexible(text: string): Row[] {
                 title: asString(x["title"] ?? x["name"] ?? x["label"] ?? x["tile"]),
                 order: asNumber(seqRaw),
                 notes: asString(x["notes"] ?? x["note"] ?? x["description"]),
-                codes: asString(x["codes"] ?? x["code"] ?? x["value"]),
+                codes: asString(x["codes"] ?? x["code"] ?? x["value"] ?? x["optionValue"]),
                 def: asBool(isDefaultRaw),
-                active:
-                    x["active"] === undefined && x["activity"] === undefined && x["isActive"] === undefined
-                        ? true
-                        : asBool(activeRaw),
+                active: x["activity"] !== undefined ? (x["activity"] === 1 || x["activity"] === true) : true,
             };
         };
 
@@ -147,43 +120,12 @@ function parseListOptionsFlexible(text: string): Row[] {
             if (arr.length) return arr.map(mapItem);
         }
     } catch {
-        // fall through to XML parsing
+        // Return empty array if JSON parsing fails
+        return [];
     }
 
-    const doc = safeParseXml(text);
-    const items = Array.from(doc.querySelectorAll("List > item, item, row, Row, option"));
-    const textOf = (el: Element | null) => (el?.textContent ?? "").trim();
-    const pick = (el: Element, selectors: string[]) => {
-        for (const s of selectors) {
-            const found = el.querySelector(s);
-            if (found) {
-                const val = textOf(found);
-                if (val) return val;
-            }
-        }
-        return "";
-    };
-    const toNum = (v: string): number => asNumber(v);
-    return items.map((it) => {
-        const id = pick(it, ["id", "ID"]);
-        const option_id = pick(it, ["option_id", "optionId", "optionid", "code", "value", "id"]);
-        const title = pick(it, ["title", "tile", "name", "label"]);
-        const seq = pick(it, ["seq", "order", "sort", "sequence", "position", "index"]);
-        const notes = pick(it, ["notes", "note", "description"]);
-        const codes = pick(it, ["codes", "code", "value"]);
-        const isDefault = pick(it, ["isDefault", "default", "def"]);
-        const activity = pick(it, ["activity", "active", "isActive", "enabled"]);
-        return {
-            id: id || undefined,
-            option_id,
-            title,
-            order: toNum(seq),
-            def: asBool(isDefault),
-            active: activity ? asBool(activity) : true,
-            notes,
-            codes,
-        };
-    });
+    // Remove XML parsing since we're using JSON API
+    return [];
 }
 
 // sort by seq/order asc, then title as a tiebreaker
@@ -291,6 +233,8 @@ function ToastPortal({ children }: { children: React.ReactNode }) {
 
 /* ---------- Page ---------- */
 export default function ListsPage(): JSX.Element {
+    const [mounted, setMounted] = useState(false);
+    
     const INITIAL_ROWS: Row[] = useMemo(
         () => [
             { id: 1, option_id: "1", title: "0", order: 0, def: false, active: true, notes: "", codes: "" },
@@ -315,6 +259,11 @@ export default function ListsPage(): JSX.Element {
         },
         [removeToast]
     );
+
+    // Handle mounting for hydration safety
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     // Convert any stray window.alert calls into toasts (safety net)
     useEffect(() => {
@@ -373,31 +322,32 @@ export default function ListsPage(): JSX.Element {
         [makeCid]
     );
 
+    // Ensure the canonical `rows` state always contains stable `_cid` values.
+    // This prevents changing React keys between renders (which can cause inputs
+    // to remount and lose their edited values). We run this on mount and
+    // whenever `rows` changes to fill in missing `_cid`s.
+    useEffect(() => {
+        setRows((prev) => {
+            // If every row already has a _cid, keep as-is (avoid extra renders)
+            if (prev.every((r) => r._cid)) return prev;
+            return attachCids(prev);
+        });
+        // Only run when component mounts or when attachCids changes
+    }, [attachCids]);
+
     /* Fetch available lists */
     useEffect(() => {
         let mounted = true;
         (async () => {
             try {
                 setError(null);
-                const tryEndpoints = [`${API_BASE}/api/list-options/list`, `${API_BASE}/api/list-options`];
-                let bodyText = "";
-                let ok = false;
-                for (const url of tryEndpoints) {
-                    try {
-                        const res = await fetchWithAuth(url, {
-                            method: "GET",
-                            headers: { Accept: "application/xml, application/json;q=0.8" },
-                        });
-                        if (res.ok) {
-                            bodyText = await res.text();
-                            ok = true;
-                            break;
-                        }
-                    } catch {
-                        // try next endpoint
-                    }
-                }
-                if (!ok) throw new Error("Failed to load list IDs (all endpoints failed)");
+                const res = await fetchWithAuth(`${API_BASE}/api/list-options`, {
+                    method: "GET",
+                    headers: { Accept: "application/json" },
+                });
+                
+                if (!res.ok) throw new Error("Failed to load list IDs");
+                const bodyText = await res.text();
 
                 const rawIds = extractListIdsFromResponseText(bodyText);
                 const uniq = uniqueCaseInsensitive(rawIds);
@@ -426,44 +376,31 @@ export default function ListsPage(): JSX.Element {
             setLoading(true);
             setError(null);
             try {
-                const endpoints = [
+                const res = await fetchWithAuth(
                     `${API_BASE}/api/list-options/list/${encodeURIComponent(listId)}`,
-                    `${API_BASE}/api/list-options?list_id=${encodeURIComponent(listId)}`,
-                ];
-
-                let payload = "";
-                let ok = false;
-                let lastStatus = "";
-                for (const url of endpoints) {
-                    try {
-                        const res = await fetchWithAuth(url, {
-                            method: "GET",
-                            headers: {
-                                Accept: "application/xml,text/xml;q=0.9,application/json;q=0.8,*/*;q=0.7",
-                            },
-                        });
-                        if (res.ok) {
-                            payload = await res.text();
-                            ok = true;
-                            break;
-                        } else {
-                            lastStatus = `${res.status} ${res.statusText}`;
-                            if (res.status === 404) {
-                                // Treat as empty list (brand new)
-                                setRows([]);
-                                existingIdsRef.current = new Set();
-                                originalByIdRef.current = new Map();
-                                newRowsRef.current = new WeakSet();
-                                setLoading(false);
-                                return;
-                            }
-                        }
-                    } catch (err: unknown) {
-                        lastStatus = err instanceof Error ? err.message : "network error";
+                    {
+                        method: "GET",
+                        headers: {
+                            Accept: "application/json",
+                        },
                     }
-                }
-                if (!ok) throw new Error(`Failed to load list data: ${lastStatus || "all endpoints failed"}`);
+                );
 
+                if (res.status === 404) {
+                    // Treat as empty list (brand new)
+                    setRows([]);
+                    existingIdsRef.current = new Set();
+                    originalByIdRef.current = new Map();
+                    newRowsRef.current = new WeakSet();
+                    setLoading(false);
+                    return;
+                }
+
+                if (!res.ok) {
+                    throw new Error(`Failed to load list data: ${res.status} ${res.statusText}`);
+                }
+
+                const payload = await res.text();
                 const parsed = parseListOptionsFlexible(payload);
                 const withCid = attachCids(parsed);
                 withCid.sort(bySeqThenTitle);
@@ -746,18 +683,6 @@ export default function ListsPage(): JSX.Element {
                 return;
             }
 
-            const orgId =
-                (typeof window !== "undefined" &&
-                    (localStorage.getItem("orgId") ||
-                        localStorage.getItem("ORG_ID") ||
-                        localStorage.getItem("org_id"))) ||
-                "";
-
-            if (!orgId) {
-                pushToast("Missing orgId", "Keys tried: orgId, ORG_ID, org_id.", "error");
-                return;
-            }
-
             const existingIds = existingIdsRef.current;
             const originals = originalByIdRef.current;
 
@@ -805,7 +730,6 @@ export default function ListsPage(): JSX.Element {
             const createResults = await Promise.allSettled(
                 createCandidates.map(async (r) => {
                     const body = {
-                        orgId: String(orgId),
                         listId: String(selectedListId),
                         optionId: String(r.option_id).trim(),
                         title: String(r.title ?? ""),
@@ -822,7 +746,7 @@ export default function ListsPage(): JSX.Element {
                         method: "POST",
                         headers: {
                             "Content-Type": "application/json",
-                            Accept: "application/json,application/xml;q=0.8",
+                            Accept: "application/json",
                         },
                         body: JSON.stringify(body),
                     });
@@ -837,7 +761,6 @@ export default function ListsPage(): JSX.Element {
             const updateResults = await Promise.allSettled(
                 updateCandidates.map(async ({ curr, pathId }) => {
                     const body = {
-                        orgId: String(orgId),
                         listId: String(selectedListId),
                         optionId: String(curr.option_id).trim(),
                         title: String(curr.title ?? ""),
@@ -856,7 +779,7 @@ export default function ListsPage(): JSX.Element {
                             method: "PUT",
                             headers: {
                                 "Content-Type": "application/json",
-                                Accept: "application/json,application/xml;q=0.8",
+                                Accept: "application/json",
                             },
                             body: JSON.stringify(body),
                         }
@@ -905,6 +828,36 @@ export default function ListsPage(): JSX.Element {
     const displayRows = useMemo(() => {
         return attachCids([...rows]).sort(bySeqThenTitle);
     }, [rows, attachCids]);
+
+    // Helper function to find the original index in rows array from display index
+    const findOriginalIndex = useCallback((displayIndex: number): number => {
+        const displayRow = displayRows[displayIndex];
+        if (!displayRow) return -1;
+        
+        // Find by _cid first (most reliable)
+        if (displayRow._cid) {
+            const idx = rows.findIndex(r => r._cid === displayRow._cid);
+            if (idx !== -1) return idx;
+        }
+        
+        // Fallback: find by id if it exists
+        if (displayRow.id !== undefined && displayRow.id !== null) {
+            const idx = rows.findIndex(r => r.id === displayRow.id);
+            if (idx !== -1) return idx;
+        }
+        
+        // Last resort: find by multiple field match
+        return rows.findIndex(r => 
+            r.option_id === displayRow.option_id &&
+            r.title === displayRow.title &&
+            r.order === displayRow.order
+        );
+    }, [displayRows, rows]);
+
+    // Prevent hydration mismatch by not rendering until mounted
+    if (!mounted) {
+        return <div className="min-h-screen bg-gray-50 dark:bg-gray-900"></div>;
+    }
 
     return (
         <div className={dark ? "dark" : ""}>
@@ -1113,14 +1066,20 @@ export default function ListsPage(): JSX.Element {
                                         <td className="px-3 py-2 align-top">
                                             <CellInput
                                                 value={row.option_id}
-                                                onChange={(v) => updateRow(i, "option_id", v)}
+                                                onChange={(v) => {
+                                                    const originalIdx = findOriginalIndex(i);
+                                                    if (originalIdx !== -1) updateRow(originalIdx, "option_id", v);
+                                                }}
                                                 ariaLabel={`Option ID ${i + 1}`}
                                             />
                                         </td>
                                         <td className="px-3 py-2 align-top">
                                             <CellInput
                                                 value={row.title}
-                                                onChange={(v) => updateRow(i, "title", v)}
+                                                onChange={(v) => {
+                                                    const originalIdx = findOriginalIndex(i);
+                                                    if (originalIdx !== -1) updateRow(originalIdx, "title", v);
+                                                }}
                                                 ariaLabel={`Title ${(row.id ?? row.option_id) || "new"}`}
                                             />
                                         </td>
@@ -1128,21 +1087,30 @@ export default function ListsPage(): JSX.Element {
                                             <CellInput
                                                 type="number"
                                                 value={row.order}
-                                                onChange={(v) => updateRow(i, "order", v)}
+                                                onChange={(v) => {
+                                                    const originalIdx = findOriginalIndex(i);
+                                                    if (originalIdx !== -1) updateRow(originalIdx, "order", v);
+                                                }}
                                                 ariaLabel={`Order ${(row.id ?? row.option_id) || "new"}`}
                                             />
                                         </td>
                                         <td className="px-3 py-2 align-top">
                                             <CellTextarea
                                                 value={row.notes}
-                                                onChange={(v) => updateRow(i, "notes", v)}
+                                                onChange={(v) => {
+                                                    const originalIdx = findOriginalIndex(i);
+                                                    if (originalIdx !== -1) updateRow(originalIdx, "notes", v);
+                                                }}
                                                 ariaLabel={`Notes ${(row.id ?? row.option_id) || "new"}`}
                                             />
                                         </td>
                                         <td className="px-3 py-2 align-top">
                                             <CellTextarea
                                                 value={row.codes}
-                                                onChange={(v) => updateRow(i, "codes", v)}
+                                                onChange={(v) => {
+                                                    const originalIdx = findOriginalIndex(i);
+                                                    if (originalIdx !== -1) updateRow(originalIdx, "codes", v);
+                                                }}
                                                 ariaLabel={`Codes ${(row.id ?? row.option_id) || "new"}`}
                                             />
                                         </td>
@@ -1150,7 +1118,10 @@ export default function ListsPage(): JSX.Element {
                                             <input
                                                 type="checkbox"
                                                 checked={row.def}
-                                                onChange={(e) => updateRow(i, "def", e.target.checked)}
+                                                onChange={(e) => {
+                                                    const originalIdx = findOriginalIndex(i);
+                                                    if (originalIdx !== -1) updateRow(originalIdx, "def", e.target.checked);
+                                                }}
                                                 className="h-4 w-4 accent-blue-600 align-middle"
                                                 aria-label={`Default ${(row.id ?? row.option_id) || "new"}`}
                                             />
@@ -1159,7 +1130,10 @@ export default function ListsPage(): JSX.Element {
                                             <input
                                                 type="checkbox"
                                                 checked={row.active}
-                                                onChange={(e) => updateRow(i, "active", e.target.checked)}
+                                                onChange={(e) => {
+                                                    const originalIdx = findOriginalIndex(i);
+                                                    if (originalIdx !== -1) updateRow(originalIdx, "active", e.target.checked);
+                                                }}
                                                 className="h-4 w-4 accent-blue-600 align-middle"
                                                 aria-label={`Active ${(row.id ?? row.option_id) || "new"}`}
                                             />
