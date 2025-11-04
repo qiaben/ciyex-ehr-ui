@@ -34,13 +34,15 @@ const isCodeType = (v: string): v is CodeType =>
 
 // --- Safe base URL builder (avoid double slashes) ---
 const BASE_API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
-const API_URL = `${BASE_API}/api/codes`;
+// Backend actual table/resource appears to be 'codess' (extra 's'). Use that as primary, fallback to legacy '/api/codes'.
+const PRIMARY_CODES_URL = `${BASE_API}/api/codess`;
+const LEGACY_CODES_URL = `${BASE_API}/api/codes`;
 
 // Detect https-page → http-api mixed-content (blocked by browsers)
 const isHttpsMixedContent = () =>
   typeof window !== "undefined" &&
   window.location.protocol === "https:" &&
-  API_URL.startsWith("http:");
+  PRIMARY_CODES_URL.startsWith("http:");
 
 type ApiResponse<T = unknown> = { data?: T; message?: string; error?: string };
 
@@ -112,22 +114,30 @@ export default function CodesPage() {
 
       try {
         setError(null);
-        let url = API_URL;
+        let baseUrl = PRIMARY_CODES_URL; // default to new endpoint
+        let url = baseUrl;
         const qText = qOverride ?? searchText;
         const fText = typeOverride ?? filter;
         if (qText || fText) {
           const params = new URLSearchParams();
           if (qText) params.append("q", qText);
           if (fText) params.append("codeType", fText);
-          url = `${API_URL}/search?${params.toString()}`;
+          url = `${baseUrl}/search?${params.toString()}`;
         }
-        const res = await fetchWithAuth(url, { headers: makeHeaders(), mode: "cors" as const });
-        const bodyText = await res.text();
-        let parsed: ApiResponse<Code[]> | null = null;
-        try {
-          parsed = bodyText ? (JSON.parse(bodyText) as ApiResponse<Code[]>) : null;
-        } catch {
-          parsed = null;
+        // Attempt primary endpoint first; if 404 or 403 (strict older security), fallback once to legacy.
+        const attempt = async (target: string) => {
+          const r = await fetchWithAuth(target, { headers: makeHeaders(), mode: "cors" as const });
+          const text = await r.text();
+          let parsed: ApiResponse<Code[]> | null = null; try { parsed = text ? JSON.parse(text) as ApiResponse<Code[]> : null; } catch { parsed = null; }
+          return { r, text, parsed } as const;
+        };
+
+        let { r: res, text: bodyText, parsed } = await attempt(url);
+        if ((res.status === 404 || res.status === 403) && url.startsWith(PRIMARY_CODES_URL)) {
+          // Fallback: rebuild URL with legacy base
+          baseUrl = LEGACY_CODES_URL;
+          url = (qText || fText) ? `${baseUrl}/search?${new URLSearchParams(Object.entries({ ...(qText && { q: qText }), ...(fText && { codeType: fText }) })).toString()}` : baseUrl;
+          ({ r: res, text: bodyText, parsed } = await attempt(url));
         }
         if (res.ok && parsed) {
           setCodes(parsed.data || []);
@@ -136,13 +146,15 @@ export default function CodesPage() {
           const msg =
             (parsed && (parsed.message || parsed.error)) ||
             bodyText ||
-            `Failed to load codes (status ${res.status})`;
+            `Failed to load codes (status ${res.status}). Endpoint tried: ${url.includes('codess') ? '/api/codess' : '/api/codes'}`;
           setCodes([]);
           setError(msg);
           console.error("/api/codes error", {
             status: res.status,
             requestId: res.headers.get("x-request-id"),
             body: bodyText,
+            triedPrimary: PRIMARY_CODES_URL,
+            finalUrl: url,
           });
         }
       } catch (err) {
@@ -207,14 +219,30 @@ export default function CodesPage() {
 
     try {
       const payload = sanitizePayload(form);
-      const url = payload.id ? `${API_URL}/${payload.id}` : API_URL;
+      // build base path (prefer new codess)
+      const basePath = PRIMARY_CODES_URL;
+      const legacyBase = LEGACY_CODES_URL;
+      const urlPrimary = payload.id ? `${basePath}/${payload.id}` : basePath;
+      const urlLegacy = payload.id ? `${legacyBase}/${payload.id}` : legacyBase;
+      let url = urlPrimary;
       const method = payload.id ? "PUT" : "POST";
-      const res = await fetchWithAuth(url, {
+      let res = await fetchWithAuth(url, {
         method,
         headers: makeHeaders(),
         body: JSON.stringify(payload),
         mode: "cors" as const,
       });
+
+      // Fallback to legacy if primary returns 404/403
+      if ((res.status === 404 || res.status === 403) && url === urlPrimary) {
+        url = urlLegacy;
+        res = await fetchWithAuth(url, {
+          method,
+          headers: makeHeaders(),
+          body: JSON.stringify(payload),
+          mode: "cors" as const,
+        });
+      }
 
       const text = await res.text();
       let parsed: ApiResponse | null = null;
@@ -255,12 +283,18 @@ export default function CodesPage() {
     }
 
     try {
-      const res = await fetchWithAuth(`${API_URL}/${id}`, {
+      // try primary then legacy
+      let url = `${PRIMARY_CODES_URL}/${id}`;
+      let res = await fetchWithAuth(url, {
         method: "DELETE",
         headers: makeHeaders(),
         mode: "cors" as const,
       });
       const text = await res.text();
+      if ((res.status === 404 || res.status === 403) && url.startsWith(PRIMARY_CODES_URL)) {
+        url = `${LEGACY_CODES_URL}/${id}`;
+        res = await fetchWithAuth(url, { method: "DELETE", headers: makeHeaders(), mode: "cors" as const });
+      }
       let parsed: ApiResponse | null = null;
       try {
         parsed = text ? (JSON.parse(text) as ApiResponse) : null;
