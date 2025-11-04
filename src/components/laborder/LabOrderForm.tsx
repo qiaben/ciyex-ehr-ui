@@ -505,28 +505,54 @@ export default function LabOrderForm({ initial }: { initial?: Partial<LabOrder> 
     try {
       setCodesLoading(true);
       const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
-      let url = `${base}/api/codes`;
+      if (!base) { setCodesList([]); return; }
+
+      const primaryBase = `${base}/api/codess`; // suspected new endpoint
+      const legacyBase = `${base}/api/codes`;
+
       const params = new URLSearchParams();
       if (q) params.append("q", q);
       if (codeType) params.append("codeType", codeType);
-      if (params.toString()) url = `${base}/api/codes/search?${params.toString()}`;
+
+      const buildUrl = (b: string) => params.size > 0 ? `${b}/search?${params.toString()}` : b;
+      let url = buildUrl(primaryBase);
+
       const h = makePickerHeaders() as Record<string, string>;
-      // ensure X-Org-Id provided for backend filters
-      if (h.orgId && !('X-Org-Id' in h)) {
-        h['X-Org-Id'] = h.orgId;
+      // add richer multi-tenant / role headers for backend security filters
+      if (h.orgId && !('X-Org-Id' in h)) h['X-Org-Id'] = h.orgId;
+      if (typeof window !== 'undefined') {
+        const tenant = (localStorage.getItem('selectedTenant') || '').trim();
+        if (tenant) h['X-Tenant-Name'] = tenant;
+        const role = (localStorage.getItem('role') || '').trim();
+        if (role) h['X-Role'] = role; // some backends expect X-Role not role
       }
-      const res = await fetchWithAuth(url, { headers: h, mode: "cors" as const });
-      const text = await res.text();
-  let parsed: { data?: CodeItem[]; message?: string; error?: string } | null = null;
-  try { parsed = text ? JSON.parse(text) : null; } catch { parsed = null; }
+
+      type PickerResp = { data?: CodeItem[]; message?: string; error?: string } | null;
+      const attempt = async (target: string) => {
+        const res = await fetchWithAuth(target, { headers: h, mode: 'cors' as const });
+        const text = await res.text();
+        let parsed: PickerResp = null; try { parsed = text ? JSON.parse(text) : null; } catch { parsed = null; }
+        return { res, text, parsed } as const;
+      };
+
+      let { res, parsed } = await attempt(url);
+      if ((res.status === 404 || res.status === 403) && url.startsWith(primaryBase)) {
+        // fallback to legacy
+        url = buildUrl(legacyBase);
+        ({ res, parsed } = await attempt(url));
+      }
+
       if (res.ok && parsed && Array.isArray(parsed.data)) {
         setCodesList(parsed.data as CodeItem[]);
         setPickerPage(1);
       } else {
+        if (res.status === 403) {
+          console.warn('Codes picker forbidden 403', { url, headersSent: Object.keys(h) });
+        }
         setCodesList([]);
       }
     } catch (e) {
-      console.error("loadCodesForPicker error", e);
+      console.error('loadCodesForPicker error', e);
       setCodesList([]);
     } finally {
       setCodesLoading(false);
@@ -1152,3 +1178,4 @@ export default function LabOrderForm({ initial }: { initial?: Partial<LabOrder> 
     </div>
   );
 }
+
