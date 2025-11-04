@@ -72,6 +72,7 @@ export default function NewLabOrderPage() {
   }, [editId, patientId]);
 
   return (
+    
     <AdminLayout>
       <div className="p-6">
         <div className="max-w-[1200px] mx-auto">

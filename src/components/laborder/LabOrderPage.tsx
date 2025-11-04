@@ -227,6 +227,7 @@ export default function LabOrdersPage() {
       const matchesQ = digitsOnly
         ? (String(o.patientId) === q || String(o.mrn) === q || hay.includes(q))
         : hay.includes(q);
+        
       const matchesS = statusFilter === "all" || o.status === statusFilter;
       const matchesP = priorityFilter === "all" || o.priority === priorityFilter;
       return matchesQ && matchesS && matchesP;
