@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 
 interface Code {
@@ -34,13 +34,15 @@ const isCodeType = (v: string): v is CodeType =>
 
 // --- Safe base URL builder (avoid double slashes) ---
 const BASE_API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
-const API_URL = `${BASE_API}/api/codes`;
+// Backend actual table/resource appears to be 'codess' (extra 's'). Use that as primary, fallback to legacy '/api/codes'.
+const PRIMARY_CODES_URL = `${BASE_API}/api/codess`;
+const LEGACY_CODES_URL = `${BASE_API}/api/codes`;
 
 // Detect https-page → http-api mixed-content (blocked by browsers)
 const isHttpsMixedContent = () =>
   typeof window !== "undefined" &&
   window.location.protocol === "https:" &&
-  API_URL.startsWith("http:");
+  PRIMARY_CODES_URL.startsWith("http:");
 
 type ApiResponse<T = unknown> = { data?: T; message?: string; error?: string };
 
@@ -52,23 +54,30 @@ export default function CodesPage() {
   const [error, setError] = useState<string | null>(null);
 
   // UI input values
+  // Default to CPT4 (CPT codes) if nothing stored so we immediately show CPT codes from code.sql
+  const DEFAULT_CODE_TYPE = "CPT4";
   const [q, setQ] = useState<string>(() =>
     typeof window !== "undefined" ? localStorage.getItem("codes_q") || "" : ""
   );
-  const [selectedType, setSelectedType] = useState<string>(() =>
-    typeof window !== "undefined" ? localStorage.getItem("codes_type") || "" : ""
-  );
+  const [selectedType, setSelectedType] = useState<string>(() => {
+    if (typeof window === "undefined") return DEFAULT_CODE_TYPE;
+    const stored = localStorage.getItem("codes_type");
+    return stored !== null && stored !== "" ? stored : DEFAULT_CODE_TYPE;
+  });
 
   // Actual applied filters (used for fetching)
   const [searchText, setSearchText] = useState<string>(() =>
     typeof window !== "undefined" ? localStorage.getItem("codes_q") || "" : ""
   );
-  const [filter, setFilter] = useState<string>(() =>
-    typeof window !== "undefined" ? localStorage.getItem("codes_type") || "" : ""
-  );
+  const [filter, setFilter] = useState<string>(() => {
+    if (typeof window === "undefined") return DEFAULT_CODE_TYPE;
+    const stored = localStorage.getItem("codes_type");
+    return stored !== null && stored !== "" ? stored : DEFAULT_CODE_TYPE;
+  });
 
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(1); // 1-based page index for UI
   const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState<number>(0); // total records reported by server
 
   // --- Robust orgId resolution (staging-safe). Fall back to env -> default '1' ---
   const resolveOrgId = (): string | null => {
@@ -97,7 +106,7 @@ export default function CodesPage() {
   }, [orgId]);
 
   const loadCodes = useCallback(
-    async (qOverride?: string, typeOverride?: string) => {
+    async (qOverride?: string, typeOverride?: string, pageOverride?: number, sizeOverride?: number) => {
       if (!orgId) {
         setCodes([]);
         setError("Missing orgId. Please sign in again.");
@@ -112,37 +121,64 @@ export default function CodesPage() {
 
       try {
         setError(null);
-        let url = API_URL;
+        let baseUrl = PRIMARY_CODES_URL; // default to new endpoint
         const qText = qOverride ?? searchText;
         const fText = typeOverride ?? filter;
-        if (qText || fText) {
-          const params = new URLSearchParams();
-          if (qText) params.append("q", qText);
-          if (fText) params.append("codeType", fText);
-          url = `${API_URL}/search?${params.toString()}`;
-        }
-        const res = await fetchWithAuth(url, { headers: makeHeaders(), mode: "cors" as const });
-        const bodyText = await res.text();
-        let parsed: ApiResponse<Code[]> | null = null;
-        try {
-          parsed = bodyText ? (JSON.parse(bodyText) as ApiResponse<Code[]>) : null;
-        } catch {
-          parsed = null;
+        const pageNum = pageOverride ?? page; // 1-based
+        const sizeNum = sizeOverride ?? pageSize;
+
+        // Build params (support both search and base) with pagination.
+        // Assumption: backend expects 'page' (1-based) & 'size'. Adjust if zero-based by subtracting 1.
+        const params = new URLSearchParams();
+        params.append("page", String(pageNum));
+        params.append("size", String(sizeNum));
+        if (qText) params.append("q", qText);
+        if (fText) params.append("codeType", fText);
+        // Decide endpoint: use /search if we have query filters besides pagination.
+        const useSearch = !!(qText || fText);
+        let url = useSearch ? `${baseUrl}/search?${params.toString()}` : `${baseUrl}?${params.toString()}`;
+        // Attempt primary endpoint first; if 404 or 403 (strict older security), fallback once to legacy.
+        const attempt = async (target: string) => {
+          const r = await fetchWithAuth(target, { headers: makeHeaders(), mode: "cors" as const });
+          const text = await r.text();
+          let parsed: ApiResponse<Code[]> | null = null; try { parsed = text ? JSON.parse(text) as ApiResponse<Code[]> : null; } catch { parsed = null; }
+          return { r, text, parsed } as const;
+        };
+
+        let { r: res, text: bodyText, parsed } = await attempt(url);
+        if ((res.status === 404 || res.status === 403) && url.startsWith(PRIMARY_CODES_URL)) {
+          // Fallback: rebuild URL with legacy base
+          baseUrl = LEGACY_CODES_URL;
+          url = useSearch
+            ? `${baseUrl}/search?${params.toString()}`
+            : `${baseUrl}?${params.toString()}`;
+          ({ r: res, text: bodyText, parsed } = await attempt(url));
         }
         if (res.ok && parsed) {
-          setCodes(parsed.data || []);
-          setPage(1);
+          // Attempt to derive total count from common keys (total, totalCount, count, or length of data as fallback)
+          type PossiblyCounted = ApiResponse<Code[]> & { total?: number; totalCount?: number; count?: number };
+          const pc = parsed as PossiblyCounted;
+          const hasArray = Array.isArray(pc.data);
+          const derivedTotal = hasArray && typeof pc.total === 'number' ? pc.total
+            : hasArray && typeof pc.totalCount === 'number' ? pc.totalCount
+            : hasArray && typeof pc.count === 'number' ? pc.count
+            : hasArray ? pc.data!.length : 0;
+          setCodes((parsed.data as Code[]) || []);
+          setTotalCount(derivedTotal);
         } else {
           const msg =
             (parsed && (parsed.message || parsed.error)) ||
             bodyText ||
-            `Failed to load codes (status ${res.status})`;
+            `Failed to load codes (status ${res.status}). Endpoint tried: ${url.includes('codess') ? '/api/codess' : '/api/codes'}`;
           setCodes([]);
+          setTotalCount(0);
           setError(msg);
           console.error("/api/codes error", {
             status: res.status,
             requestId: res.headers.get("x-request-id"),
             body: bodyText,
+            triedPrimary: PRIMARY_CODES_URL,
+            finalUrl: url,
           });
         }
       } catch (err) {
@@ -150,19 +186,48 @@ export default function CodesPage() {
         setError("Unexpected error while loading codes");
       }
     },
-    [orgId, searchText, filter, makeHeaders]
+    [orgId, searchText, filter, page, pageSize, makeHeaders]
   );
 
   // Run search only when button clicked
   const runSearch = () => {
     setSearchText(q);
     setFilter(selectedType);
+    setPage(1);
     if (typeof window !== "undefined") {
       localStorage.setItem("codes_q", q);
       localStorage.setItem("codes_type", selectedType);
     }
-    loadCodes(q, selectedType);
+    // After state updates, trigger load with overrides (page 1)
+    loadCodes(q, selectedType, 1, pageSize);
   };
+
+  // Fire load when page or pageSize changes (but not on first mount until user searches or existing filters)
+  useEffect(() => {
+    // Only proceed if we already did an initial search OR there are persisted filters
+    if (searchText || filter || codes.length > 0) {
+      loadCodes(searchText, filter, page, pageSize);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize]);
+
+  // Initial auto-load when no filters and nothing loaded yet
+  useEffect(() => {
+    // On first mount, if nothing has been loaded yet, ensure we run with default CPT4 filter
+    if (codes.length === 0) {
+      runSearch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-run search when code type (All Types vs specific) changes
+  useEffect(() => {
+    // Avoid duplicate run if selectedType equals current applied filter and search text unchanged
+    if (filter !== selectedType) {
+      runSearch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedType]);
 
   const [toast, setToast] = useState<null | { message: string; kind?: "success" | "error" }>(null);
   const showToast = (message: string, kind: "success" | "error" = "success") => {
@@ -207,14 +272,30 @@ export default function CodesPage() {
 
     try {
       const payload = sanitizePayload(form);
-      const url = payload.id ? `${API_URL}/${payload.id}` : API_URL;
+      // build base path (prefer new codess)
+      const basePath = PRIMARY_CODES_URL;
+      const legacyBase = LEGACY_CODES_URL;
+      const urlPrimary = payload.id ? `${basePath}/${payload.id}` : basePath;
+      const urlLegacy = payload.id ? `${legacyBase}/${payload.id}` : legacyBase;
+      let url = urlPrimary;
       const method = payload.id ? "PUT" : "POST";
-      const res = await fetchWithAuth(url, {
+      let res = await fetchWithAuth(url, {
         method,
         headers: makeHeaders(),
         body: JSON.stringify(payload),
         mode: "cors" as const,
       });
+
+      // Fallback to legacy if primary returns 404/403
+      if ((res.status === 404 || res.status === 403) && url === urlPrimary) {
+        url = urlLegacy;
+        res = await fetchWithAuth(url, {
+          method,
+          headers: makeHeaders(),
+          body: JSON.stringify(payload),
+          mode: "cors" as const,
+        });
+      }
 
       const text = await res.text();
       let parsed: ApiResponse | null = null;
@@ -255,12 +336,18 @@ export default function CodesPage() {
     }
 
     try {
-      const res = await fetchWithAuth(`${API_URL}/${id}`, {
+      // try primary then legacy
+      let url = `${PRIMARY_CODES_URL}/${id}`;
+      let res = await fetchWithAuth(url, {
         method: "DELETE",
         headers: makeHeaders(),
         mode: "cors" as const,
       });
       const text = await res.text();
+      if ((res.status === 404 || res.status === 403) && url.startsWith(PRIMARY_CODES_URL)) {
+        url = `${LEGACY_CODES_URL}/${id}`;
+        res = await fetchWithAuth(url, { method: "DELETE", headers: makeHeaders(), mode: "cors" as const });
+      }
       let parsed: ApiResponse | null = null;
       try {
         parsed = text ? (JSON.parse(text) as ApiResponse) : null;
@@ -283,9 +370,7 @@ export default function CodesPage() {
     }
   };
 
-  const startIndex = (page - 1) * pageSize;
-  const paginated = codes.slice(startIndex, startIndex + pageSize);
-  const totalPages = Math.ceil(codes.length / pageSize);
+  const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize));
 
   return (
     <div className="p-6 space-y-6 font-sans">
@@ -379,14 +464,14 @@ export default function CodesPage() {
             </tr>
           </thead>
           <tbody>
-            {paginated.length === 0 ? (
+            {codes.length === 0 ? (
               <tr>
                 <td colSpan={12} className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
                   No codes found.
                 </td>
               </tr>
             ) : (
-              paginated.map((c) => (
+              codes.map((c) => (
                 <tr key={c.id} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700">
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-100">{c.code}</td>
                   <td className="px-3 py-2">{c.codeType}</td>
@@ -438,25 +523,39 @@ export default function CodesPage() {
       </div>
 
       {/* Pagination footer */}
-      <div className="flex justify-between items-center mt-3 text-sm text-gray-600 dark:text-gray-400">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap gap-4 justify-between items-center mt-3 text-sm text-gray-600 dark:text-gray-400">
+        <div className="flex items-center gap-3">
           <button
             disabled={page === 1}
-            onClick={() => setPage((p) => p - 1)}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
             className="px-3 py-1 border rounded disabled:opacity-50 dark:border-gray-600"
           >
             Prev
           </button>
+          <span>
+            Page {page} of {totalPages}
+          </span>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="px-3 py-1 border rounded disabled:opacity-50 dark:border-gray-600"
+          >
+            Next
+          </button>
         </div>
-
-        <div>
-          Page {page} of {totalPages || 1}
-        </div>
-
-        <div className="ml-auto flex items-center gap-3">
-          <div>
-            Showing {paginated.length} of {codes.length}
-          </div>
+        <div className="flex items-center gap-3 ml-auto">
+          {(() => {
+            const hasData = totalCount > 0;
+            const firstItem = hasData ? (page - 1) * pageSize + 1 : 0;
+            const lastItem = hasData ? firstItem + codes.length - 1 : 0;
+            return (
+              <div>
+                {hasData
+                  ? `Showing ${firstItem}-${lastItem} of ${totalCount}`
+                  : `Showing 0 of 0`}
+              </div>
+            );
+          })()}
           <select
             value={pageSize}
             onChange={(e) => {
