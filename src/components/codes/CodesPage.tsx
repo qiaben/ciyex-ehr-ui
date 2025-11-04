@@ -1,6 +1,5 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
-import { useDebounce } from "@/hooks/useDebounce";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 
 interface Code {
@@ -61,9 +60,6 @@ export default function CodesPage() {
   const [selectedType, setSelectedType] = useState<string>(() =>
     typeof window !== "undefined" ? localStorage.getItem("codes_type") || "" : ""
   );
-  // Debounced versions for auto-search
-  const debouncedQ = useDebounce(q, 450);
-  const debouncedType = useDebounce(selectedType, 450);
 
   // Actual applied filters (used for fetching)
   const [searchText, setSearchText] = useState<string>(() =>
@@ -73,8 +69,9 @@ export default function CodesPage() {
     typeof window !== "undefined" ? localStorage.getItem("codes_type") || "" : ""
   );
 
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(1); // 1-based page index for UI
   const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState<number>(0); // total records reported by server
 
   // --- Robust orgId resolution (staging-safe). Fall back to env -> default '1' ---
   const resolveOrgId = (): string | null => {
@@ -103,7 +100,7 @@ export default function CodesPage() {
   }, [orgId]);
 
   const loadCodes = useCallback(
-    async (qOverride?: string, typeOverride?: string) => {
+    async (qOverride?: string, typeOverride?: string, pageOverride?: number, sizeOverride?: number) => {
       if (!orgId) {
         setCodes([]);
         setError("Missing orgId. Please sign in again.");
@@ -119,15 +116,21 @@ export default function CodesPage() {
       try {
         setError(null);
         let baseUrl = PRIMARY_CODES_URL; // default to new endpoint
-        let url = baseUrl;
         const qText = qOverride ?? searchText;
         const fText = typeOverride ?? filter;
-        if (qText || fText) {
-          const params = new URLSearchParams();
-          if (qText) params.append("q", qText);
-          if (fText) params.append("codeType", fText);
-          url = `${baseUrl}/search?${params.toString()}`;
-        }
+        const pageNum = pageOverride ?? page; // 1-based
+        const sizeNum = sizeOverride ?? pageSize;
+
+        // Build params (support both search and base) with pagination.
+        // Assumption: backend expects 'page' (1-based) & 'size'. Adjust if zero-based by subtracting 1.
+        const params = new URLSearchParams();
+        params.append("page", String(pageNum));
+        params.append("size", String(sizeNum));
+        if (qText) params.append("q", qText);
+        if (fText) params.append("codeType", fText);
+        // Decide endpoint: use /search if we have query filters besides pagination.
+        const useSearch = !!(qText || fText);
+        let url = useSearch ? `${baseUrl}/search?${params.toString()}` : `${baseUrl}?${params.toString()}`;
         // Attempt primary endpoint first; if 404 or 403 (strict older security), fallback once to legacy.
         const attempt = async (target: string) => {
           const r = await fetchWithAuth(target, { headers: makeHeaders(), mode: "cors" as const });
@@ -140,18 +143,29 @@ export default function CodesPage() {
         if ((res.status === 404 || res.status === 403) && url.startsWith(PRIMARY_CODES_URL)) {
           // Fallback: rebuild URL with legacy base
           baseUrl = LEGACY_CODES_URL;
-          url = (qText || fText) ? `${baseUrl}/search?${new URLSearchParams(Object.entries({ ...(qText && { q: qText }), ...(fText && { codeType: fText }) })).toString()}` : baseUrl;
+          url = useSearch
+            ? `${baseUrl}/search?${params.toString()}`
+            : `${baseUrl}?${params.toString()}`;
           ({ r: res, text: bodyText, parsed } = await attempt(url));
         }
         if (res.ok && parsed) {
-          setCodes(parsed.data || []);
-          setPage(1);
+          // Attempt to derive total count from common keys (total, totalCount, count, or length of data as fallback)
+          type PossiblyCounted = ApiResponse<Code[]> & { total?: number; totalCount?: number; count?: number };
+          const pc = parsed as PossiblyCounted;
+          const hasArray = Array.isArray(pc.data);
+          const derivedTotal = hasArray && typeof pc.total === 'number' ? pc.total
+            : hasArray && typeof pc.totalCount === 'number' ? pc.totalCount
+            : hasArray && typeof pc.count === 'number' ? pc.count
+            : hasArray ? pc.data!.length : 0;
+          setCodes((parsed.data as Code[]) || []);
+          setTotalCount(derivedTotal);
         } else {
           const msg =
             (parsed && (parsed.message || parsed.error)) ||
             bodyText ||
             `Failed to load codes (status ${res.status}). Endpoint tried: ${url.includes('codess') ? '/api/codess' : '/api/codes'}`;
           setCodes([]);
+          setTotalCount(0);
           setError(msg);
           console.error("/api/codes error", {
             status: res.status,
@@ -166,34 +180,30 @@ export default function CodesPage() {
         setError("Unexpected error while loading codes");
       }
     },
-    [orgId, searchText, filter, makeHeaders]
+    [orgId, searchText, filter, page, pageSize, makeHeaders]
   );
 
   // Run search only when button clicked
-  const runSearch = (overrideQ?: string, overrideType?: string) => {
-    const nextQ = overrideQ !== undefined ? overrideQ : q;
-    const nextType = overrideType !== undefined ? overrideType : selectedType;
-    setSearchText(nextQ);
-    setFilter(nextType);
+  const runSearch = () => {
+    setSearchText(q);
+    setFilter(selectedType);
+    setPage(1);
     if (typeof window !== "undefined") {
-      localStorage.setItem("codes_q", nextQ);
-      localStorage.setItem("codes_type", nextType);
+      localStorage.setItem("codes_q", q);
+      localStorage.setItem("codes_type", selectedType);
     }
-    loadCodes(nextQ, nextType);
+    // After state updates, trigger load with overrides (page 1)
+    loadCodes(q, selectedType, 1, pageSize);
   };
 
-  // Auto-trigger search when debounced inputs change (skip initial mount if empty to avoid unwanted full load?)
-  const [initialized, setInitialized] = useState(false);
+  // Fire load when page or pageSize changes (but not on first mount until user searches or existing filters)
   useEffect(() => {
-    // Avoid triggering an empty full-table load on very first render unless values stored.
-    if (!initialized) {
-      setInitialized(true);
-      if (debouncedQ || debouncedType) runSearch(debouncedQ, debouncedType);
-      return;
+    // Only proceed if we already did an initial search OR there are persisted filters
+    if (searchText || filter || codes.length > 0) {
+      loadCodes(searchText, filter, page, pageSize);
     }
-    runSearch(debouncedQ, debouncedType);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQ, debouncedType]);
+  }, [page, pageSize]);
 
   const [toast, setToast] = useState<null | { message: string; kind?: "success" | "error" }>(null);
   const showToast = (message: string, kind: "success" | "error" = "success") => {
@@ -336,9 +346,7 @@ export default function CodesPage() {
     }
   };
 
-  const startIndex = (page - 1) * pageSize;
-  const paginated = codes.slice(startIndex, startIndex + pageSize);
-  const totalPages = Math.ceil(codes.length / pageSize);
+  const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize));
 
   return (
     <div className="p-6 space-y-6 font-sans">
@@ -376,9 +384,8 @@ export default function CodesPage() {
             className="border rounded px-3 py-2 w-80 text-sm bg-white dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
           />
           <button
-            onClick={() => runSearch()}
+            onClick={runSearch}
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
-            title="Manual refresh (auto search runs on pause in typing)"
           >
             Search
           </button>
@@ -433,14 +440,14 @@ export default function CodesPage() {
             </tr>
           </thead>
           <tbody>
-            {paginated.length === 0 ? (
+            {codes.length === 0 ? (
               <tr>
                 <td colSpan={12} className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
                   No codes found.
                 </td>
               </tr>
             ) : (
-              paginated.map((c) => (
+              codes.map((c) => (
                 <tr key={c.id} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700">
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-100">{c.code}</td>
                   <td className="px-3 py-2">{c.codeType}</td>
@@ -504,12 +511,12 @@ export default function CodesPage() {
         </div>
 
         <div>
-          Page {page} of {totalPages || 1}
+          Page {page} of {totalPages}
         </div>
 
         <div className="ml-auto flex items-center gap-3">
           <div>
-            Showing {paginated.length} of {codes.length}
+            Showing {codes.length} of {totalCount || codes.length}{totalCount && totalCount > codes.length ? ` (page size ${pageSize})` : ""}
           </div>
           <select
             value={pageSize}
@@ -525,6 +532,13 @@ export default function CodesPage() {
               </option>
             ))}
           </select>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="px-3 py-1 border rounded disabled:opacity-50 dark:border-gray-600"
+          >
+            Next
+          </button>
         </div>
       </div>
 
