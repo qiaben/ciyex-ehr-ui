@@ -54,20 +54,26 @@ export default function CodesPage() {
   const [error, setError] = useState<string | null>(null);
 
   // UI input values
+  // Default to CPT4 (CPT codes) if nothing stored so we immediately show CPT codes from code.sql
+  const DEFAULT_CODE_TYPE = "CPT4";
   const [q, setQ] = useState<string>(() =>
     typeof window !== "undefined" ? localStorage.getItem("codes_q") || "" : ""
   );
-  const [selectedType, setSelectedType] = useState<string>(() =>
-    typeof window !== "undefined" ? localStorage.getItem("codes_type") || "" : ""
-  );
+  const [selectedType, setSelectedType] = useState<string>(() => {
+    if (typeof window === "undefined") return DEFAULT_CODE_TYPE;
+    const stored = localStorage.getItem("codes_type");
+    return stored !== null && stored !== "" ? stored : DEFAULT_CODE_TYPE;
+  });
 
   // Actual applied filters (used for fetching)
   const [searchText, setSearchText] = useState<string>(() =>
     typeof window !== "undefined" ? localStorage.getItem("codes_q") || "" : ""
   );
-  const [filter, setFilter] = useState<string>(() =>
-    typeof window !== "undefined" ? localStorage.getItem("codes_type") || "" : ""
-  );
+  const [filter, setFilter] = useState<string>(() => {
+    if (typeof window === "undefined") return DEFAULT_CODE_TYPE;
+    const stored = localStorage.getItem("codes_type");
+    return stored !== null && stored !== "" ? stored : DEFAULT_CODE_TYPE;
+  });
 
   const [page, setPage] = useState(1); // 1-based page index for UI
   const [pageSize, setPageSize] = useState(10);
@@ -207,7 +213,8 @@ export default function CodesPage() {
 
   // Initial auto-load when no filters and nothing loaded yet
   useEffect(() => {
-    if (!searchText && !filter && codes.length === 0) {
+    // On first mount, if nothing has been loaded yet, ensure we run with default CPT4 filter
+    if (codes.length === 0) {
       runSearch();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
