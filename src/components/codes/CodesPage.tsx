@@ -1,5 +1,6 @@
 "use client";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useDebounce } from "@/hooks/useDebounce";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 
 interface Code {
@@ -60,6 +61,9 @@ export default function CodesPage() {
   const [selectedType, setSelectedType] = useState<string>(() =>
     typeof window !== "undefined" ? localStorage.getItem("codes_type") || "" : ""
   );
+  // Debounced versions for auto-search
+  const debouncedQ = useDebounce(q, 450);
+  const debouncedType = useDebounce(selectedType, 450);
 
   // Actual applied filters (used for fetching)
   const [searchText, setSearchText] = useState<string>(() =>
@@ -166,15 +170,30 @@ export default function CodesPage() {
   );
 
   // Run search only when button clicked
-  const runSearch = () => {
-    setSearchText(q);
-    setFilter(selectedType);
+  const runSearch = (overrideQ?: string, overrideType?: string) => {
+    const nextQ = overrideQ !== undefined ? overrideQ : q;
+    const nextType = overrideType !== undefined ? overrideType : selectedType;
+    setSearchText(nextQ);
+    setFilter(nextType);
     if (typeof window !== "undefined") {
-      localStorage.setItem("codes_q", q);
-      localStorage.setItem("codes_type", selectedType);
+      localStorage.setItem("codes_q", nextQ);
+      localStorage.setItem("codes_type", nextType);
     }
-    loadCodes(q, selectedType);
+    loadCodes(nextQ, nextType);
   };
+
+  // Auto-trigger search when debounced inputs change (skip initial mount if empty to avoid unwanted full load?)
+  const [initialized, setInitialized] = useState(false);
+  useEffect(() => {
+    // Avoid triggering an empty full-table load on very first render unless values stored.
+    if (!initialized) {
+      setInitialized(true);
+      if (debouncedQ || debouncedType) runSearch(debouncedQ, debouncedType);
+      return;
+    }
+    runSearch(debouncedQ, debouncedType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQ, debouncedType]);
 
   const [toast, setToast] = useState<null | { message: string; kind?: "success" | "error" }>(null);
   const showToast = (message: string, kind: "success" | "error" = "success") => {
@@ -357,8 +376,9 @@ export default function CodesPage() {
             className="border rounded px-3 py-2 w-80 text-sm bg-white dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
           />
           <button
-            onClick={runSearch}
+            onClick={() => runSearch()}
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+            title="Manual refresh (auto search runs on pause in typing)"
           >
             Search
           </button>
