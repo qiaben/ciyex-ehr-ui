@@ -205,6 +205,23 @@ export default function CodesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize]);
 
+  // Initial auto-load when no filters and nothing loaded yet
+  useEffect(() => {
+    if (!searchText && !filter && codes.length === 0) {
+      runSearch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-run search when code type (All Types vs specific) changes
+  useEffect(() => {
+    // Avoid duplicate run if selectedType equals current applied filter and search text unchanged
+    if (filter !== selectedType) {
+      runSearch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedType]);
+
   const [toast, setToast] = useState<null | { message: string; kind?: "success" | "error" }>(null);
   const showToast = (message: string, kind: "success" | "error" = "success") => {
     setToast({ message, kind });
