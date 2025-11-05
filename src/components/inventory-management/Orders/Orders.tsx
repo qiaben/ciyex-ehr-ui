@@ -508,8 +508,8 @@ export default function Orders() {
                                     <Button
                                         type="button"
                                         onClick={() => {
-                                                setEditMode(false); // cancel edit but keep modal open
-                                                setSelected(null);  // close modal completely
+                                            setEditMode(false); // cancel edit but keep modal open
+                                            setSelected(null);  // close modal completely
                                         }}
                                     >
                                         {editMode ? "Cancel" : "Cancel"}
