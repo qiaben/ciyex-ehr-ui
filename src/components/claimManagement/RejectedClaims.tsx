@@ -16,9 +16,10 @@ const RejectedClaims: React.FC = () => {
   const [selectedClaims, setSelectedClaims] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
-  // Dynamic orgId from localStorage, patientId for future use
+  // Dynamic orgId from localStorage
   const orgId = typeof window !== "undefined" ? localStorage.getItem("orgId") || "" : "";
-  // const patientId = ...; // For future dynamic retrieval
+  // Get patientId from localStorage, context, or props (update as needed)
+  const patientId = typeof window !== "undefined" ? localStorage.getItem("patientId") : 2;
 
   // Mock data from screenshots
   const mockClaims = [
@@ -33,15 +34,16 @@ const RejectedClaims: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/all-claims`, {
+        // Use new API endpoint for all claims
+        const res = await fetch(`/api/all-claims`, {
           headers: { "x-org-id": orgId }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        const body = await res.json();
-        const rejectedClaims = (body.data || []).filter((c: any) => c.status === 'rejected' || c.status === 'denied');
+        const allClaims = await res.json();
+        const rejectedClaims = (allClaims || []).filter((c: any) => c.status === 'rejected' || c.status === 'denied');
         setClaims(rejectedClaims);
-  const carriers = [...new Set(rejectedClaims.map((c: any) => c.payerName).filter(Boolean))] as string[];
-  setUniqueCarriers(carriers);
+        const carriers = [...new Set(rejectedClaims.map((c: any) => c.payerName).filter(Boolean))] as string[];
+        setUniqueCarriers(carriers);
         if (rejectedClaims.length === 0) {
           // setClaims(mockClaims); // Uncomment for demo
         }

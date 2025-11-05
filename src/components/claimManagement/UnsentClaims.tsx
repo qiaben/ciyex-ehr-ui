@@ -18,7 +18,8 @@ const UnsentClaims: React.FC = () => {
 
   // Get orgId from localStorage (dynamic)
   const orgId = typeof window !== "undefined" ? localStorage.getItem("orgId") : null;
- const patientId = 2; // TODO: Replace with actual patientId from context/session
+  // Get patientId from localStorage, context, or props (update as needed)
+  const patientId = typeof window !== "undefined" ? localStorage.getItem("patientId") : 2;
   // Mock data fallback (based on Oryx screenshots; remove in production)
   const mockClaims = [
     { id: 28302, patientName: "Robert John Diaz (9650)", type: "E-claim Primary", createdOn: "10/23/2025", payerName: "Horizon Young Grins", status: "readyForSubmission", hasAttachment: false, notes: "", description: "" },
@@ -31,12 +32,12 @@ const UnsentClaims: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/all-claims`, {
+        // Use new API endpoint for all claims
+        const res = await fetch(`/api/all-claims`, {
           headers: { "x-org-id": orgId }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        const body = await res.json();
-        const allClaims = body.data || [];
+        const allClaims = await res.json();
         const unsentClaims = allClaims.filter((c: any) => c.status === 'unsent' || c.status === 'readyForSubmission');
         setClaims(unsentClaims);
         // Dynamic carriers
@@ -54,7 +55,7 @@ const UnsentClaims: React.FC = () => {
       setLoading(false);
     }
     fetchClaims();
-  }, [patientId, orgId]);
+  }, [orgId]);
 
   // Filter/search logic
   const filteredClaims = claims.filter((claim: any) => {

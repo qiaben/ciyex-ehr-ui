@@ -440,18 +440,20 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
             const json = (await res.json()) as ApiResponse<ProcedureDto>;
             if (!res.ok || !json.success) throw new Error(json.message || "Save failed");
 
-            // --- Create Invoice in Billing if this is a new procedure ---
-            if (!editing?.id) {
+            // After procedure creation, create invoice dynamically using all relevant procedure fields
+            if (!editing?.id && json.data) {
                 try {
-                    // Only create invoice if procedure creation succeeded
                     const invoiceBody = {
-                        code: cpt4.trim(),
-                        description: description.trim(),
+                        code: cpt4.trim() || json.data.cpt4 || "",
+                        description: description.trim() || json.data.description || "",
+                        units: units !== "" ? Number(units) : (json.data.units ? Number(json.data.units) : 1),
+                        rate: rate ? Number(rate) : (json.data.rate ? Number(json.data.rate) : 0),
+                        dos: hospitalBillingStart || json.data.hospitalBillingStart || "",
                         provider: providername.trim(),
-                        dos: hospitalBillingStart || "", // required, fallback to empty string
-                        rate: rate ? Number(rate) : 0,
+                        modifiers: [modifier1, modifier2, modifier3, modifier4].filter(Boolean).join(","),
+                        patientId,
+                        encounterId,
                     };
-                    // Use fetchWithAuth for consistent orgId header
                     await fetchWithAuth(`/api/patient-billing/${patientId}/invoices`, {
                         method: "POST",
                         body: JSON.stringify(invoiceBody),
