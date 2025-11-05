@@ -27,18 +27,20 @@ const UnclaimedClaims: React.FC = () => {
 
   // Dynamic orgId from localStorage
   const orgId = typeof window !== "undefined" ? localStorage.getItem("orgId") || "" : "";
+  // Get patientId from localStorage, context, or props (update as needed)
+  const patientId = typeof window !== "undefined" ? localStorage.getItem("patientId") : 2;
 
   useEffect(() => {
     async function fetchClaims() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/all-claims`, {
+        // Use new API endpoint for all claims
+        const res = await fetch(`/api/all-claims`, {
           headers: { "x-org-id": orgId }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        const body = await res.json();
-        const allClaims = body.data || [];
+        const allClaims = await res.json();
         const unclaimedClaims = allClaims.filter((c: any) => c.status === 'unclaimed');
         setClaims(unclaimedClaims);
         // Dynamic carriers

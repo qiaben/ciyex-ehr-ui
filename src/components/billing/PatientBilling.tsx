@@ -210,15 +210,17 @@ const RowStat: React.FC<{
     </div>
 );
 
-const IconBtn: React.FC<React.PropsWithChildren<{ title: string; onClick?: () => void }>> = ({
+const IconBtn: React.FC<React.PropsWithChildren<{ title: string; onClick?: () => void; disabled?: boolean }>> = ({
                                                                                                  children,
                                                                                                  title,
                                                                                                  onClick,
+                                                                                                 disabled,
                                                                                              }) => (
     <button
         title={title}
         onClick={onClick}
-        className="rounded border border-gray-200 bg-white px-2 py-1 text-sm hover:bg-gray-50"
+        disabled={disabled}
+        className={`rounded border border-gray-200 bg-white px-2 py-1 text-sm ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
     >
         {children}
     </button>

@@ -18,6 +18,8 @@ const ErroredClaims: React.FC = () => {
 
   // Get orgId from localStorage (dynamic)
   const orgId = typeof window !== "undefined" ? localStorage.getItem("orgId") : null;
+  // Get patientId from localStorage, context, or props (update as needed)
+  const patientId = typeof window !== "undefined" ? localStorage.getItem("patientId") : 2;
 
   // Mock data from screenshots
   const mockClaims = [
@@ -30,12 +32,13 @@ const ErroredClaims: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/all-claims`, {
+        // Use new API endpoint for all claims
+        const res = await fetch(`/api/all-claims`, {
           headers: { "x-org-id": orgId }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const body = await res.json();
-        const erroredClaims = (body.data || []).filter((c: any) => c.status === 'error');
+        const allClaims = await res.json();
+        const erroredClaims = (allClaims || []).filter((c: any) => c.status === 'error');
         setClaims(erroredClaims);
         const carriers = [...new Set(erroredClaims.map((c: any) => c.payerName).filter(Boolean))];
         setUniqueCarriers(carriers);
@@ -50,7 +53,7 @@ const ErroredClaims: React.FC = () => {
       setLoading(false);
     }
     fetchClaims();
-  }, [patientId, orgId]);
+  }, [orgId]);
 
   const filteredClaims = claims.filter((claim: any) => {
     return (

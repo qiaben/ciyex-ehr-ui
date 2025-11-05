@@ -17,8 +17,9 @@ const HistoryClaims: React.FC = () => {
   const [selectedClaims, setSelectedClaims] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
-  const patientId = 1;
-  const orgId = 1;
+  // Get patientId and orgId from localStorage, context, or props (update as needed)
+  const patientId = typeof window !== "undefined" ? localStorage.getItem("patientId") : 1;
+  const orgId = typeof window !== "undefined" ? localStorage.getItem("orgId") : 1;
 
   // Add selectAll and toggleSelect functions
   const selectAll = () => {
@@ -51,14 +52,15 @@ const HistoryClaims: React.FC = () => {
     async function fetchClaims() {
       setLoading(true);
       try {
-        const res = await fetch(`${API_BASE}/all-claims`, {
-          headers: { "x-org-id": orgId.toString() }
+        // Use new API endpoint for all claims
+        const res = await fetch(`/api/all-claims`, {
+          headers: { "x-org-id": orgId ? orgId.toString() : "" }
         });
-        const body = await res.json();
-        const historyClaims = (body.data || []).filter((c: any) => c.status === 'sent' || c.status === 'submittedToClearingHouse');
+        const allClaims = await res.json();
+        const historyClaims = (allClaims || []).filter((c: any) => c.status === 'sent' || c.status === 'submittedToClearingHouse');
         setClaims(historyClaims);
         // Optionally set unique carriers
-  setUniqueCarriers([...new Set((body.data || []).map((c: any) => c.payerName).filter(Boolean))] as string[]);
+        setUniqueCarriers([...new Set((allClaims || []).map((c: any) => c.payerName).filter(Boolean))] as string[]);
       } catch (e) {
         setClaims([]);
         setError("Failed to fetch claims.");
@@ -66,7 +68,7 @@ const HistoryClaims: React.FC = () => {
       setLoading(false);
     }
     fetchClaims();
-  }, [patientId, orgId]);
+  }, [orgId]);
 
   // filteredClaims logic same...
   const filteredClaims = claims.filter((claim: any) => {
