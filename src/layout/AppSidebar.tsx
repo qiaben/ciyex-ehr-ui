@@ -143,6 +143,11 @@ const navItems: NavItem[] = [
         path: "/labs/orders",
         pro: false,
       },
+      {
+        name: "Lab Results",
+        path: "/labs/results",
+        pro: false,
+      },
     ],
   },
 ];
