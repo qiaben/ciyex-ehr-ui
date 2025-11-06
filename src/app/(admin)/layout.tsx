@@ -74,6 +74,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         "/inventory-management/settings": "Inventory Settings",
         "/patient_education": "Patient Education",
         "/all-encounters": "All Encounters",
+        "/labs/orders": "Lab Orders",
+        "/labs/results": "Lab Results",
       
         
     };
