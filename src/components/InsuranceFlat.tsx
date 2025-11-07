@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
+import { verifyInsuranceEligibility } from "@/utils/sikkaApi";
 
 type ApiResponse<T> = {
     success: boolean;
@@ -112,6 +113,9 @@ export default function InsuranceFlat({
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [info, setInfo] = useState<string | null>(null);
+    const [verifying, setVerifying] = useState(false);
+    const [verificationResult, setVerificationResult] = useState<any>(null);
+    const [showVerificationModal, setShowVerificationModal] = useState(false);
 
     const [form, setForm] = useState<CoverageDto>({
         patientId,
@@ -302,20 +306,83 @@ export default function InsuranceFlat({
         }
     }
 
+    async function verifyCurrentInsurance() {
+        const row = rows[insuranceSubTab];
+        if (!row?.id) {
+            setError("No insurance data to verify. Please add insurance first.");
+            resetMessagesSoon();
+            return;
+        }
+
+        if (!row.policyNumber || !row.provider) {
+            setError("Missing required fields (Policy Number, Provider) for verification.");
+            resetMessagesSoon();
+            return;
+        }
+
+        setVerifying(true);
+        setError(null);
+        setVerificationResult(null);
+        try {
+            // Call Sikka API to verify this specific insurance
+            const result = await verifyInsuranceEligibility(
+                patientId,
+                row.policyNumber,
+                row.provider,
+                patient.dateOfBirth || "",
+                insuranceSubTab // Pass which level is being verified
+            );
+            setVerificationResult(result);
+            setShowVerificationModal(true);
+            setInfo(`${tabLabels[insuranceSubTab]} insurance verified successfully`);
+        } catch (err: any) {
+            setError(err?.message || "Verification failed");
+        } finally {
+            setVerifying(false);
+            resetMessagesSoon();
+        }
+    }
+
     const current = rows[insuranceSubTab];
 
     return (
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
             <div className="flex justify-between items-center mb-4">
                 <h4 className="text-lg font-semibold text-gray-800">Insurance</h4>
-                {!editInsurance && (
-                    <button
-                        onClick={() => setEditInsurance(true)}
-                        className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-                    >
-                        Edit
-                    </button>
-                )}
+                <div className="flex gap-2">
+                    {!editInsurance && rows[insuranceSubTab]?.id && (
+                        <button
+                            onClick={verifyCurrentInsurance}
+                            disabled={verifying}
+                            className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                        >
+                            {verifying ? (
+                                <>
+                                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Verifying...
+                                </>
+                            ) : (
+                                <>
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Verify {tabLabels[insuranceSubTab]}
+                                </>
+                            )}
+                        </button>
+                    )}
+                    {!editInsurance && (
+                        <button
+                            onClick={() => setEditInsurance(true)}
+                            className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                            Edit
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Alerts */}
@@ -337,6 +404,7 @@ export default function InsuranceFlat({
                         }`}
                     >
                         {tabLabels[tab]}
+                        {rows[tab]?.id && <span className="ml-1 text-xs">✓</span>}
                     </button>
                 ))}
             </div>
