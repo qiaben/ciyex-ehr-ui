@@ -1,6 +1,5 @@
 "use client";
 
-
 import AllergiesSummary from "@/components/patients/AllergiesSummary";
 import MedicalProblemsSummary from "@/components/patients/MedicalProblemsSummary";
 import InsuranceSummary from "@/components/patients/InsuranceSummary";
@@ -12,6 +11,7 @@ import AdminLayout from "@/app/(admin)/layout";
 import Link from "next/link";
 import DemographicsFlat from "@/components/DemographicsFlat";
 import HistoryFlat from "@/components/HistoryFlat";
+import PatientRelationshipsTab from "@/components/PatientRelationshipsTab";
 import {
     AppointmentsFlat,
     BillingFlat,
@@ -908,6 +908,7 @@ export default function PatientDashboardPage() {
         // 👇 New buttons
         { key: "immunizations", label: "Immunizations" },
         { key: "healthcareservices", label: "Healthcare Services" },
+        { key: "relationships", label: "Relationships" },
     ];
 
     const renderTabContent = (tabKey: string) => {
@@ -1213,6 +1214,9 @@ export default function PatientDashboardPage() {
                         return <ImmunizationsFlat patientId={Number(patient.id)} />;
            case "healthcareservices":
                 return <HealthcareServicesFlat patientId={Number(patient.id)} />;
+            
+            case "relationships":
+                return <PatientRelationshipsTab patientId={Number(patient.id)} />;
 
             default:
                 return (
@@ -1295,7 +1299,7 @@ export default function PatientDashboardPage() {
                             </div>
                         </div>
 
-                        {/* <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex items-center gap-3 shrink-0">
                             <button
                                 className="h-8 px-3 rounded bg-blue-600 hover:bg-blue-700 text-xs font-medium text-white shadow-sm inline-flex items-center"
                                 onClick={handleOpenEncounter}
@@ -1305,7 +1309,7 @@ export default function PatientDashboardPage() {
                                 </svg>
                                 New Encounter
                             </button>
-                        </div> */}
+                        </div>
                     </div>
 
                     <div className="mt-1.5">
