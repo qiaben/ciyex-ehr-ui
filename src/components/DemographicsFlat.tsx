@@ -18,6 +18,17 @@ interface Patient {
     familyMembers?: string[];
     careTeam?: string[];
 }
+
+interface PatientRelationship {
+    id: number;
+    relatedPatientName: string;
+    relationshipType: string;
+    phoneNumber?: string;
+    email?: string;
+    address?: string;
+    emergencyContact: boolean;
+    active: boolean;
+}
 interface Props {
     patient: Patient;
     demoForm: Partial<Patient>;
@@ -38,6 +49,9 @@ export default function DemographicsFlat({
                                          }: Props) {
     const [providers, setProviders] = useState<Provider[]>([]);
     const [patients, setPatients] = useState<PatientRef[]>([]);
+    const [relationships, setRelationships] = useState<PatientRelationship[]>([]);
+    const [relationshipsLoading, setRelationshipsLoading] = useState(true);
+    const [relationshipsError, setRelationshipsError] = useState<string | null>(null);
     const [alertState, setAlertState] = useState<{
         type: "success" | "error";
         message: string;
@@ -73,9 +87,57 @@ export default function DemographicsFlat({
             } catch {}
         };
 
+        const fetchRelationships = async () => {
+            if (!patient.id) {
+                console.log('No patient ID available');
+                setRelationshipsLoading(false);
+                return;
+            }
+            
+            try {
+                setRelationshipsLoading(true);
+                setRelationshipsError(null);
+                console.log('Fetching relationships for patient:', patient.id);
+                
+                const res = await fetchWithAuth(
+                    `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patient.id}/relationships`
+                );
+                console.log('Response status:', res.status);
+                
+                if (res.ok) {
+                    const response = await res.json();
+                    console.log('Full API response:', response);
+                    
+                    // Handle ApiResponse wrapper
+                    const relationshipsData = response.data || [];
+                    console.log('Relationships data array:', relationshipsData);
+                    
+                    // Filter for active relationships
+                    const activeRelationships = relationshipsData.filter((r: PatientRelationship) => r.active);
+                    console.log('Active relationships count:', activeRelationships.length, activeRelationships);
+                    
+                    setRelationships(activeRelationships);
+                    setRelationshipsLoading(false);
+                } else {
+                    const errorMsg = `Failed to fetch relationships: ${res.status}`;
+                    console.error(errorMsg);
+                    setRelationshipsError(errorMsg);
+                    setRelationshipsLoading(false);
+                }
+            } catch (err) {
+                const errorMsg = `Error fetching relationships: ${err}`;
+                console.error(errorMsg, err);
+                setRelationshipsError(errorMsg);
+                setRelationshipsLoading(false);
+            }
+        };
+
         fetchProviders();
         fetchPatients();
-    }, []);
+        if (patient.id) {
+            fetchRelationships();
+        }
+    }, [patient.id]);
 
     const handleInputChange = (
         field: string,
@@ -382,6 +444,54 @@ export default function DemographicsFlat({
                     </ul>
                 ) : (
                     <div className="text-xs text-gray-500 font-normal">None</div>
+                )}
+            </Section>
+
+            {/* ✅ Patient Relationships */}
+            <Section title="Patient Relationships">
+                {relationshipsLoading ? (
+                    <div className="text-xs text-gray-500 font-normal flex items-center gap-2">
+                        <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Loading relationships...
+                    </div>
+                ) : relationshipsError ? (
+                    <div className="text-xs text-red-600 font-normal">
+                        {relationshipsError}
+                    </div>
+                ) : relationships.length > 0 ? (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                            <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-2 py-1 text-left font-semibold">Relationship</th>
+                                <th className="px-2 py-1 text-left font-semibold">Name</th>
+                                <th className="px-2 py-1 text-center font-semibold">Emergency Contact</th>
+                            </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                            {relationships.map((rel) => (
+                                <tr key={rel.id} className="hover:bg-gray-50">
+                                    <td className="px-2 py-1.5">{rel.relationshipType}</td>
+                                    <td className="px-2 py-1.5">{rel.relatedPatientName}</td>
+                                    <td className="px-2 py-1.5 text-center">
+                                        {rel.emergencyContact ? (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                Yes
+                                            </span>
+                                        ) : (
+                                            <span className="text-gray-400">-</span>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <div className="text-xs text-gray-500 font-normal">No relationships recorded</div>
                 )}
             </Section>
 
