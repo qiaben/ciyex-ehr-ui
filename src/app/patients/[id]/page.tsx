@@ -19,13 +19,13 @@ import {
     AllergiesFlat,
     InsuranceFlat,
     ReportFlat,
-    DocumentsFlat,
     LabsFlat,
     IssuesFlat,
     MedicalProblemsFlat,
     ImmunizationsFlat,
     HealthcareServicesFlat  // ✅ add this
 } from "@/components/PatientComponents";
+import DocumentsFlat from "@/components/Documents/Documents";
 import EncounterTableExpandable from "@/components/encounter/EncounterTableExpandable";
 
 import PatientBilling from "@/components/billing/PatientBilling";
@@ -416,7 +416,6 @@ export default function PatientDashboardPage() {
     const [allergies, setAllergies] = useState<any[]>([]);
     const [viewMode, setViewMode] = useState<string>("dashboard");
     const [highlightedTab, setHighlightedTab] = useState<string>("dashboard");
-    const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
     const [showEncounterForm, setShowEncounterForm] = useState(false);
     const [encounterForm, setEncounterForm] = useState<EncounterFormData>({
         visitCategory: "",
@@ -1128,7 +1127,7 @@ export default function PatientDashboardPage() {
 
 
             case "documents":
-                return <DocumentsFlat selectedDoc={selectedDoc} setSelectedDoc={setSelectedDoc} />;
+                return <DocumentsFlat />;
 
             case "report":
                 return (
@@ -1211,10 +1210,14 @@ export default function PatientDashboardPage() {
                 );
 
             case "immunizations":
-                        return <ImmunizationsFlat patientId={Number(patient.id)} />;
-           case "healthcareservices":
+                return <ImmunizationsFlat patientId={Number(patient.id)} />;
+                
+            case "healthcareservices":
                 return <HealthcareServicesFlat patientId={Number(patient.id)} />;
             
+
+            case "documents":
+                return <DocumentsFlat />;
             case "relationships":
                 return <PatientRelationshipsTab patientId={Number(patient.id)} />;
 
