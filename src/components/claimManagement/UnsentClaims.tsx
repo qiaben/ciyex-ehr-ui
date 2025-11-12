@@ -1,11 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { Edit, Eye, Paperclip, EyeOff } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 const API_BASE = "/api/patient-billing";
 
+// Type definitions
+type Claim = {
+  id: number;
+  patientId: number;
+  patientName: string;
+  type: string;
+  createdOn: string;
+  provider: string;
+  status: string;
+  notes?: string;
+  description?: string;
+  hasAttachment?: boolean;
+};
+
 const UnsentClaims: React.FC = () => {
-  const [claims, setClaims] = useState<any[]>([]);
+  const router = useRouter();
+  const [claims, setClaims] = useState<Claim[]>([]);
   const [uniqueCarriers, setUniqueCarriers] = useState<string[]>([]);
   const [searchPatient, setSearchPatient] = useState("");
   const [searchClaim, setSearchClaim] = useState("");
@@ -28,7 +44,7 @@ const UnsentClaims: React.FC = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [showAttachmentModal, setShowAttachmentModal] = useState(false);
   const [showEditNarrativeModal, setShowEditNarrativeModal] = useState(false);
-  const [selectedClaimForAction, setSelectedClaimForAction] = useState<any>(null);
+  const [selectedClaimForAction, setSelectedClaimForAction] = useState<Claim | null>(null);
   const [narrativeText, setNarrativeText] = useState("");
   
   const [actionLoading, setActionLoading] = useState(false);
@@ -88,7 +104,7 @@ const UnsentClaims: React.FC = () => {
       const response = await res.json();
       setClaims(response.data || []);
       setUniqueCarriers(
-        Array.from(new Set((response.data || []).map((c: any) => String(c.payerName)).filter(Boolean)))
+        Array.from(new Set((response.data || []).map((c: any) => String(c.provider)).filter(Boolean)))
       );
       setError(null);
     } catch (err: any) {
@@ -113,7 +129,7 @@ const UnsentClaims: React.FC = () => {
         })
         .then(data => {
           setClaims(data);
-          setUniqueCarriers(Array.from(new Set(data.map((c: any) => String(c.payerName)).filter(Boolean))));
+          setUniqueCarriers(Array.from(new Set(data.map((c: any) => String(c.provider)).filter(Boolean))));
           setError(null);
         })
         .catch(err => {
@@ -123,6 +139,17 @@ const UnsentClaims: React.FC = () => {
     }
   }, [selectedPatientId]);
 
+  // ✅ Helper function to format date
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit' 
+    });
+  };
+
   // ✅ Filter claims
   const filteredClaims = claims.filter((claim: any) => {
     return (
@@ -130,7 +157,7 @@ const UnsentClaims: React.FC = () => {
       (!searchPatient || (claim.patientName && claim.patientName.toLowerCase().includes(searchPatient.toLowerCase()))) &&
       (!searchClaim || (claim.id && claim.id.toString().includes(searchClaim)) || claim.createdOn?.includes(searchClaim)) &&
       (!filters.type || claim.type === filters.type) &&
-      (!filters.carrier || claim.payerName === filters.carrier) &&
+      (!filters.carrier || claim.provider === filters.carrier) &&
       (!filters.attachment || (filters.attachment === "yes" ? claim.hasAttachment : !claim.hasAttachment))
     );
   });
@@ -230,6 +257,14 @@ const handleChangeStatus = async () => {
     }
   };
 
+  // ✅ Navigate to patient page
+  const navigateToPatientBilling = (patientId: number) => {
+    if (patientId) {
+      // Navigate to patient page - user will need to click Billing tab
+      router.push(`/patients/${patientId}`);
+    }
+  };
+
 
  
 
@@ -309,8 +344,8 @@ const handleChangeStatus = async () => {
           className="border px-2 py-1 rounded"
         >
           <option value="">Filter by Claim Type</option>
-          <option value="E-claim Primary">E-claim Primary</option>
-          <option value="E-claim Secondary">E-claim Secondary</option>
+          <option value="manual">Manual</option>
+          <option value="electronic">Electronic</option>
         </select>
         <select
           value={filters.carrier}
@@ -404,11 +439,19 @@ const handleChangeStatus = async () => {
                     onChange={() => toggleSelect(claim.id)}
                   />
                 </td>
-                <td className="p-2">{claim.patientName}</td>
+                <td className="p-2">
+                  <button 
+                    className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer text-left"
+                    onClick={() => navigateToPatientBilling(claim.patientId)}
+                    title="View patient billing"
+                  >
+                    {claim.patientName}
+                  </button>
+                </td>
                 <td className="p-2">{claim.id}</td>
                 <td className="p-2">{claim.type}</td>
-                <td className="p-2">{claim.createdOn}</td>
-                <td className="p-2">{claim.payerName}</td>
+                <td className="p-2">{formatDate(claim.createdOn)}</td>
+                <td className="p-2">{claim.provider}</td>
                 <td className="p-2">
                   <button className="text-blue-500">Show</button>
                 </td>
@@ -708,8 +751,8 @@ const handleChangeStatus = async () => {
               <div><strong>Claim #:</strong> {selectedClaimForAction.id}</div>
               <div><strong>Patient:</strong> {selectedClaimForAction.patientName}</div>
               <div><strong>Type:</strong> {selectedClaimForAction.type}</div>
-              <div><strong>Created On:</strong> {selectedClaimForAction.createdOn}</div>
-              <div><strong>Carrier:</strong> {selectedClaimForAction.payerName}</div>
+              <div><strong>Created On:</strong> {formatDate(selectedClaimForAction.createdOn)}</div>
+              <div><strong>Carrier:</strong> {selectedClaimForAction.provider}</div>
               <div><strong>Status:</strong> {selectedClaimForAction.status}</div>
               <div><strong>Notes:</strong> {selectedClaimForAction.notes || 'N/A'}</div>
               <div><strong>Description:</strong> {selectedClaimForAction.description || 'N/A'}</div>
