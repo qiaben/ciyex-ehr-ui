@@ -86,6 +86,9 @@ const HistoryClaims: React.FC = () => {
 
       const response = await res.json();
       setClaims(response.data || []);
+      setUniqueCarriers(
+        Array.from(new Set((response.data || []).map((c: any) => String(c.provider)).filter(Boolean)))
+      );
       setError(null);
     } catch (err: any) {
       setError(err.message || "Error fetching patient claims");
@@ -193,6 +196,9 @@ const HistoryClaims: React.FC = () => {
     const res = await fetchWithAuth(`${API_URL}/api/all-claims`);
     const data = await res.json();
     setClaims(data);
+    setUniqueCarriers(
+      Array.from(new Set(data.map((c: any) => String(c.provider)).filter(Boolean)))
+    );
     setLoading(false);
   };
 
@@ -205,13 +211,24 @@ const HistoryClaims: React.FC = () => {
     }
   }, [selectedPatientId]);
 
+  // ✅ Helper function to format date
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit' 
+    });
+  };
+
   // ✅ Filter
   const filteredClaims = claims.filter((claim: any) => {
     return (
       (!searchPatient || (claim.patientName && claim.patientName.toLowerCase().includes(searchPatient.toLowerCase()))) &&
       (!searchClaim || (claim.id && claim.id.toString().includes(searchClaim))) &&
       (!filters.type || claim.type === filters.type) &&
-      (!filters.carrier || claim.payerName === filters.carrier) &&
+      (!filters.carrier || claim.provider === filters.carrier) &&
       (!filters.attachment || (filters.attachment === "yes" ? claim.hasAttachment : !claim.hasAttachment)) &&
       !hiddenClaims.has(claim.id)
     );
@@ -341,9 +358,9 @@ const HistoryClaims: React.FC = () => {
                 <td className="p-2">{claim.patientName}</td>
                 <td className="p-2">{claim.id}</td>
                 <td className="p-2">{claim.type}</td>
-                <td className="p-2">{claim.sentOn || claim.createdOn}</td>
-                <td className="p-2">{claim.printedOn || ''}</td>
-                <td className="p-2">{claim.payerName}</td>
+                <td className="p-2">{formatDate(claim.sentOn || claim.createdOn)}</td>
+                <td className="p-2">{formatDate(claim.printedOn) || ''}</td>
+                <td className="p-2">{claim.provider}</td>
                 <td className="p-2"><button className="text-blue-500">Show</button></td>
                 <td className="p-2">{claim.status}</td>
                 <td className="p-2">{claim.eraStatus || ''}</td>
@@ -586,9 +603,9 @@ const HistoryClaims: React.FC = () => {
                         <td className="border border-gray-300 p-2">{claim.patientName}</td>
                         <td className="border border-gray-300 p-2">{claim.id}</td>
                         <td className="border border-gray-300 p-2">{claim.type}</td>
-                        <td className="border border-gray-300 p-2">{claim.sentOn || claim.createdOn}</td>
-                        <td className="border border-gray-300 p-2">{claim.printedOn || '-'}</td>
-                        <td className="border border-gray-300 p-2">{claim.payerName}</td>
+                        <td className="border border-gray-300 p-2">{formatDate(claim.sentOn || claim.createdOn)}</td>
+                        <td className="border border-gray-300 p-2">{formatDate(claim.printedOn) || '-'}</td>
+                        <td className="border border-gray-300 p-2">{claim.provider}</td>
                         <td className="border border-gray-300 p-2">{claim.status}</td>
                         <td className="border border-gray-300 p-2">{claim.eraStatus || '-'}</td>
                         <td className="border border-gray-300 p-2">{claim.clearingHouseStatusMessage || '-'}</td>
@@ -680,8 +697,8 @@ const HistoryClaims: React.FC = () => {
               <div><strong>Claim #:</strong> {selectedClaimForAction.id}</div>
               <div><strong>Patient:</strong> {selectedClaimForAction.patientName}</div>
               <div><strong>Type:</strong> {selectedClaimForAction.type}</div>
-              <div><strong>Sent On:</strong> {selectedClaimForAction.sentOn || selectedClaimForAction.createdOn}</div>
-              <div><strong>Carrier:</strong> {selectedClaimForAction.payerName}</div>
+              <div><strong>Sent On:</strong> {formatDate(selectedClaimForAction.sentOn || selectedClaimForAction.createdOn)}</div>
+              <div><strong>Carrier:</strong> {selectedClaimForAction.provider}</div>
               <div><strong>Status:</strong> {selectedClaimForAction.status}</div>
               <div><strong>ERA Status:</strong> {selectedClaimForAction.eraStatus || 'N/A'}</div>
               <div><strong>Notes:</strong> {selectedClaimForAction.notes || 'N/A'}</div>

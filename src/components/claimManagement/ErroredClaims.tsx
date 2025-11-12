@@ -90,7 +90,7 @@ const ErroredClaims: React.FC = () => {
       const response = await res.json();
       setClaims(response.data || []);
       setUniqueCarriers(
-        Array.from(new Set((response.data || []).map((c: any) => String(c.payerName)).filter(Boolean)))
+        Array.from(new Set((response.data || []).map((c: any) => String(c.provider)).filter(Boolean)))
       );
       setError(null);
     } catch (err: any) {
@@ -113,7 +113,7 @@ const ErroredClaims: React.FC = () => {
       setClaims(data);
 
       setUniqueCarriers(
-        Array.from(new Set(data.map((c: any) => String(c.payerName)).filter(Boolean)))
+        Array.from(new Set(data.map((c: any) => String(c.provider)).filter(Boolean)))
       );
 
       setError(null);
@@ -202,6 +202,17 @@ const ErroredClaims: React.FC = () => {
     }
   };
 
+  // ✅ Helper function to format date
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit' 
+    });
+  };
+
   // ✅ Filtering
   const filteredClaims = claims.filter((claim: any) => {
     return (
@@ -209,7 +220,7 @@ const ErroredClaims: React.FC = () => {
       (!searchPatient || claim.patientName?.toLowerCase().includes(searchPatient.toLowerCase())) &&
       (!searchClaim || claim.id?.toString().includes(searchClaim) || claim.createdOn?.includes(searchClaim)) &&
       (!filters.type || claim.type === filters.type) &&
-      (!filters.carrier || claim.payerName === filters.carrier) &&
+      (!filters.carrier || claim.provider === filters.carrier) &&
       (!filters.attachment || (filters.attachment === "yes" ? claim.hasAttachment : !claim.hasAttachment))
     );
   });
@@ -307,8 +318,8 @@ const ErroredClaims: React.FC = () => {
           className="border px-2 py-1 rounded"
         >
           <option value="">Filter by Claim Type</option>
-          <option value="E-claim Primary">E-claim Primary</option>
-          <option value="E-claim Secondary">E-claim Secondary</option>
+          <option value="manual">Manual</option>
+          <option value="electronic">Electronic</option>
         </select>
 
         <select
@@ -390,8 +401,8 @@ const ErroredClaims: React.FC = () => {
                 <td className="p-2">{claim.patientName}</td>
                 <td className="p-2">{claim.id}</td>
                 <td className="p-2">{claim.type}</td>
-                <td className="p-2">{claim.createdOn}</td>
-                <td className="p-2">{claim.payerName}</td>
+                <td className="p-2">{formatDate(claim.createdOn)}</td>
+                <td className="p-2">{claim.provider}</td>
                 <td className="p-2"><button className="text-blue-500">Show</button></td>
                 <td className="p-2">{claim.status}</td>
                 <td className="p-2">{claim.clearingHouseStatusMessage || ""}</td>
