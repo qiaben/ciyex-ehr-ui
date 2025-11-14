@@ -172,7 +172,6 @@ function extFromNameOrType(f: File) {
 
 /* ======================= Settings helpers ======================= */
 type DocSettings = {
-  orgId: number;
   maxUploadSizeMB: number;
   enableAudio: boolean;
   allowedFileTypes: string[];
@@ -651,6 +650,9 @@ function logFormData(label: string, fd: FormData) {
 
 /* ======================= Page ======================= */
 export default function Page() {
+  // ⚙️ CONFIGURATION - Change these values as needed
+  const patientId = "1"; // 👈 Change this to filter documents by patient
+
   // Alerts
   const { banners, push: pushBanner, remove: removeBanner } = useBanners();
 
@@ -667,24 +669,27 @@ export default function Page() {
   const [maxBytes, setMaxBytes] = useState<number | null>(null);
 
   // IDs
-  const [orgId, setOrgId] = useState("1");
+  const [tenantName, setTenantName] = useState<string | null>(null);
 
-  // 👇 Hard-code and change any time you want
-  const patientId = "1";
-
-  // orgId from localStorage (client only)
+  // Get tenant name from localStorage (client only)
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setOrgId(localStorage.getItem("orgId") || "1");
+      const tenant = localStorage.getItem("primaryGroup");
+      if (tenant) {
+        setTenantName(tenant);
+      } else {
+        pushBanner("error", "Primary group not found in localStorage", "Configuration Error");
+      }
     }
-  }, []);
+  }, [pushBanner]);
 
   // fetch settings
   useEffect(() => {
     const load = async () => {
+      if (!tenantName) return;
       try {
         const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-        const res = await fetchWithAuth(`${base}/api/document-settings/${orgId}`);
+        const res = await fetchWithAuth(`${base}/api/document-settings`);
         const json: { success?: boolean; data?: DocSettings } = await res.json();
         if (json?.success && json?.data) {
           const d = json.data;
@@ -702,14 +707,19 @@ export default function Page() {
         pushBanner("error", "Failed to load document settings.", "Settings error");
       }
     };
-    if (orgId) load();
-  }, [orgId, pushBanner]);
+    if (tenantName) load();
+  }, [tenantName, pushBanner]);
 
   // list documents (show errors only; no success banner)
   const loadDocuments = useCallback(async () => {
+    if (!tenantName || !patientId) return;
     try {
       const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-      const res = await fetchWithAuth(`${base}/api/${orgId}/patients/${patientId}/documents`);
+      const res = await fetchWithAuth(`${base}/api/documents/upload/patient/${patientId}`, {
+        headers: {
+          'X-Tenant-Name': tenantName,
+        },
+      });
       const text = await res.text();
 
       console.groupCollapsed("%cGET documents list", "color:#6f42c1;font-weight:600");
@@ -738,9 +748,9 @@ export default function Page() {
       setUploaded([]);
       pushBanner("error", "Error loading documents. Check console.", "Network error");
     }
-  }, [orgId, patientId, pushBanner]);
+  }, [tenantName, patientId, pushBanner]);
 
-  useEffect(() => { if (orgId && patientId) loadDocuments(); }, [loadDocuments, orgId, patientId]);
+  useEffect(() => { if (tenantName && patientId) loadDocuments(); }, [loadDocuments, tenantName, patientId]);
 
   // add files with validation
   const addFiles = useCallback((files: File[]) => {
@@ -791,7 +801,7 @@ export default function Page() {
   const [uploadProgress, setUploadProgress] = useState(0);
 
   const doUpload = useCallback(async () => {
-    if (!pending.length) return;
+    if (!pending.length || !tenantName || !patientId) return;
     setUploading(true);
     setUploadProgress(0);
     const interval = setInterval(() => {
@@ -803,13 +813,17 @@ export default function Page() {
       for (const f of pending) {
         const dto = { category, type: extFromNameOrType(f), description: "" };
         const form = new FormData();
-        form.append("dto", JSON.stringify(dto));   // @RequestPart("dto") String
-        form.append("file", f, f.name);            // @RequestPart("file") MultipartFile
+        form.append("dto", JSON.stringify(dto));
+        form.append("file", f, f.name);
+        form.append("patientId", patientId);
 
-        const url = `${base}/api/${orgId}/patients/${patientId}/documents`;
+        const url = `${base}/api/documents/upload`;
 
         console.groupCollapsed("%cPOST %s", "color:#0b74de;font-weight:600", url);
-        const headersWeSet: RequestInit["headers"] = { Accept: "application/json" }; // don't set Content-Type for FormData
+        const headersWeSet: RequestInit["headers"] = { 
+          Accept: "application/json",
+          'X-Tenant-Name': tenantName,
+        };
         console.log("Headers we set:", headersWeSet);
         logFormData("Multipart parts", form);
         console.groupEnd();
@@ -843,7 +857,7 @@ export default function Page() {
       setPending([]);
       loadDocuments();
     }
-  }, [pending, orgId, patientId, category, loadDocuments, pushBanner]);
+  }, [pending, tenantName, patientId, category, loadDocuments, pushBanner]);
 
   // optional download endpoints
   const downloadBlob = (blob: Blob, name: string) => {
@@ -856,7 +870,7 @@ export default function Page() {
     const row = uploaded[i]; if (!row?._api) return;
     try {
       const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-      const url = `${base}/api/${orgId}/patients/${patientId}/documents/${row._api.id}/download`;
+      const url = `${base}/api/documents/upload/${row._api.id}/download`;
       const res = await fetchWithAuth(url);
       const blob = await res.blob();
       const fileLike = new File([blob], row.file.name, { type: row.file.type || blob.type || "application/octet-stream" });
@@ -865,13 +879,13 @@ export default function Page() {
       console.warn("Preview download failed or endpoint missing.", e);
       pushBanner("info", "Preview requires a /download endpoint.", "Preview");
     }
-  }, [uploaded, orgId, patientId, pushBanner]);
+  }, [uploaded, pushBanner]);
 
   const onDownloadFromList = useCallback(async (i: number) => {
     const row = uploaded[i]; if (!row?._api) return;
     try {
       const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-      const url = `${base}/api/${orgId}/patients/${patientId}/documents/${row._api.id}/download`;
+      const url = `${base}/api/documents/upload/${row._api.id}/download`;
       const res = await fetchWithAuth(url);
       const blob = await res.blob();
       downloadBlob(blob, row.file.name);
@@ -879,7 +893,7 @@ export default function Page() {
       console.warn("Download failed or endpoint missing.", e);
       pushBanner("info", "Download endpoint not available.", "Download");
     }
-  }, [uploaded, orgId, patientId, pushBanner]);
+  }, [uploaded, pushBanner]);
 
   // filters / layout
   const availableCats = Array.from(new Set(uploaded.map((x) => x.category)));
