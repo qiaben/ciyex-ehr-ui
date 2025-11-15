@@ -3,11 +3,9 @@
 import AdminLayout from "@/app/(admin)/layout";
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
-import TemplateManagement from "./Template/TemplateManagement";
 
 /* ------------ Types ------------ */
 type ApiResponse<T> = { success: boolean; message: string; data: T };
-type FolderType = "inbox" | "sent" | "archive";
 
 type Message = {
     id: number;
@@ -17,9 +15,35 @@ type Message = {
     createdAt: number;
     subject: string;
     body: string;
-    folder: FolderType;
+    folder: string;
     avatar?: { initials: string; color: string };
     isRead?: boolean;
+    thread?: MessageThread[];
+    type?: 'patient' | 'provider';
+    who?: string;
+    preview?: string;
+    when?: string;
+    unread?: boolean;
+    lastActive?: string;
+    username?: string;
+    status?: 'sent' | 'delivered' | 'read';
+    replyTo?: { id: number; sender: string; message: string };
+    isArchived?: boolean;
+    conversationPatientId?: number;
+    conversationPatientName?: string;
+    conversationProviderId?: number;
+};
+
+type MessageThread = {
+    id: string;
+    sender: string;
+    content: string;
+    timestamp: string;
+    isUser: boolean;
+    avatar?: string;
+    attachments?: Attachment[];
+    status?: 'sent' | 'delivered' | 'read';
+    replyTo?: { id: number; sender: string; message: string };
 };
 
 type Patient = {
@@ -52,16 +76,52 @@ type CommunicationDto = {
     toNames?: string[];
     createdDate?: string;
     inResponseTo?: number;
+    fromType?: 'provider' | 'patient';
+};
+
+type Attachment = {
+    id: string;
+    name: string;
+    url: string;
+    type: 'image' | 'pdf' | 'document' | 'other';
+    size: string;
+};
+
+// Define proper types for conversation items
+type ConversationItem = {
+    id: string;
+    participant: string;
+    participantType: 'patient' | 'provider';
+    time: string;
+    preview?: string;
+    unread: boolean;
+    avatar?: { initials: string; color: string };
+    lastActive?: string;
+    username?: string;
+    isArchived?: boolean;
+};
+
+type Conversation = {
+    id: string;
+    participant: string;
+    participantType: 'patient' | 'provider';
+    lastMessage: string;
+    lastMessageTime: number;
+    unread: boolean;
+    avatar: { initials: string; color: string };
+    messages: Message[];
+    username?: string;
+    isArchived?: boolean;
 };
 
 const avatarColors = [
-    "bg-blue-600",
-    "bg-pink-600",
-    "bg-green-600",
-    "bg-red-600",
-    "bg-orange-600",
-    "bg-purple-600",
-    "bg-indigo-600",
+    "bg-gradient-to-br from-blue-500 to-blue-600",
+    "bg-gradient-to-br from-pink-500 to-pink-600",
+    "bg-gradient-to-br from-green-500 to-green-600",
+    "bg-gradient-to-br from-red-500 to-red-600",
+    "bg-gradient-to-br from-orange-500 to-orange-600",
+    "bg-gradient-to-br from-purple-500 to-purple-600",
+    "bg-gradient-to-br from-indigo-500 to-indigo-600",
 ];
 
 /* ------------ Helpers ------------ */
@@ -70,27 +130,722 @@ function formatTime(ts: number): string {
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function initials(name: string) {
-    const parts = name.split(/\s+/).filter(Boolean);
-    return (
-        (parts[0]?.[0] || "").toUpperCase() + (parts[1]?.[0] || "").toUpperCase()
-    );
+function formatMessageTime(ts: number): string {
+    const d = new Date(ts);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+
+    if (isToday) {
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } else {
+        return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
 }
 
-/* ------------ Component ------------ */
+function formatRelativeTime(ts: number): string {
+    const now = new Date().getTime();
+    const diff = now - ts;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return `${days}d ago`;
+}
+
+function initials(name: string) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    let initials = '';
+
+    if (parts.length > 0) {
+        initials += parts[0][0].toUpperCase();
+    }
+
+    if (parts.length > 1) {
+        initials += parts[parts.length - 1][0].toUpperCase();
+    }
+
+    return initials;
+}
+
+function generateUsername(name: string): string {
+    return name.toLowerCase().replace(/\s+/g, '_') + '_' + Math.random().toString(36).substr(2, 5);
+}
+
+/* ------------ WhatsApp-style Components ------------ */
+
+// Attachment Menu Component - WhatsApp Style
+const AttachmentMenu: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    position: { top: number; left: number };
+    onSelect: (type: 'image' | 'document' | 'camera' | 'contact' | 'location') => void;
+}> = ({ isOpen, onClose, position, onSelect }) => {
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                onClose();
+            }
+        };
+
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isOpen, onClose]);
+
+    if (!isOpen) return null;
+
+    const menuItems = [
+        { type: 'image' as const, icon: '🖼️', label: 'Photos & Videos', color: 'text-purple-500' },
+        { type: 'document' as const, icon: '📄', label: 'Document', color: 'text-blue-500' },
+        { type: 'camera' as const, icon: '📷', label: 'Camera', color: 'text-gray-500' },
+        { type: 'contact' as const, icon: '👤', label: 'Contact', color: 'text-green-500' },
+        { type: 'location' as const, icon: '📍', label: 'Location', color: 'text-red-500' },
+    ];
+
+    return (
+        <div
+            ref={menuRef}
+            className="fixed bg-white rounded-2xl shadow-2xl border border-gray-200 py-3 z-50 min-w-48"
+            style={{
+                top: Math.max(10, position.top - 220), // Ensure it doesn't go off-screen
+                left: Math.max(10, position.left - 180),
+                maxHeight: '300px',
+                overflow: 'auto'
+            }}
+        >
+            {menuItems.map((item) => (
+                <button
+                    key={item.type}
+                    onClick={() => onSelect(item.type)}
+                    className="flex items-center gap-4 w-full px-4 py-3 hover:bg-gray-50 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
+                >
+                    <span className={`text-2xl ${item.color}`}>{item.icon}</span>
+                    <span className="text-sm font-medium text-gray-700">{item.label}</span>
+                </button>
+            ))}
+        </div>
+    );
+};
+
+// Reply Preview Component - UPDATED: Show "yourself" when replying to own messages
+const ReplyPreview: React.FC<{
+    replyTo: { id: string; sender: string; content: string };
+    onCancel?: () => void;
+    isReplyingToSelf?: boolean;
+}> = ({ replyTo, onCancel, isReplyingToSelf = false }) => (
+    <div className="flex items-start gap-3 p-3 bg-gray-50 border-l-4 border-green-500 rounded-lg mb-3">
+        <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold text-green-600">
+                    {isReplyingToSelf ? "Replying to yourself" : `Replying to ${replyTo.sender}`}
+                </span>
+            </div>
+            <p className="text-sm text-gray-600 truncate">{replyTo.content}</p>
+        </div>
+        {onCancel && (
+            <button
+                onClick={onCancel}
+                className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        )}
+    </div>
+);
+
+// Message Bubble Component - WhatsApp Style with Reply and Archive Buttons
+const MessageBubble: React.FC<{
+    message: MessageThread;
+    isCurrentUser: boolean;
+    onReply?: (message: MessageThread) => void;
+    onArchive?: (message: MessageThread) => void;
+    currentUserName?: string;
+}> = ({ message, isCurrentUser, onReply, onArchive, currentUserName }) => {
+    const [showOptions, setShowOptions] = useState(false);
+
+    // Check if the reply is to the current user's own message
+    const isReplyingToSelf = message.replyTo && currentUserName &&
+        message.replyTo.sender === currentUserName;
+
+    return (
+        <div
+            className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'} mb-3 group relative`}
+            onMouseEnter={() => setShowOptions(true)}
+            onMouseLeave={() => setShowOptions(false)}
+        >
+            {/* Action buttons that appear on hover - POSITIONED ON THE RIGHT SIDE */}
+            {showOptions && isCurrentUser && (
+                <div className="absolute right-0 -translate-x-14 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1 z-10">
+                    {/* Reply Button */}
+                    {onReply && (
+                        <button
+                            onClick={() => onReply(message)}
+                            className="bg-white shadow-lg rounded-full p-2 border border-gray-200 hover:bg-gray-50 transition-colors"
+                            title="Reply to this message"
+                        >
+                            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                            </svg>
+                        </button>
+                    )}
+
+                    {/* Archive Button - REPLACED DELETE WITH ARCHIVE */}
+                    {onArchive && (
+                        <button
+                            onClick={() => onArchive(message)}
+                            className="bg-white shadow-lg rounded-full p-2 border border-gray-200 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                            title="Archive this message"
+                        >
+                            <svg className="w-4 h-4 text-gray-600 hover:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {/* Action buttons for received messages (on the left side) */}
+            {showOptions && !isCurrentUser && (
+                <div className="absolute left-0 translate-x-14 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1 z-10">
+                    {/* Reply Button for received messages */}
+                    {onReply && (
+                        <button
+                            onClick={() => onReply(message)}
+                            className="bg-white shadow-lg rounded-full p-2 border border-gray-200 hover:bg-gray-50 transition-colors"
+                            title="Reply to this message"
+                        >
+                            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+            )}
+
+            <div className={`flex flex-col max-w-[70%] ${isCurrentUser ? 'items-end' : 'items-start'}`}>
+
+                {/* Reply-to message preview */}
+                {message.replyTo && (
+                    <div className={`w-full mb-1 px-3 pt-2 border-l-2 ${
+                        isCurrentUser ? 'border-green-400' : 'border-gray-400'
+                    }`}>
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-medium text-gray-600">
+                                {isReplyingToSelf ? "You" : message.replyTo.sender}
+                            </span>
+                        </div>
+                        <p className="text-xs text-gray-500 truncate">
+                            {message.replyTo.message}
+                        </p>
+                    </div>
+                )}
+
+                {/* Message bubble */}
+                <div className={`relative px-4 py-2 rounded-2xl ${
+                    isCurrentUser
+                        ? 'bg-green-500 text-white rounded-br-md'
+                        : 'bg-gray-100 text-gray-800 rounded-bl-md'
+                }`}>
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                </div>
+
+                {/* Timestamp and status */}
+                <div className="flex items-center gap-2 mt-1 px-2">
+                    <span className="text-xs text-gray-500">
+                        {formatMessageTime(new Date(message.timestamp).getTime())}
+                    </span>
+                    {isCurrentUser && message.status && (
+                        <div className="flex items-center">
+                            {message.status === 'read' ? (
+                                <svg className="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
+                                </svg>
+                            ) : message.status === 'delivered' ? (
+                                <svg className="w-3 h-3 text-gray-500" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
+                                </svg>
+                            ) : (
+                                <svg className="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v13.5a.5.5 0 0 1-.777.416L8 13.101l-5.223 2.815A.5.5 0 0 1 2 15.5V2zm2-1a1 1 0 0 0-1 1v12.566l4.723-2.482a.5.5 0 0 1 .554 0L13 14.566V2a1 1 0 0 0-1-1H4z"/>
+                                </svg>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Message List Item Component - FIXED: Handle boolean type properly
+const MessageListItem: React.FC<{
+    item: ConversationItem;
+    isActive: boolean;
+    onSelect: (id: string) => void
+}> = ({ item, isActive, onSelect }) => {
+    return (
+        <div
+            className={`flex items-start p-4 cursor-pointer border-b border-gray-100 ${
+                isActive ? 'bg-blue-50' : 'hover:bg-gray-50'
+            }`}
+            onClick={() => onSelect(item.id)}
+        >
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-sm font-bold mr-3 ${
+                item.avatar?.color || 'bg-green-500'
+            }`}>
+                {initials(item.participant) || 'U'}
+            </div>
+            <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-start mb-1">
+                    <span className={`font-semibold text-sm ${isActive ? 'text-black' : 'text-gray-900'}`}>
+                        {item.participant}
+                    </span>
+                    <span className="text-xs text-gray-500">{item.time}</span>
+                </div>
+                <p className={`text-sm truncate ${isActive ? 'text-gray-700' : 'text-gray-600'} ${item.unread ? 'font-semibold' : ''}`}>
+                    {item.preview || 'No preview available'}
+                </p>
+            </div>
+            {item.unread && (
+                <div className="flex-shrink-0 w-2 h-2 bg-green-500 rounded-full ml-2"></div>
+            )}
+        </div>
+    );
+};
+
+// Profile Sidebar Component - UPDATED: Removed email section
+const ProfileSidebar: React.FC<{ selectedConversation: Conversation | null }> = ({ selectedConversation }) => {
+    if (!selectedConversation) return null;
+
+    const actualTime = formatRelativeTime(selectedConversation.lastMessageTime);
+    const isProvider = selectedConversation.participantType === 'provider';
+
+    const userProfile = {
+        role: isProvider ? 'Healthcare Provider' : 'Patient',
+        place: isProvider ? 'Medical Center' : 'Patient Home',
+        activeHours: isProvider ? '9:00 AM - 6:00 PM' : 'Flexible',
+        experience: isProvider ? '8 years' : 'N/A',
+        languages: isProvider ? ['English', 'Spanish', 'Medical Terminology'] : ['English', 'Spanish']
+    };
+
+    return (
+        <div className="w-80 p-6 border-l bg-white flex-shrink-0">
+            <div className="text-center mb-6">
+                <div className={`w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3 ${
+                    selectedConversation.avatar?.color || 'bg-green-500'
+                }`}>
+                    {initials(selectedConversation.participant) || 'U'}
+                </div>
+                <h3 className="font-bold text-lg mb-1">{selectedConversation.participant}</h3>
+                {/* Email section removed as requested */}
+                <p className="text-gray-500 text-xs mt-2">{actualTime}</p>
+            </div>
+
+            <div className="mb-6">
+                <h4 className="font-bold text-sm mb-3">About {selectedConversation.participant}</h4>
+                <div className="space-y-3 text-sm">
+                    <div>
+                        <span className="text-gray-500 block text-xs mb-1">Role</span>
+                        <p className="font-medium">{userProfile.role}</p>
+                    </div>
+                    <div>
+                        <span className="text-gray-500 block text-xs mb-1">Place</span>
+                        <p className="font-medium">{userProfile.place}</p>
+                    </div>
+                    <div>
+                        <span className="text-gray-500 block text-xs mb-1">Active Hours</span>
+                        <p className="font-medium">{userProfile.activeHours}</p>
+                    </div>
+                    <div>
+                        <span className="text-gray-500 block text-xs mb-1">Experience</span>
+                        <p className="font-medium">{userProfile.experience}</p>
+                    </div>
+                    <div>
+                        <span className="text-gray-500 block text-xs mb-1">Languages Known</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                            {userProfile.languages.map((lang) => (
+                                <span key={lang} className="px-2 py-1 bg-gray-100 rounded text-xs">
+                                    {lang}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Attachment Preview Component
+const AttachmentPreview: React.FC<{
+    files: File[];
+    onRemove: (index: number) => void;
+}> = ({ files, onRemove }) => {
+    if (files.length === 0) return null;
+
+    return (
+        <div className="border-t bg-gray-50 p-3">
+            <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">
+                    {files.length} attachment{files.length > 1 ? 's' : ''}
+                </span>
+            </div>
+            <div className="space-y-2">
+                {files.map((file, index) => (
+                    <div key={index} className="flex items-center gap-3 bg-white p-2 rounded-lg border">
+                        <div className="flex-shrink-0">
+                            {file.type.startsWith('image/') ? (
+                                <span className="text-2xl">🖼️</span>
+                            ) : file.type.includes('pdf') ? (
+                                <span className="text-2xl">📄</span>
+                            ) : (
+                                <span className="text-2xl">📎</span>
+                            )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                            <p className="text-xs text-gray-500">
+                                {(file.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => onRemove(index)}
+                            className="flex-shrink-0 text-gray-400 hover:text-red-500 transition-colors"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// WhatsApp-style Reply Section - UPDATED: robust drag & drop
+const ReplySection: React.FC<{
+    replyBody: string;
+    setReplyBody: (body: string) => void;
+    onSendReply: () => void;
+    isTyping: boolean;
+    replyInputRef: React.RefObject<HTMLTextAreaElement>;
+    replyTo?: MessageThread | null;
+    onCancelReply?: () => void;
+    currentUserName?: string;
+    showAttachmentMenu: boolean;
+    attachmentMenuPosition: { top: number; left: number };
+    onAttachmentSelect: (type: 'image' | 'document' | 'camera' | 'contact' | 'location') => void;
+    onCloseAttachmentMenu: () => void;
+    pendingAttachments: File[];
+    onRemoveAttachment: (index: number) => void;
+    onFilesSelected: (files: File[]) => void;
+}> = ({
+          replyBody,
+          setReplyBody,
+          onSendReply,
+          isTyping,
+          replyInputRef,
+          replyTo,
+          onCancelReply,
+          currentUserName,
+          showAttachmentMenu,
+          attachmentMenuPosition,
+          onAttachmentSelect,
+          onCloseAttachmentMenu,
+          pendingAttachments,
+          onRemoveAttachment,
+          onFilesSelected
+      }) => {
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [dragActive, setDragActive] = useState(false);
+    // Use a ref counter to avoid flicker when entering/leaving nested elements
+    const dragCounter = useRef(0);
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            onSendReply();
+        }
+    };
+
+    // Check if replying to own message
+    const isReplyingToSelf = replyTo && currentUserName && replyTo.sender === currentUserName;
+
+    // Format the replyTo object for the ReplyPreview component
+    const formattedReplyTo = replyTo ? {
+        id: replyTo.id,
+        sender: replyTo.sender,
+        content: replyTo.content
+    } : undefined;
+
+    // Window-level drag handlers so users can drag from outside the window
+    useEffect(() => {
+        const onWindowDragEnter = (e: DragEvent) => {
+            e.preventDefault();
+            dragCounter.current += 1;
+            setDragActive(true);
+        };
+
+        const onWindowDragOver = (e: DragEvent) => {
+            e.preventDefault();
+            setDragActive(true);
+        };
+
+        const onWindowDragLeave = (e: DragEvent) => {
+            e.preventDefault();
+            dragCounter.current -= 1;
+            if (dragCounter.current <= 0) {
+                dragCounter.current = 0;
+                setDragActive(false);
+            }
+        };
+
+        const onWindowDrop = (e: DragEvent) => {
+            e.preventDefault();
+            dragCounter.current = 0;
+            setDragActive(false);
+            const files = e.dataTransfer?.files;
+            if (files && files.length > 0) {
+                onFilesSelected(Array.from(files));
+            }
+        };
+
+        window.addEventListener('dragenter', onWindowDragEnter);
+        window.addEventListener('dragover', onWindowDragOver);
+        window.addEventListener('dragleave', onWindowDragLeave);
+        window.addEventListener('drop', onWindowDrop);
+
+        return () => {
+            window.removeEventListener('dragenter', onWindowDragEnter);
+            window.removeEventListener('dragover', onWindowDragOver);
+            window.removeEventListener('dragleave', onWindowDragLeave);
+            window.removeEventListener('drop', onWindowDrop);
+        };
+    }, [onFilesSelected]);
+
+    // Local handlers for the reply area (keeps existing behavior)
+    const handleLocalDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current = 0;
+        setDragActive(false);
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+            onFilesSelected(Array.from(files));
+        }
+    };
+
+    const handleLocalDragEnter = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current += 1;
+        setDragActive(true);
+    };
+
+    const handleLocalDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current -= 1;
+        if (dragCounter.current <= 0) {
+            dragCounter.current = 0;
+            setDragActive(false);
+        }
+    };
+
+    return (
+        <div className="relative">
+            {/* Full-window drop overlay when dragging files */}
+            {dragActive && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+                    onDragOver={(e) => { e.preventDefault(); }}
+                    onDrop={(e) => { /* handled by window drop listener */ e.preventDefault(); }}
+                >
+                    <div className="w-80 p-6 bg-white rounded-lg border-2 border-dashed border-green-300 text-center">
+                        <div className="text-3xl mb-3">📎</div>
+                        <div className="font-semibold">Drop files to attach</div>
+                        <div className="text-sm text-gray-500 mt-2">You can drop multiple files</div>
+                    </div>
+                </div>
+            )}
+
+            <div
+                className="border-t bg-white relative"
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); }}
+                onDragEnter={handleLocalDragEnter}
+                onDragLeave={handleLocalDragLeave}
+                onDrop={handleLocalDrop}
+            >
+                {/* Attachment Menu */}
+                <AttachmentMenu
+                    isOpen={showAttachmentMenu}
+                    onClose={onCloseAttachmentMenu}
+                    position={attachmentMenuPosition}
+                    onSelect={onAttachmentSelect}
+                />
+
+                {/* Attachment Preview */}
+                <AttachmentPreview
+                    files={pendingAttachments}
+                    onRemove={onRemoveAttachment}
+                />
+
+                {/* Reply Preview */}
+                {formattedReplyTo && (
+                    <ReplyPreview
+                        replyTo={formattedReplyTo}
+                        onCancel={onCancelReply}
+                        isReplyingToSelf={isReplyingToSelf || false}
+                    />
+                )}
+
+                <div className="p-3">
+                    <div className={`flex gap-2 items-end ${dragActive ? 'ring-2 ring-green-300 rounded-lg bg-green-50' : ''}`}>
+                        {/* Emoji Button */}
+                        <button className="flex-shrink-0 p-2 text-gray-500 hover:text-gray-700 transition-colors">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </button>
+
+                        {/* Attachment Button (opens file picker) */}
+                        <input ref={fileInputRef} type="file" className="hidden" multiple onChange={(e) => {
+                            const files = e.target.files;
+                            if (files && files.length > 0) {
+                                onFilesSelected(Array.from(files));
+                                // reset so same file can be chosen again
+                                e.currentTarget.value = '';
+                            }
+                        }} />
+
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            type="button"
+                            className="flex-shrink-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors relative"
+                            title="Add attachment"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                            </svg>
+                        </button>
+
+
+                        {/* Message Input */}
+                        <div className="flex-1 relative">
+                            <textarea
+                                ref={replyInputRef}
+                                className="w-full p-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-500 resize-none bg-gray-50"
+                                placeholder="Type a message..."
+                                value={replyBody}
+                                onChange={(e) => {
+                                    const el = e.target as HTMLTextAreaElement;
+                                    const caret = el.selectionStart ?? el.value.length;
+                                    const newVal = el.value;
+
+                                    // update height immediately for smooth UX
+                                    el.style.height = 'auto';
+                                    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+
+                                    // update state
+                                    setReplyBody(newVal);
+
+                                    // restore focus and caret on next tick to avoid losing caret
+                                    setTimeout(() => {
+                                        const node = replyInputRef.current;
+                                        if (node) {
+                                            node.focus();
+                                            try {
+                                                node.selectionStart = node.selectionEnd = caret;
+                                            } catch {
+                                                // ignore if not supported
+                                            }
+                                        }
+                                    }, 0);
+                                }}
+                                onKeyDown={handleKeyDown}
+                                disabled={isTyping}
+                                rows={1}
+                                style={{ minHeight: '44px', maxHeight: '120px' }}
+                            />
+                        </div>
+
+                        {/* Voice Message / Send Button */}
+                        {replyBody.trim() || pendingAttachments.length > 0 ? (
+                            <button
+                                onClick={onSendReply}
+                                disabled={isTyping}
+                                className="flex-shrink-0 p-3 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors disabled:opacity-50"
+                            >
+                                {isTyping ? (
+                                    <div className="flex gap-1">
+                                        <div className="w-2 h-2 bg-current rounded-full animate-bounce"></div>
+                                        <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                                        <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                                    </div>
+                                ) : (
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                              d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                    </svg>
+                                )}
+                            </button>
+                        ) : (
+                            <button className="flex-shrink-0 p-3 text-gray-500 hover:text-gray-700 transition-colors">
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2c-4.97 0-9 4.03-9 9 0 4.97 4.03 9 9 9 4.97 0 9-4.03 9-9 0-4.97-4.03-9-9-9zm0 16c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
+                                    <path d="M12 7c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4z"/>
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+/* ------------ Main Component ------------ */
 export default function MessagingPage() {
     const [messages, setMessages] = useState<Message[]>([]);
     const hydratedOnce = useRef(false);
 
-    const [currentFolder, setCurrentFolder] = useState<FolderType>("inbox");
-    const [showTemplates, setShowTemplates] = useState(false);
-    const [query, setQuery] = useState("");
+    // Conversation state
+    const [conversationView, setConversationView] = useState<'list' | 'thread'>('list');
+    const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+    const [conversationSearch, setConversationSearch] = useState('');
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [selectedFolder, setSelectedFolder] = useState<'all' | 'unread' | 'starred' | 'archived'>('all');
 
-    // pagination
-    const [currentPage, setCurrentPage] = useState(1);
-    const [pageSize, setPageSize] = useState(50);
+    // Message input state
+    const [replyBody, setReplyBody] = useState("");
+    const [isTyping, setIsTyping] = useState(false);
+    const [replyingTo, setReplyingTo] = useState<MessageThread | null>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const replyInputRef = useRef<HTMLTextAreaElement>(null);
 
-    // compose state
+    // Attachment state
+    const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+    const [attachmentMenuPosition] = useState({ top: 0, left: 0 });
+    const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+
+    // Compose state
     const [isCreating, setIsCreating] = useState(false);
     const [patients, setPatients] = useState<Patient[]>([]);
     const [providers, setProviders] = useState<Provider[]>([]);
@@ -99,745 +854,1128 @@ export default function MessagingPage() {
     const [selectedProviderId, setSelectedProviderId] = useState<string>("");
     const [subject, setSubject] = useState("");
     const [body, setBody] = useState("");
-    const [attachments, setAttachments] = useState<File[]>([]);
     const [selectedTemplateId, setSelectedTemplateId] = useState<number | "">("");
 
-    const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-    const [replyBody, setReplyBody] = useState("");
+    // Notification state
+    const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
-    const isSendDisabled =
-        !subject || !body || !selectedProviderId || !selectedPatientId;
+    // Dropdown options - REMOVED TRASH, CHANGED TO ARCHIVE
+    const dropdownOptions = [
+        { id: 'all', label: 'All messages', icon: '📨' },
+        { id: 'unread', label: 'Unread', icon: '🔔' },
+        { id: 'starred', label: 'Starred', icon: '⭐' },
+        { id: 'archived', label: 'Archived', icon: '📁' }
+    ];
+
+    // Get current user name (assuming admin is the provider)
+    const currentUserName = useMemo(() => {
+        if (providers.length > 0) {
+            const provider = providers[0];
+            return `${provider.identification?.firstName} ${provider.identification?.lastName}`.trim() || 'Healthcare Provider';
+        }
+        return 'Healthcare Provider';
+    }, [providers]);
 
     /* ---- Derived Data ---- */
-    const rows = useMemo(() => {
-        return messages.filter(
-            (m) =>
-                m.folder === currentFolder &&
-                (m.sender.toLowerCase().includes(query.toLowerCase()) ||
-                    m.recipient.toLowerCase().includes(query.toLowerCase()) ||
-                    m.subject.toLowerCase().includes(query.toLowerCase()) ||
-                    m.body.toLowerCase().includes(query.toLowerCase()))
-        );
-    }, [messages, currentFolder, query]);
-
-    const paginatedRows = useMemo(() => {
-        const start = (currentPage - 1) * pageSize;
-        return rows.slice(start, start + pageSize);
-    }, [rows, currentPage, pageSize]);
-
-    const unreadInboxCount = useMemo(
-        () => messages.filter((m) => m.folder === "inbox" && !m.isRead).length,
-        [messages]
-    );
-
     const composeTemplateOptions: Template[] = useMemo(
         () => templates.filter((t: Template) => !t.archived),
         [templates]
     );
 
-    /* ---- Load patients/providers ---- */
-    useEffect(() => {
-        if (!isCreating) return;
-        const loadPatients = async () => {
-            const res = await fetchWithAuth(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/patients?page=0&size=50`
-            );
-            const json: ApiResponse<{ content: Patient[] }> = await res.json();
-            if (json.success && Array.isArray(json.data?.content)) {
-                setPatients(json.data.content);
-            }
-        };
-        const loadProviders = async () => {
-            const res = await fetchWithAuth(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/providers?status=ACTIVE`
-            );
-            const json: ApiResponse<Provider[]> = await res.json();
-            if (json.success && Array.isArray(json.data)) {
-                setProviders(json.data);
-            }
-        };
-        void loadPatients();
-        void loadProviders();
-    }, [isCreating]);
+    // Track archived conversations
+    const [archivedConversations, setArchivedConversations] = useState<Set<string>>(new Set());
 
-    /* ---- Load templates ---- */
+    // Group messages by conversation (participant) - WhatsApp style
+    const conversationsByParticipant = useMemo(() => {
+        const conversationMap = new Map<string, Conversation>();
+
+        messages.forEach(msg => {
+            // For admin view, we want to group by the other participant
+            // Since admin is always the provider, group by patient
+            let conversationParticipant: string;
+            let participantType: 'patient' | 'provider';
+
+            if (msg.type === 'provider') {
+                // If message is from provider, conversation is with the recipient (patient)
+                conversationParticipant = msg.recipient;
+                participantType = 'patient';
+            } else {
+                // If message is from patient, conversation is with the sender (patient)
+                conversationParticipant = msg.sender;
+                participantType = 'patient';
+            }
+
+            // Create a consistent conversation ID based on participant
+            // Better conversation ID that includes both patient and provider when available
+            let conversationId: string;
+            if (msg.conversationPatientId && msg.conversationProviderId) {
+                conversationId = `conversation_p${msg.conversationPatientId}_pr${msg.conversationProviderId}`;
+            } else {
+                conversationId = `conversation_${conversationParticipant.toLowerCase().replace(/\s+/g, '_')}`;
+            }
+
+            // Check if this conversation is archived
+            const isArchived = archivedConversations.has(conversationId);
+
+            // Ensure unread is always a boolean
+            const unread = Boolean(msg.unread);
+
+            if (!conversationMap.has(conversationId)) {
+                conversationMap.set(conversationId, {
+                    id: conversationId,
+                    participant: conversationParticipant,
+                    participantType,
+                    lastMessage: msg.body,
+                    lastMessageTime: msg.createdAt,
+                    unread: unread,
+                    avatar: msg.avatar || {
+                        initials: initials(conversationParticipant),
+                        color: avatarColors[Math.abs(conversationId.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % avatarColors.length]
+                    },
+                    messages: [msg],
+                    username: msg.username || generateUsername(conversationParticipant),
+                    isArchived
+                });
+            } else {
+                const existing = conversationMap.get(conversationId)!;
+                // Update with latest message
+                if (msg.createdAt > existing.lastMessageTime) {
+                    existing.lastMessage = msg.body;
+                    existing.lastMessageTime = msg.createdAt;
+                }
+                if (unread) {
+                    existing.unread = true;
+                }
+                existing.messages.push(msg);
+                // Sort messages by time when adding new ones
+                existing.messages.sort((a, b) => a.createdAt - b.createdAt);
+                existing.isArchived = isArchived;
+            }
+        });
+
+        return Array.from(conversationMap.values()).sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+    }, [messages, archivedConversations]);
+
+    // Filter conversations based on selected folder
+    const filteredConversations = useMemo(() => {
+        let filtered = conversationsByParticipant;
+
+        switch (selectedFolder) {
+            case 'unread':
+                filtered = filtered.filter(conv => conv.unread && !conv.isArchived);
+                break;
+            case 'starred':
+                // Implement starred logic if needed
+                filtered = filtered.filter(conv => !conv.isArchived);
+                break;
+            case 'archived':
+                filtered = filtered.filter(conv => Boolean(conv.isArchived));
+                break;
+            case 'all':
+            default:
+                filtered = filtered.filter(conv => !conv.isArchived);
+                break;
+        }
+
+        return filtered;
+    }, [conversationsByParticipant, selectedFolder]);
+
+    // Convert backend messages to conversation items - FIXED: Ensure proper boolean handling
+    const conversationItems: ConversationItem[] = useMemo(() => {
+        return filteredConversations.map(conv => ({
+            id: conv.id,
+            participant: conv.participant,
+            participantType: conv.participantType,
+            time: formatRelativeTime(conv.lastMessageTime),
+            preview: conv.lastMessage.slice(0, 50) + (conv.lastMessage.length > 50 ? '...' : ''),
+            unread: Boolean(conv.unread), // Explicitly ensure boolean
+            avatar: conv.avatar,
+            lastActive: formatRelativeTime(conv.lastMessageTime),
+            username: conv.username,
+            isArchived: Boolean(conv.isArchived) // Ensure boolean
+        }));
+    }, [filteredConversations]);
+
+    /* ---- Notification ---- */
+    const showNotification = (message: string, type: 'success' | 'error') => {
+        setNotification({ message, type });
+        setTimeout(() => setNotification(null), 4000);
+    };
+
+    /* ---- Load Data ---- */
     useEffect(() => {
-        const loadTemplates = async () => {
-            const res = await fetchWithAuth(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/templates`
-            );
-            const json: ApiResponse<Template[]> = await res.json();
-            if (json.success && Array.isArray(json.data)) {
-                setTemplates(json.data);
+        const loadInitialData = async () => {
+            try {
+                // Load providers on component mount
+                const providersRes = await fetchWithAuth(
+                    `${process.env.NEXT_PUBLIC_API_URL}/api/providers?status=ACTIVE`
+                );
+                const providersJson: ApiResponse<Provider[]> = await providersRes.json();
+                if (providersJson.success && Array.isArray(providersJson.data)) {
+                    setProviders(providersJson.data);
+                } else {
+                    // If no providers found, create a default admin provider
+                    console.warn('No providers found, creating default admin provider');
+                    setProviders([{
+                        id: 1,
+                        identification: {
+                            firstName: 'Admin',
+                            lastName: 'Provider'
+                        }
+                    }]);
+                }
+
+                // Load patients
+                const patientsRes = await fetchWithAuth(
+                    `${process.env.NEXT_PUBLIC_API_URL}/api/patients?page=0&size=50`
+                );
+                const patientsJson: ApiResponse<{ content: Patient[] }> = await patientsRes.json();
+                if (patientsJson.success && Array.isArray(patientsJson.data?.content)) {
+                    setPatients(patientsJson.data.content);
+                }
+
+                // Load templates
+                const templatesRes = await fetchWithAuth(
+                    `${process.env.NEXT_PUBLIC_API_URL}/api/templates`
+                );
+                const templatesJson: ApiResponse<Template[]> = await templatesRes.json();
+                if (templatesJson.success && Array.isArray(templatesJson.data)) {
+                    setTemplates(templatesJson.data);
+                }
+            } catch (error) {
+                console.error('Failed to load initial data:', error);
+                // Set default provider even if API fails
+                setProviders([{
+                    id: 1,
+                    identification: {
+                        firstName: 'Admin',
+                        lastName: 'Provider'
+                    }
+                }]);
             }
         };
-        void loadTemplates();
+
+        if (!hydratedOnce.current) {
+            hydratedOnce.current = true;
+            void loadInitialData();
+            void loadCommunications();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    function applySelectedTemplate() {
+    /* ---- Load Communications ---- */
+    const loadCommunications = async () => {
+        try {
+            const res = await fetchWithAuth(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/communications`
+            );
+
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            const json: ApiResponse<CommunicationDto[]> = await res.json();
+            if (json.success && Array.isArray(json.data)) {
+                const mapped: Message[] = json.data.map((comm) => {
+                    const ts = comm.createdDate
+                        ? new Date(comm.createdDate).getTime()
+                        : Date.now();
+
+                    let folder = "sent";
+                    if (comm.status === "RECEIVED") folder = "inbox";
+                    else if (comm.status === "ARCHIVED") folder = "archive";
+
+                    const colorIndex = comm.id % avatarColors.length;
+                    const senderName = comm.fromName || "Unknown User";
+                    const recipientName = comm.toNames?.[0] || "Unknown Recipient";
+
+                    // Better type detection
+                    let messageType: 'patient' | 'provider' = 'patient'; // default to patient
+                    if (comm.fromType) {
+                        messageType = comm.fromType;
+                    } else if (senderName.toLowerCase().includes('provider') ||
+                        senderName.toLowerCase().includes('dr.') ||
+                        senderName.toLowerCase().includes('doctor') ||
+                        senderName.toLowerCase().includes('nurse')) {
+                        messageType = 'provider';
+                    }
+
+                    // Ensure unread is always a boolean
+                    const unread = folder === 'inbox';
+
+                    return {
+                        id: comm.id,
+                        sender: senderName,
+                        recipient: recipientName,
+                        subject: comm.subject,
+                        body: comm.payload,
+                        createdAt: ts,
+                        time: formatTime(ts),
+                        folder,
+                        avatar: {
+                            initials: initials(senderName),
+                            color: avatarColors[colorIndex],
+                        },
+                        isRead: folder !== "inbox",
+                        type: messageType,
+                        who: comm.fromName,
+                        preview: comm.payload.slice(0, 100) + (comm.payload.length > 100 ? '...' : ''),
+                        when: formatTime(ts),
+                        unread: unread,
+                        lastActive: formatRelativeTime(ts),
+                        username: generateUsername(senderName),
+                        status: 'read' // Default status for existing messages
+                    };
+                });
+
+                setMessages(mapped);
+            }
+        } catch (error) {
+            console.error('Failed to load communications:', error);
+            showNotification('Failed to load messages', 'error');
+        }
+    };
+
+    // Focus on input when conversation is selected
+    useEffect(() => {
+        if (selectedConversation && replyInputRef.current) {
+            setTimeout(() => {
+                replyInputRef.current?.focus();
+            }, 100);
+        }
+    }, [selectedConversation]);
+
+    /* ---- Attachment Handlers ---- */
+    const handleAttachmentSelect = (type: 'image' | 'document' | 'camera' | 'contact' | 'location') => {
+        console.log('Attachment type selected:', type);
+        setShowAttachmentMenu(false);
+
+        // Create file input based on selection
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = type === 'image' ? 'image/*' : type === 'document' ? '.pdf,.doc,.docx,.txt' : '*/*';
+        input.multiple = type === 'image';
+
+        input.onchange = (e) => {
+            const files = (e.target as HTMLInputElement).files;
+            if (files && files.length > 0) {
+                const selectedFiles = Array.from(files);
+
+                // Add to pending attachments
+                setPendingAttachments(prev => [...prev, ...selectedFiles]);
+
+                const fileNames = selectedFiles.map(f => f.name).join(', ');
+                showNotification(`Added ${selectedFiles.length} ${type}(s): ${fileNames}`, 'success');
+                console.log(`Selected ${type} files:`, selectedFiles);
+            }
+        };
+
+        input.click();
+    };
+
+    const handleCloseAttachmentMenu = () => {
+        setShowAttachmentMenu(false);
+    };
+
+    // Remove attachment from pending list
+    const removeAttachment = (index: number) => {
+        setPendingAttachments(prev => prev.filter((_, i) => i !== index));
+    };
+
+    // Handle files selected via picker or drag-drop
+    const handleFilesSelected = (files: File[]) => {
+        if (!files || files.length === 0) return;
+        setPendingAttachments(prev => [...prev, ...files]);
+        const names = files.map(f => f.name).join(', ');
+        showNotification(`Added ${files.length} attachment(s): ${names}`, 'success');
+        console.log('Files added via picker/drag-drop:', files);
+    };
+
+    // Clear all attachments
+    // const clearAttachments = () => {
+    //     setPendingAttachments([]);
+    // };
+
+    // Simple fallback for direct file upload
+    // const handleSimpleAttachment = () => {
+    //     const input = document.createElement('input');
+    //     input.type = 'file';
+    //     input.accept = '*/*';
+    //     input.multiple = true;
+    //
+    //     input.onchange = (e) => {
+    //         const files = (e.target as HTMLInputElement).files;
+    //         if (files && files.length > 0) {
+    //             const fileNames = Array.from(files).map(f => f.name).join(', ');
+    //             showNotification(`Added ${files.length} file(s): ${fileNames}`, 'success');
+    //             console.log('Selected files:', files);
+    //         }
+    //     };
+    //
+    //     input.click();
+    // };
+
+    /* ---- Actions ---- */
+    const markAsRead = async (id: number) => {
+        try {
+            setMessages((prev) =>
+                prev.map((m) => (m.id === id ? { ...m, isRead: true, unread: false } : m))
+            );
+        } catch (error) {
+            console.error('Failed to mark as read:', error);
+        }
+    };
+
+    const applySelectedTemplate = () => {
         const t = composeTemplateOptions.find((t) => t.id === selectedTemplateId);
         if (t) {
             setSubject(t.subject);
             setBody(t.body);
         }
-    }
+    };
 
-    /* ---- Hydrate communications ---- */
-    const loadCommunications = async () => {
-        const res = await fetchWithAuth(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/communications`
-        );
-        const json: ApiResponse<CommunicationDto[]> = await res.json();
-        if (json.success && Array.isArray(json.data)) {
-            const mapped: Message[] = json.data.map((comm, idx) => {
-                const ts = comm.createdDate
-                    ? new Date(comm.createdDate).getTime()
-                    : Date.now();
-                let folder: FolderType = "sent";
-                if (comm.status === "RECEIVED") folder = "inbox";
-                else if (comm.status === "ARCHIVED") folder = "archive";
-                return {
-                    id: comm.id,
-                    sender: comm.fromName || "Unknown Provider",
-                    recipient: comm.toNames?.[0] || "Unknown Patient",
-                    subject: comm.subject,
-                    body: comm.payload,
-                    createdAt: ts,
-                    time: formatTime(ts),
-                    folder,
-                    avatar: {
-                        initials: initials(comm.fromName || "U"),
-                        color: avatarColors[idx % avatarColors.length],
-                    },
-                    isRead: folder !== "inbox",
-                };
+    /* ---- Reply to Message ---- */
+    const handleReplyToMessage = (message: MessageThread) => {
+        setReplyingTo(message);
+        replyInputRef.current?.focus();
+    };
+
+    const cancelReply = () => {
+        setReplyingTo(null);
+    };
+
+    /* ---- Archive Message ---- */
+    const handleArchiveMessage = async (message: MessageThread) => {
+        if (!confirm('Are you sure you want to archive this message?')) return;
+
+        try {
+            const res = await fetchWithAuth(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/communications/${message.id}/archive`,
+                { method: 'PUT' }
+            );
+
+            if (res.ok) {
+                await loadCommunications();
+                showNotification('Message archived successfully', 'success');
+            } else {
+                throw new Error('Failed to archive message');
+            }
+        } catch (error) {
+            console.error('Failed to archive message:', error);
+            showNotification('Failed to archive message', 'error');
+        }
+    };
+
+    /* ---- Archive Conversation ---- */
+    const handleArchiveConversation = async (conversationId: string) => {
+        try {
+            // Mark conversation as archived in local state
+            setArchivedConversations(prev => new Set(prev).add(conversationId));
+
+            // If the currently selected conversation is being archived, clear it
+            if (selectedConversation?.id === conversationId) {
+                setSelectedConversation(null);
+                setConversationView('list');
+            }
+
+            showNotification('Conversation archived', 'success');
+        } catch (error) {
+            console.error('Failed to archive conversation:', error);
+            showNotification('Failed to archive conversation', 'error');
+        }
+    };
+
+    /* ---- Unarchive Conversation ---- */
+    const handleUnarchiveConversation = async (conversationId: string) => {
+        try {
+            // Remove conversation from archived set
+            setArchivedConversations(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(conversationId);
+                return newSet;
             });
-            setMessages(mapped);
+
+            showNotification('Conversation moved to inbox', 'success');
+        } catch (error) {
+            console.error('Failed to unarchive conversation:', error);
+            showNotification('Failed to unarchive conversation', 'error');
+        }
+    };
+
+    /* ---- Send Reply ---- */
+    const sendConversationReply = async () => {
+        if (!selectedConversation || (!replyBody.trim() && pendingAttachments.length === 0)) return;
+
+        // Add conversation debugging
+        console.log('Conversation context:', {
+            id: selectedConversation.id,
+            participant: selectedConversation.participant,
+            patientId: selectedConversation.messages[0]?.conversationPatientId,
+            providerId: selectedConversation.messages[0]?.conversationProviderId
+        });
+
+        setIsTyping(true);
+        try {
+            // Use the conversation context from the selected conversation
+            // This ensures replies stay in the correct thread
+            const conversationData = selectedConversation.messages[0]; // Get conversation context from first message
+            
+            let provider = providers[0];
+            if (!provider) {
+                provider = {
+                    id: 1,
+                    identification: { firstName: 'Admin', lastName: 'Provider' }
+                };
+            }
+
+            const providerId = provider.id;
+            const senderName = `${provider.identification?.firstName} ${provider.identification?.lastName}`.trim() || 'Healthcare Provider';
+
+            // CRITICAL FIX: Use the actual conversation patient ID instead of name matching
+            let patientId;
+            let recipientName;
+
+            if (conversationData?.conversationPatientId) {
+                // Use the conversation context from backend (PREFERRED)
+                patientId = conversationData.conversationPatientId;
+                recipientName = conversationData.conversationPatientName || selectedConversation.participant;
+            } else {
+                // Fallback: try to find patient by exact name match
+                const patient = patients.find(p => {
+                    const fullName = `${p.firstName} ${p.lastName}`;
+                    return fullName === selectedConversation.participant ||
+                           selectedConversation.participant.includes(p.firstName) ||
+                           selectedConversation.participant.includes(p.lastName);
+                });
+                
+                if (patient) {
+                    patientId = patient.id;
+                    recipientName = `${patient.firstName} ${patient.lastName}`;
+                } else {
+                    // Last resort: extract patient ID from conversation ID if it follows pattern
+                    const conversationIdMatch = selectedConversation.id.match(/conversation_.*_(\d+)$/);
+                    if (conversationIdMatch) {
+                        patientId = parseInt(conversationIdMatch[1]);
+                        recipientName = selectedConversation.participant;
+                    } else {
+                        throw new Error(`Cannot determine patient ID for conversation: ${selectedConversation.participant}`);
+                    }
+                }
+            }
+
+            // Build reply payload
+            let replyPayload = replyBody.trim();
+
+            // Add attachment info to message if there are attachments
+            if (pendingAttachments.length > 0) {
+                const attachmentInfo = pendingAttachments.map(f => `📎 ${f.name} (${(f.size / 1024 / 1024).toFixed(2)} MB)`).join('\n');
+                replyPayload = replyPayload ? `${replyPayload}\n\n${attachmentInfo}` : attachmentInfo;
+            }
+
+            // Add reply context
+            let replyToId = null;
+            if (replyingTo) {
+                replyPayload = `Replying to: "${replyingTo.content.substring(0, 100)}"\n\n${replyPayload}`;
+                replyToId = parseInt(replyingTo.id);
+            }
+
+            const payloadObj = {
+                sender: `Provider/${providerId}`,
+                recipients: [`Patient/${patientId}`],
+                providerId: providerId,
+                patientId: patientId, // CRITICAL: Use the correct patient ID
+                subject: `Re: ${selectedConversation.messages[0]?.subject || 'Conversation'}`,
+                payload: replyPayload,
+                status: "SENT",
+                category: "reply",
+                sentDate: new Date().toISOString(),
+                inResponseTo: replyToId || selectedConversation.messages[0]?.id,
+                fromName: senderName,
+                toNames: [recipientName],
+                fromType: 'provider'
+            };
+
+            console.log('Sending reply to conversation:', {
+                conversationId: selectedConversation.id,
+                patientId: patientId,
+                providerId: providerId,
+                recipientName: recipientName
+            });
+
+            const res = await fetchWithAuth(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/communications`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payloadObj),
+                }
+            );
+
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(`HTTP ${res.status}: ${errorText}`);
+            }
+
+            const json = await res.json();
+            if (json.success && json.data) {
+                // Handle attachments if any
+                if (pendingAttachments.length > 0) {
+                    console.log('Would upload attachments:', pendingAttachments);
+                }
+
+                await loadCommunications();
+                setReplyBody("");
+                setReplyingTo(null);
+                setPendingAttachments([]);
+                showNotification('Reply sent successfully! ✨', 'success');
+
+                if (replyInputRef.current) {
+                    replyInputRef.current.style.height = 'auto';
+                }
+
+                setTimeout(() => {
+                    replyInputRef.current?.focus();
+                }, 100);
+            } else {
+                throw new Error(json.message || 'Failed to send reply');
+            }
+        } catch (error) {
+            console.error('Error sending reply:', error);
+            showNotification(`Failed to send reply: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+        } finally {
+            setIsTyping(false);
         }
     };
 
     useEffect(() => {
-        if (hydratedOnce.current) return;
-        hydratedOnce.current = true;
-        void loadCommunications();
-    }, []);
-
-    /* ---- Actions ---- */
-    async function archiveMessage(id: number) {
-        const res = await fetchWithAuth(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/communications/archive/${id}`,
-            { method: "PUT" }
-        );
-        if (res.ok) {
-            setMessages((prev) =>
-                prev.map((m) => (m.id === id ? { ...m, folder: "archive" } : m))
-            );
+        if (messagesEndRef.current && selectedConversation) {
+            // Scroll when the selected conversation changes or new messages arrive,
+            // but NOT on replyBody changes (typing) to avoid janky scrolling.
+            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
-    }
+    }, [selectedConversation, messages.length]);
 
-    async function restoreMessage(id: number) {
-        const res = await fetchWithAuth(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/communications/restore/${id}`,
-            { method: "PUT" }
-        );
-        if (res.ok) {
-            setMessages((prev) =>
-                prev.map((m) => {
-                    if (m.id === id) {
-                        const restoredFolder: FolderType =
-                            m.subject?.toLowerCase().startsWith("re:") || m.folder === "sent"
-                                ? "sent"
-                                : "inbox";
-                        return { ...m, folder: restoredFolder };
-                    }
-                    return m;
-                })
-            );
-        }
-    }
+    // Get thread messages for selected conversation with WhatsApp-style formatting
+    const getThreadMessages = useMemo(() => {
+        if (!selectedConversation) return [];
 
-    function markAsRead(id: number) {
-        setMessages((prev) =>
-            prev.map((m) => (m.id === id ? { ...m, isRead: true } : m))
-        );
-    }
+        // Sort messages by time and convert to thread format
+        return selectedConversation.messages
+            .sort((a, b) => a.createdAt - b.createdAt)
+            .map(msg => ({
+                id: msg.id.toString(),
+                sender: msg.sender,
+                content: msg.body,
+                timestamp: new Date(msg.createdAt).toISOString(),
+                isUser: msg.type === 'provider', // Assuming current user is always provider
+                status: msg.status || 'sent',
+                replyTo: msg.replyTo
+            }));
+    }, [selectedConversation]);
 
     /* ---- Create Message ---- */
-    async function createMessage() {
-        if (isSendDisabled) return;
-        const provider = providers.find((p) => String(p.id) === selectedProviderId);
-        const patient = patients.find((p) => String(p.id) === selectedPatientId);
+    const createMessage = async () => {
+        if (!subject || !body || !selectedProviderId || !selectedPatientId) return;
 
-        const providerIdNum = provider?.id ?? Number(selectedProviderId);
-        const patientIdNum = patient?.id ?? Number(selectedPatientId);
+        try {
+            const provider = providers.find((p) => String(p.id) === selectedProviderId);
+            const patient = patients.find((p) => String(p.id) === selectedPatientId);
 
-        const payloadObj = {
-            sender: providerIdNum ? `Provider/${providerIdNum}` : undefined,
-            recipients: patientIdNum ? [`Patient/${patientIdNum}`] : [],
-            providerId: providerIdNum,
-            patientId: patientIdNum,
-            subject,
-            payload: body,
-            status: "SENT",
-            category: "appointment",
-            sentDate: new Date().toISOString(),
-        };
-
-        const res = await fetchWithAuth(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/communications`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payloadObj),
+            if (!provider || !patient) {
+                showNotification('Please select both provider and patient', 'error');
+                return;
             }
-        );
-        const json: ApiResponse<CommunicationDto> = await res.json();
-        if (json.success && json.data) {
-            await loadCommunications();
-        }
 
-        setIsCreating(false);
-        setSubject("");
-        setBody("");
-        setSelectedPatientId("");
-        setSelectedProviderId("");
-        setSelectedTemplateId("");
-        setAttachments([]);
-    }
+            const providerName = `${provider.identification?.firstName} ${provider.identification?.lastName}`.trim() || `Provider ${provider.id}`;
+            const patientName = `${patient.firstName} ${patient.lastName}`.trim();
 
-    /* ---- Send Reply ---- */
-    async function sendReply() {
-        if (!replyingTo || !replyBody.trim()) return;
-
-        const provider = providers.find((p) => String(p.id) === selectedProviderId);
-        const patient = patients.find(
-            (p) => `${p.firstName} ${p.lastName}`.trim() === replyingTo.recipient.trim()
-        );
-
-        const providerIdNum = provider?.id ?? Number(selectedProviderId);
-        const patientIdNum = patient?.id ?? Number(selectedPatientId);
-
-        const providerName = provider
-            ? `${provider.identification?.firstName || ""} ${
-                provider.identification?.lastName || ""
-            }`.trim()
-            : "";
-
-        const payloadObj = {
-            sender: providerIdNum ? `Provider/${providerIdNum}` : undefined,
-            recipients: patientIdNum ? [`Patient/${patientIdNum}`] : [],
-            providerId: providerIdNum,
-            patientId: patientIdNum,
-            subject: `Re: ${replyingTo.subject}`,
-            payload: replyBody,
-            status: "SENT",
-            category: "reply",
-            sentDate: new Date().toISOString(),
-            inResponseTo: replyingTo.id,
-            fromName: providerName,
-        };
-
-        const res = await fetchWithAuth(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/communications`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payloadObj),
-            }
-        );
-        const json: ApiResponse<CommunicationDto> = await res.json();
-        if (json.success && json.data) {
-            const comm = json.data;
-            const ts = comm.createdDate
-                ? new Date(comm.createdDate).getTime()
-                : Date.now();
-            const newMsg: Message = {
-                id: comm.id,
-                sender: comm.fromName || "Unknown Provider",
-                recipient: comm.toNames?.[0] || "Unknown Patient",
-                subject: comm.subject,
-                body: comm.payload,
-                createdAt: ts,
-                time: formatTime(ts),
-                folder: "sent",
-                avatar: {
-                    initials: initials(comm.fromName || "U"),
-                    color: avatarColors[Math.floor(Math.random() * avatarColors.length)],
-                },
-                isRead: true,
+            const payloadObj = {
+                sender: `Provider/${provider.id}`,
+                recipients: [`Patient/${patient.id}`],
+                providerId: provider.id,
+                patientId: patient.id,
+                subject: subject.trim(),
+                payload: body.trim(),
+                status: "SENT",
+                category: "general",
+                sentDate: new Date().toISOString(),
+                fromName: providerName,
+                toNames: [patientName],
+                fromType: 'provider' as const
             };
-            setMessages((prev) => [newMsg, ...prev]);
+
+            const res = await fetchWithAuth(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/communications`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payloadObj),
+                }
+            );
+
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(`HTTP ${res.status}: ${errorText}`);
+            }
+
+            const json: ApiResponse<CommunicationDto> = await res.json();
+
+            if (json.success && json.data) {
+                await loadCommunications();
+                showNotification('Message sent successfully! 📨', 'success');
+
+                setIsCreating(false);
+                setSubject("");
+                setBody("");
+                setSelectedPatientId("");
+                setSelectedProviderId("");
+                setSelectedTemplateId("");
+            } else {
+                throw new Error(json.message || 'Failed to send message');
+            }
+        } catch (error) {
+            console.error('Failed to send message:', error);
+            showNotification('Failed to send message', 'error');
         }
+    };
 
-        setReplyingTo(null);
-        setReplyBody("");
-    }
+    /* ---- Fiverr-style Conversation View ---- */
+    const ConversationView = () => (
+        <div className="flex-1 flex h-[calc(100vh-140px)] bg-white rounded-lg overflow-hidden border border-gray-200">
+            {/* Left Sidebar - Conversations List */}
+            <div className={`w-80 border-r bg-white flex-shrink-0 ${
+                conversationView === 'thread' ? 'hidden md:flex' : 'flex'
+            }`}>
+                <div className="flex flex-col h-full w-full">
+                    {/* Header with Dropdown Arrow */}
+                    <div className="p-4 border-b">
+                        <div className="relative">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <h2 className="text-lg font-bold">
+                                        {selectedFolder === 'archived' ? 'Archived' :
+                                            selectedFolder === 'unread' ? 'Unread' :
+                                                selectedFolder === 'starred' ? 'Starred' : 'All messages'}
+                                    </h2>
+                                    <button
+                                        className="text-gray-500 hover:text-gray-700 transition-colors"
+                                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                    >
+                                        <svg
+                                            className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
 
-    return (
-        <AdminLayout>
-            <div className="px-4 pt-0 pb-4">
-                {/* Top Tabs & Actions */}
-                <div className="flex justify-between items-center -mt-2 mb-1">
-                    <div className="flex items-center gap-2">
-                        {(["inbox", "sent", "archive"] as const).map((f) => (
-                            <button
-                                key={f}
-                                onClick={() => {
-                                    setShowTemplates(false);
-                                    setCurrentFolder(f);
-                                    setCurrentPage(1);
-                                }}
-                                className={`px-3 py-1.5 rounded text-sm ${
-                                    !showTemplates && currentFolder === f
-                                        ? "bg-blue-600 text-white"
-                                        : "bg-gray-100 text-gray-700"
-                                }`}
-                            >
-                                {f === "inbox" ? (
-                                    <span className="inline-flex items-center gap-2">
-                    Inbox
-                                        {unreadInboxCount > 0 && (
-                                            <span className="inline-flex min-w-[20px] h-5 items-center justify-center rounded-full bg-blue-600 text-white text-xs px-1">
-                        {unreadInboxCount}
-                      </span>
-                                        )}
-                  </span>
-                                ) : (
-                                    f.charAt(0).toUpperCase() + f.slice(1)
-                                )}
-                            </button>
-                        ))}
-                        <button
-                            onClick={() => setShowTemplates(true)}
-                            className={`px-3 py-1.5 rounded text-sm ${
-                                showTemplates
-                                    ? "bg-blue-600 text-white"
-                                    : "bg-gray-100 text-gray-700"
-                            }`}
-                        >
-                            Templates
-                        </button>
+                            {/* Dropdown Menu */}
+                            {isDropdownOpen && (
+                                <div className="absolute top-10 left-0 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                                    <div className="p-2">
+                                        {dropdownOptions.map((option) => (
+                                            <button
+                                                key={option.id}
+                                                onClick={() => {
+                                                    setSelectedFolder(option.id as 'all' | 'unread' | 'starred' | 'archived');
+                                                    setIsDropdownOpen(false);
+                                                    setSelectedConversation(null);
+                                                    setConversationView('list');
+                                                }}
+                                                className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-lg hover:bg-gray-50 transition-colors ${
+                                                    selectedFolder === option.id ? 'bg-blue-50 text-blue-600' : ''
+                                                }`}
+                                            >
+                                                <span className="text-lg">{option.icon}</span>
+                                                <span className="font-medium text-sm">{option.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Search */}
+                            <div className="mt-3">
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        placeholder="Search conversations..."
+                                        className="w-full pl-3 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                                        value={conversationSearch}
+                                        onChange={(e) => setConversationSearch(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="flex-1 flex justify-center">
-                        {!showTemplates && (
-                            <input
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                placeholder="Search messages..."
-                                className="px-3 py-1.5 border rounded w-1/3 text-sm"
-                            />
-                        )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        {!showTemplates ? (
-                            <button
-                                onClick={() => setIsCreating(true)}
-                                className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 shadow text-sm"
-                            >
-                                Compose
-                            </button>
+                    {/* Messages List */}
+                    <div className="flex-1 overflow-y-auto">
+                        {conversationItems.length > 0 ? (
+                            conversationItems
+                                .filter(item =>
+                                    item.participant.toLowerCase().includes(conversationSearch.toLowerCase()) ||
+                                    item.preview?.toLowerCase().includes(conversationSearch.toLowerCase())
+                                )
+                                .map((item) => (
+                                    <MessageListItem
+                                        key={item.id}
+                                        item={item}
+                                        isActive={selectedConversation?.id === item.id}
+                                        onSelect={(id) => {
+                                            const conversation = conversationsByParticipant.find(conv => conv.id === id);
+                                            if (conversation) {
+                                                setSelectedConversation(conversation);
+                                                setConversationView('thread');
+                                                if (conversation.unread && !conversation.isArchived) {
+                                                    // Mark all messages in conversation as read
+                                                    conversation.messages.forEach(msg => {
+                                                        if (msg.unread) {
+                                                            markAsRead(msg.id);
+                                                        }
+                                                    });
+                                                }
+                                            }
+                                        }}
+                                    />
+                                ))
                         ) : (
-                            <button
-                                onClick={() => window.dispatchEvent(new Event("openAddTemplate"))}
-                                className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 shadow text-sm"
-                            >
-                                Add Template
-                            </button>
+                            <div className="text-center py-8 text-gray-500">
+                                <p>
+                                    {selectedFolder === 'archived' ? 'No archived conversations' : 'No conversations found'}
+                                </p>
+                                {selectedFolder !== 'archived' && (
+                                    <button
+                                        onClick={() => setIsCreating(true)}
+                                        className="mt-2 px-4 py-2 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600"
+                                    >
+                                        Start New Conversation
+                                    </button>
+                                )}
+                            </div>
                         )}
                     </div>
                 </div>
+            </div>
 
-                {/* CONTENT AREA */}
-                {!showTemplates ? (
+            {/* Right Side - Chat Area */}
+            <div className={`flex-1 flex flex-col ${
+                conversationView === 'thread' ? 'flex' : 'hidden md:flex'
+            }`}>
+                {selectedConversation ? (
                     <>
-                        {/* -------- Messages Table -------- */}
-                        <table className="w-full border rounded bg-white shadow-sm text-sm">
-                            <thead className="bg-gray-100 text-left">
-                            <tr>
-                                <th className="px-3 py-2">From</th>
-                                <th className="px-3 py-2">To</th>
-                                <th className="px-3 py-2">Subject</th>
-                                <th className="px-3 py-2">Date/Time</th>
-                                <th className="px-3 py-2 text-right">Action</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            {paginatedRows.length > 0 ? (
-                                paginatedRows.map((m) => {
-                                    const isInboxUnread = m.folder === "inbox" && !m.isRead;
-                                    return (
-                                        <tr key={m.id} className="border-t hover:bg-gray-50">
-                                            <td className="px-3 py-2 flex items-center gap-2">
-                          <span
-                              className={`w-2 h-2 rounded-full ${
-                                  isInboxUnread ? "bg-blue-500" : "bg-transparent"
-                              }`}
-                          />
-                                                <div
-                                                    className={`w-8 h-8 flex items-center justify-center rounded-full text-white text-xs font-bold shadow ${m.avatar?.color}`}
-                                                >
-                                                    {m.avatar?.initials}
-                                                </div>
-                                                <span className="truncate">{m.sender}</span>
-                                            </td>
-                                            <td className="px-3 py-2">{m.recipient}</td>
-                                            <td
-                                                className={`px-3 py-2 truncate max-w-[260px] ${
-                                                    isInboxUnread
-                                                        ? "font-semibold text-gray-900"
-                                                        : "text-gray-800"
-                                                }`}
-                                                title={m.body}
-                                            >
-                                                {m.subject}
-                                                {isInboxUnread && (
-                                                    <span className="ml-2 inline-block text-[10px] font-semibold uppercase tracking-wide text-blue-600 bg-blue-50 px-2 py-[2px] rounded">
-                              NEW
-                            </span>
-                                                )}
-                                            </td>
-                                            <td className="px-3 py-2 whitespace-nowrap text-gray-600">
-                                                {new Date(m.createdAt).toLocaleDateString()} {m.time}
-                                            </td>
-                                            <td className="px-3 py-2 text-right">
-                                                {currentFolder === "archive" ? (
-                                                    <button
-                                                        onClick={() => restoreMessage(m.id)}
-                                                        className="text-green-600 hover:text-green-800"
-                                                        title="Restore"
-                                                    >
-                                                        ↑
-                                                    </button>
-                                                ) : (
-                                                    <div className="flex gap-3 justify-end items-center">
-                                                        <button
-                                                            onClick={() => {
-                                                                if (m.folder === "inbox" && !m.isRead)
-                                                                    markAsRead(m.id);
-                                                                setReplyingTo(m);
-
-                                                                // Autofill provider
-                                                                const prov = providers.find(
-                                                                    (p) =>
-                                                                        `${p.identification?.firstName || ""} ${
-                                                                            p.identification?.lastName || ""
-                                                                        }`.trim() === m.sender.trim()
-                                                                );
-                                                                if (prov) setSelectedProviderId(String(prov.id));
-
-                                                                // Autofill patient
-                                                                const pat = patients.find(
-                                                                    (p) =>
-                                                                        `${p.firstName} ${p.lastName}`.trim() ===
-                                                                        m.recipient.trim()
-                                                                );
-                                                                if (pat) setSelectedPatientId(String(pat.id));
-                                                            }}
-                                                            className="text-blue-600 hover:text-blue-800"
-                                                            title="Reply"
-                                                        >
-                                                            ↩
-                                                        </button>
-
-                                                        <button
-                                                            onClick={() => archiveMessage(m.id)}
-                                                            className="text-red-600 hover:text-red-800"
-                                                            title="Archive"
-                                                        >
-                                                            ↓
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            ) : (
-                                <tr>
-                                    <td
-                                        colSpan={5}
-                                        className="px-3 py-4 text-center text-gray-500 text-sm"
-                                    >
-                                        No messages found.
-                                    </td>
-                                </tr>
-                            )}
-                            </tbody>
-                        </table>
-
-                        {/* Pagination Footer */}
-                        {rows.length > 0 && (
-                            <div className="flex justify-between items-center mt-3 text-sm">
-                                <div className="flex items-center gap-2">
+                        {/* Chat Header */}
+                        <div className="p-4 border-b">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
                                     <button
-                                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                                        disabled={currentPage === 1}
-                                        className="px-3 py-1 rounded bg-gray-100 disabled:opacity-50"
+                                        onClick={() => setConversationView('list')}
+                                        className="md:hidden flex-shrink-0 p-2 hover:bg-gray-100 rounded-lg transition-colors"
                                     >
-                                        Prev
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                        </svg>
                                     </button>
-                                    <span>
-                    Page {currentPage} of{" "}
-                                        {Math.max(1, Math.ceil(rows.length / pageSize))}
-                  </span>
-                                    <button
-                                        onClick={() =>
-                                            setCurrentPage((p) =>
-                                                p < Math.ceil(rows.length / pageSize) ? p + 1 : p
-                                            )
-                                        }
-                                        disabled={currentPage >= Math.ceil(rows.length / pageSize)}
-                                        className="px-3 py-1 rounded bg-gray-100 disabled:opacity-50"
-                                    >
-                                        Next
-                                    </button>
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
+                                        selectedConversation.avatar?.color || 'bg-green-500'
+                                    }`}>
+                                        {initials(selectedConversation.participant) || 'U'}
+                                    </div>
+                                    <div>
+                                        <h2 className="font-semibold">{selectedConversation.participant}</h2>
+                                        <p className="text-sm text-gray-500">
+                                            {selectedConversation.participantType === 'provider' ? 'Healthcare Provider' : 'Patient'}
+                                        </p>
+                                    </div>
                                 </div>
 
-                                <div className="flex items-center gap-3">
-                  <span>
-                    Showing{" "}
-                      {rows.length === 0
-                          ? "0"
-                          : `${(currentPage - 1) * pageSize + 1}–${Math.min(
-                              currentPage * pageSize,
-                              rows.length
-                          )}`}{" "}
-                      of {rows.length}
-                  </span>
-                                    <select
-                                        value={pageSize}
-                                        onChange={(e) => {
-                                            setCurrentPage(1);
-                                            setPageSize(Number(e.target.value));
-                                        }}
-                                        className="border rounded px-2 py-1"
-                                    >
-                                        {[10, 20, 50, 100].map((size) => (
-                                            <option key={size} value={size}>
-                                                {size}
-                                            </option>
-                                        ))}
-                                    </select>
+                                {/* Timestamp */}
+                                <div className="text-sm text-gray-500">
+                                    {formatRelativeTime(selectedConversation.lastMessageTime)}
                                 </div>
                             </div>
-                        )}
+
+                            {/* Action Buttons - Different actions for archived vs normal conversations */}
+                            <div className="mt-3 pt-3 border-t">
+                                <div className="flex items-center justify-end">
+                                    <div className="flex items-center gap-4">
+                                        {selectedConversation.isArchived ? (
+                                            // Actions for archived conversations
+                                            <>
+                                                <button
+                                                    onClick={() => handleUnarchiveConversation(selectedConversation.id)}
+                                                    className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800 transition-colors"
+                                                >
+                                                    <span>↩️</span>
+                                                    <span>Move to Inbox</span>
+                                                </button>
+                                            </>
+                                        ) : (
+                                            // Actions for normal conversations
+                                            <>
+                                                <button
+                                                    onClick={() => {
+                                                        // Mark conversation as unread
+                                                        setSelectedConversation(prev =>
+                                                            prev ? { ...prev, unread: true } : null
+                                                        );
+                                                        showNotification('Marked as unread', 'success');
+                                                    }}
+                                                    className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 transition-colors"
+                                                >
+                                                    <span>📨</span>
+                                                    <span>Mark as unread</span>
+                                                </button>
+
+                                                <button
+                                                    onClick={() => handleArchiveConversation(selectedConversation.id)}
+                                                    className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 transition-colors"
+                                                >
+                                                    <span>📁</span>
+                                                    <span>Archive</span>
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {/* Messages Area */}
+                        <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+                            <div className="max-w-3xl mx-auto">
+                                {/* Thread messages */}
+                                {getThreadMessages.map((threadMsg) => (
+                                    <MessageBubble
+                                        key={threadMsg.id}
+                                        message={threadMsg}
+                                        isCurrentUser={threadMsg.isUser}
+                                        onReply={handleReplyToMessage}
+                                        onArchive={handleArchiveMessage}
+                                        currentUserName={currentUserName}
+                                    />
+                                ))}
+
+                                {/* Typing Indicator */}
+                                {isTyping && (
+                                    <div className="flex justify-start">
+                                        <div className="bg-gray-100 rounded-2xl rounded-bl-none p-4">
+                                            <div className="flex gap-1">
+                                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div ref={messagesEndRef} />
+                            </div>
+                        </div>
+
+                        {/* WhatsApp-style Reply Section - Show for all conversations */}
+                        <ReplySection
+                            replyBody={replyBody}
+                            setReplyBody={setReplyBody}
+                            onSendReply={sendConversationReply}
+                            isTyping={isTyping}
+                            replyInputRef={replyInputRef}
+                            replyTo={replyingTo}
+                            onCancelReply={cancelReply}
+                            currentUserName={currentUserName}
+                            showAttachmentMenu={showAttachmentMenu}
+                            onFilesSelected={handleFilesSelected}
+                            attachmentMenuPosition={attachmentMenuPosition}
+                            onAttachmentSelect={handleAttachmentSelect}
+                            onCloseAttachmentMenu={handleCloseAttachmentMenu}
+                            pendingAttachments={pendingAttachments}
+                            onRemoveAttachment={removeAttachment}
+                        />
                     </>
                 ) : (
-                    <TemplateManagement />
+                    <div className="flex-1 flex items-center justify-center text-center p-8">
+                        <div>
+                            <div className="text-6xl mb-4 opacity-20">💬</div>
+                            <h3 className="text-xl font-semibold mb-2">
+                                {selectedFolder === 'archived' ? 'Select an archived conversation' : 'Select a conversation'}
+                            </h3>
+                            <p className="text-gray-500 mb-4">
+                                {selectedFolder === 'archived'
+                                    ? 'Choose an archived conversation to view or move to inbox'
+                                    : 'Choose a message to start chatting'
+                                }
+                            </p>
+                            {selectedFolder !== 'archived' && (
+                                <button
+                                    onClick={() => setIsCreating(true)}
+                                    className="px-6 py-3 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-colors"
+                                >
+                                    Start New Conversation
+                                </button>
+                            )}
+                        </div>
+                    </div>
                 )}
             </div>
 
-            {/* Reply Modal */}
-            {replyingTo && (
-                <div className="fixed inset-0 z-[99999] grid place-items-center bg-black/40 p-4">
-                    <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
-                        <h2 className="text-lg font-semibold mb-4">
-                            Reply to {replyingTo.recipient}
-                        </h2>
-
-                        <div className="mb-3 text-sm text-gray-700">
-                            <p>
-                                <strong>From (Provider):</strong>{" "}
-                                {providers.find((p) => String(p.id) === selectedProviderId)
-                                    ? `${providers.find(
-                                        (p) => String(p.id) === selectedProviderId
-                                    )?.identification?.firstName || ""} ${
-                                        providers.find(
-                                            (p) => String(p.id) === selectedProviderId
-                                        )?.identification?.lastName || ""
-                                    }`.trim()
-                                    : "Not selected"}
-                            </p>
-                            <p>
-                                <strong>To (Patient):</strong>{" "}
-                                {patients.find((p) => String(p.id) === selectedPatientId)
-                                    ? `${patients.find(
-                                        (p) => String(p.id) === selectedPatientId
-                                    )?.firstName || ""} ${
-                                        patients.find((p) => String(p.id) === selectedPatientId)
-                                            ?.lastName || ""
-                                    }`.trim()
-                                    : "Not selected"}
-                            </p>
-                        </div>
-
-                        <textarea
-                            rows={5}
-                            value={replyBody}
-                            onChange={(e) => setReplyBody(e.target.value)}
-                            placeholder="Type your reply..."
-                            className="w-full p-2 border rounded"
-                        />
-
-                        <div className="flex justify-end gap-2 mt-3">
-                            <button
-                                onClick={() => {
-                                    setReplyingTo(null);
-                                    setReplyBody("");
-                                }}
-                                className="px-4 py-2 rounded bg-gray-100"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={sendReply}
-                                disabled={!replyBody.trim()}
-                                className={`px-4 py-2 rounded ${
-                                    replyBody.trim()
-                                        ? "bg-blue-600 text-white"
-                                        : "bg-gray-300 text-gray-600"
-                                }`}
-                            >
-                                Send Reply
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            {/* Profile Sidebar */}
+            {selectedConversation && (
+                <ProfileSidebar selectedConversation={selectedConversation} />
             )}
+        </div>
+    );
 
+    return (
+        <AdminLayout>
+            <div className="px-6 pt-6 pb-4 h-screen bg-white">
+                {/* Notification */}
+                {notification && (
+                    <div className={`fixed top-6 right-6 px-6 py-3 rounded-lg text-white font-semibold z-50 ${
+                        notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+                    }`}>
+                        {notification.message}
+                    </div>
+                )}
 
+                {/* Header */}
+                <div className="mb-6">
+                    <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                        Messaging
+                    </h1>
+                </div>
 
-            {/* Compose Modal */}
-            {isCreating && (
-                <div className="fixed inset-0 z-[99999] grid place-items-center bg-black/40 p-4">
-                    <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
-                        <h2 className="text-lg font-semibold mb-4">New Message</h2>
-                        <div className="space-y-3">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-xs">From (Provider)</label>
+                {/* Content Area */}
+                <ConversationView />
+
+                {/* Compose Modal */}
+                {isCreating && (
+                    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
+                        <div className="w-full max-w-2xl bg-white rounded-2xl p-6 shadow-xl">
+                            <h2 className="text-lg font-semibold mb-4">New Message</h2>
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-sm font-medium">From (Provider)</label>
+                                        <select
+                                            value={selectedProviderId}
+                                            onChange={(e) => setSelectedProviderId(e.target.value)}
+                                            className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                                        >
+                                            <option value="">-- Choose Provider --</option>
+                                            {providers.map((p) => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.identification?.firstName} {p.identification?.lastName}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium">Recipient (Patient)</label>
+                                        <select
+                                            value={selectedPatientId}
+                                            onChange={(e) => setSelectedPatientId(e.target.value)}
+                                            className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                                        >
+                                            <option value="">-- Choose Patient --</option>
+                                            {patients.map((p) => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.firstName} {p.lastName}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-2">
                                     <select
-                                        value={selectedProviderId}
-                                        onChange={(e) => setSelectedProviderId(e.target.value)}
-                                        className="w-full p-2 border rounded"
+                                        value={selectedTemplateId === "" ? "" : String(selectedTemplateId)}
+                                        onChange={(e) =>
+                                            setSelectedTemplateId(
+                                                e.target.value === "" ? "" : Number(e.target.value)
+                                            )
+                                        }
+                                        className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                                     >
-                                        <option value="">-- Choose Provider --</option>
-                                        {providers.map((p) => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.identification?.firstName} {p.identification?.lastName}
+                                        <option value="">Choose a template</option>
+                                        {composeTemplateOptions.map((t) => (
+                                            <option key={t.id} value={t.id}>
+                                                {t.templateName}
                                             </option>
                                         ))}
                                     </select>
-                                </div>
-                                <div>
-                                    <label className="text-xs">Recipient (Patient)</label>
-                                    <select
-                                        value={selectedPatientId}
-                                        onChange={(e) => setSelectedPatientId(e.target.value)}
-                                        className="w-full p-2 border rounded"
+                                    <button
+                                        type="button"
+                                        onClick={applySelectedTemplate}
+                                        className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                                     >
-                                        <option value="">-- Choose Patient --</option>
-                                        {patients.map((p) => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.firstName} {p.lastName}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        Use
+                                    </button>
                                 </div>
-                            </div>
-
-                            {/* Template dropdown */}
-                            <div className="flex gap-2">
-                                <select
-                                    value={selectedTemplateId === "" ? "" : String(selectedTemplateId)}
-                                    onChange={(e) =>
-                                        setSelectedTemplateId(
-                                            e.target.value === "" ? "" : Number(e.target.value)
-                                        )
-                                    }
-                                    className="w-full p-2 border rounded"
-                                >
-                                    <option value="">Choose a template</option>
-                                    {composeTemplateOptions.map((t) => (
-                                        <option key={t.id} value={t.id}>
-                                            {t.templateName}
-                                        </option>
-                                    ))}
-                                </select>
-                                <button
-                                    type="button"
-                                    onClick={applySelectedTemplate}
-                                    className="px-3 py-1 rounded bg-gray-100 hover:bg-gray-200"
-                                >
-                                    Use
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setSelectedTemplateId("");
-                                        setSubject("");
-                                        setBody("");
-                                    }}
-                                    className="px-3 py-1 rounded bg-gray-100 hover:bg-gray-200"
-                                >
-                                    Clear
-                                </button>
-                            </div>
-
-                            <input
-                                value={subject}
-                                onChange={(e) => setSubject(e.target.value)}
-                                placeholder="Subject"
-                                className="w-full p-2 border rounded"
-                            />
-
-                            <textarea
-                                value={body}
-                                onChange={(e) => setBody(e.target.value)}
-                                rows={5}
-                                placeholder="Message..."
-                                className="w-full p-2 border rounded"
-                            />
-
-                            <div className="flex justify-between items-center gap-2">
+                                {/* ATTACHMENT BUTTON ADDED HERE */}
                                 <div className="flex items-center gap-2">
-                                    <label className="px-4 py-2 rounded bg-gray-100 cursor-pointer text-sm">
-                                        <input
-                                            type="file"
-                                            multiple
-                                            hidden
-                                            onChange={(e) => {
-                                                const files = Array.from(e.target.files || []);
-                                                setAttachments((prev) =>
-                                                    [...prev, ...files].slice(0, 5)
-                                                );
-                                            }}
-                                        /> Attach
+                                    <button
+                                        type="button"
+                                        onClick={() => document.getElementById('compose-file-input')?.click()}
+                                        className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                                    >
+                                        <span>📎</span>
+                                        <span className="text-sm">Add Attachment</span>
+                                    </button>
+                                    <input
+                                        type="file"
+                                        id="compose-file-input"
+                                        className="hidden"
+                                        multiple
+                                        onChange={(e) => {
+                                            const files = e.target.files;
+                                            if (files && files.length > 0) {
+                                                showNotification(`Added ${files.length} attachment(s) to message`, 'success');
+                                                console.log('Selected files for new message:', files);
+                                            }
+                                        }}
+                                    />
+                                </div>
 
-                                    </label>
+                                <input
+                                    value={subject}
+                                    onChange={(e) => setSubject(e.target.value)}
+                                    placeholder="Subject"
+                                    className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                                />
+
+                                <textarea
+                                    value={body}
+                                    onChange={(e) => setBody(e.target.value)}
+                                    rows={6}
+                                    placeholder="Message..."
+                                    className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                                />
+
+                                <div className="flex justify-between items-center gap-2">
                                     <button
                                         onClick={() => setIsCreating(false)}
-                                        className="px-4 py-2 rounded bg-gray-100"
+                                        className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                                     >
                                         Discard
                                     </button>
+                                    <button
+                                        onClick={createMessage}
+                                        disabled={!subject || !body || !selectedProviderId || !selectedPatientId}
+                                        className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
+                                            (!subject || !body || !selectedProviderId || !selectedPatientId)
+                                                ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                                                : "bg-green-500 text-white hover:bg-green-600"
+                                        }`}
+                                    >
+                                        Send Message
+                                    </button>
                                 </div>
-                                <button
-                                    onClick={createMessage}
-                                    disabled={isSendDisabled}
-                                    className={`px-4 py-2 rounded ${
-                                        isSendDisabled
-                                            ? "bg-gray-300 text-gray-600"
-                                            : "bg-blue-600 text-white"
-                                    }`}
-                                >
-                                    Send
-                                </button>
                             </div>
-
-                            {attachments.length > 0 && (
-                                <ul className="mt-2 text-xs text-gray-600">
-                                    {attachments.map((f, idx) => (
-                                        <li key={idx}>{f.name}</li>
-                                    ))}
-                                </ul>
-                            )}
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </AdminLayout>
     );
 }
