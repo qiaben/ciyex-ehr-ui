@@ -82,7 +82,9 @@ type Claim = {
     patientId: number;
     payerName: string | null;
     treatingProviderId?: string | null;
+    provider?: string | null;
     billingEntity?: string | null;
+    policyNumber?: string | null;
     type: "Electronic" | "Paper" | null;
     notes?: string | null;
     status: ClaimStatus;
@@ -118,6 +120,17 @@ type PatientPayment = {
 };
 
 type AccountCredit = { balance: number };
+
+type CourtesyCredit = {
+    id: number;
+    invoiceId: number;
+    patientId: number;
+    adjustmentType: string;
+    amount: number;
+    description?: string;
+    appliedDate?: string;
+    createdAt?: string;
+};
 
 type Provider = {
     id: number;
@@ -438,6 +451,44 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             alert("Error: " + (err as Error).message);
         }
     }
+
+    // Courtesy Credit logic
+    async function addCourtesyCredit() {
+        if (!selectedInvoiceId) {
+            alert("Please select an invoice from the Invoice tab first");
+            return;
+        }
+        if (!depositAmount || Number(depositAmount) <= 0) {
+            alert("Please enter a valid amount");
+            return;
+        }
+        try {
+            const res = await fetchWithAuth(`${API}/invoices/${selectedInvoiceId}/courtesy-credit`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    adjustmentType: courtesyType,
+                    amount: Number(depositAmount),
+                    description: depositDesc
+                }),
+            });
+            const body = await res.json();
+            if (!body?.success) {
+                alert(body?.message || "Failed to add courtesy credit");
+                return;
+            }
+            // Reload all invoice data to show the courtesy credit transaction
+            await loadAll();
+            // Reset modal state
+            setDepositAmount("");
+            setDepositDesc("");
+            setCourtesyType("Un-Collected");
+            setShowDepositType(null);
+            alert("Courtesy credit added successfully");
+        } catch (err) {
+            alert("Error: " + (err as Error).message);
+        }
+    }
     // Transfer INS balance to PT balance
     async function transferOutstandingToPatient(invoiceId: number, amount: number) {
         try {
@@ -486,6 +537,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     // Edit modals for insurance and patient payments
     const [editInsuranceModal, setEditInsuranceModal] = useState<{invoiceId: number, remit: InsuranceRemitLine} | null>(null);
     const [editPatientModal, setEditPatientModal] = useState<{invoiceId: number, payment: PatientPayment} | null>(null);
+    const [editCourtesyModal, setEditCourtesyModal] = useState<{invoiceId: number, courtesy: CourtesyCredit} | null>(null);
     // Notes state
     const [currentNotes, setCurrentNotes] = useState<Note[]>([]);
     const [editingNote, setEditingNote] = useState<Note | null>(null);
@@ -609,6 +661,45 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         });
         const data = await res.json();
         if (!data?.success) throw new Error(data?.message || "Failed to transfer patient credit");
+        await loadAll();
+    }
+
+    // =====================
+    // Courtesy Credit Actions
+    // =====================
+    async function updateCourtesyCredit(invoiceId: number, body: { adjustmentType: string; amount: number; description?: string }) {
+        const res = await fetchWithAuth(`${API}/invoices/${invoiceId}/courtesy-credit`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        const resBody = await res.json();
+        if (!resBody?.success) throw new Error(resBody?.message || "Failed to update courtesy credit");
+        await loadAll();
+    }
+
+    async function removeCourtesyCredit(invoiceId: number, reason?: string) {
+        const res = await fetchWithAuth(`${API}/invoices/${invoiceId}/courtesy-credit`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reason: reason || "Courtesy credit removed" }),
+        });
+        const resBody = await res.json();
+        if (!resBody?.success) throw new Error(resBody?.message || "Failed to remove courtesy credit");
+        await loadAll();
+    }
+
+    // =====================
+    // Edit Invoice Action
+    // =====================
+    async function updateInvoice(invoiceId: number, body: { code: string; description: string; provider: string; dos: string; rate: number }) {
+        const res = await fetchWithAuth(`${API}/invoices/${invoiceId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!data?.success) throw new Error(data?.message || "Failed to update invoice");
         await loadAll();
     }
 
@@ -790,6 +881,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     // Pre-fetched payment summaries per invoice
     const [insPayMap, setInsPayMap] = useState<Record<number, InsuranceRemitLine[]>>({});
     const [ptPayMap, setPtPayMap] = useState<Record<number, any[]>>({});
+    const [courtesyCreditsMap, setCourtesyCreditsMap] = useState<Record<number, CourtesyCredit[]>>({});
 
     // Patient payment allocations
     const [payMethod, setPayMethod] = useState<PaymentMethod>("CREDIT_CARD");
@@ -929,7 +1021,9 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         patientId: raw.patientId,
         payerName: raw.payerName ?? null,
         treatingProviderId: raw.treatingProviderId ?? null,
+        provider: raw.provider ?? null,
         billingEntity: raw.billingEntity ?? null,
+        policyNumber: raw.policyNumber ?? raw.policynumber ?? null,
         type: (raw.type as Claim["type"]) ?? null,
         notes: raw.notes ?? null,
         status: raw.status,
@@ -965,30 +1059,35 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             }
         } catch {}
 
-        // insurance & patient payments per invoice
+        // insurance & patient payments & courtesy credits per invoice
         try {
             const all = await Promise.all(
                 invs.map(async (inv) => {
-                    const [insRes, ptRes] = await Promise.all([
+                    const [insRes, ptRes, ccRes] = await Promise.all([
                         fetchWithAuth(`${API}/invoices/${inv.id}/insurance-payments`),
                         fetchWithAuth(`${API}/invoices/${inv.id}/patient-payments`),
+                        fetchWithAuth(`${API}/invoices/${inv.id}/courtesy-credit`),
                     ]);
-                    const [insJ, ptJ] = await Promise.all([insRes.json(), ptRes.json()]);
+                    const [insJ, ptJ, ccJ] = await Promise.all([insRes.json(), ptRes.json(), ccRes.json()]);
                     return {
                         id: inv.id,
                         ins: Array.isArray(insJ?.data) ? (insJ.data as InsuranceRemitLine[]) : [],
                         pt: Array.isArray(ptJ?.data) ? (ptJ.data as any[]) : [],
+                        cc: ccJ?.success && ccJ?.data ? [ccJ.data as CourtesyCredit] : [],
                     };
                 })
             );
             const nextIns: Record<number, InsuranceRemitLine[]> = {};
             const nextPt: Record<number, any[]> = {};
-            all.forEach(({ id, ins, pt }) => {
+            const nextCc: Record<number, CourtesyCredit[]> = {};
+            all.forEach(({ id, ins, pt, cc }) => {
                 nextIns[id] = ins;
                 nextPt[id] = pt;
+                nextCc[id] = cc;
             });
             setInsPayMap(nextIns);
             setPtPayMap(nextPt);
+            setCourtesyCreditsMap(nextCc);
         } catch {}
 
         // account credit
@@ -1065,7 +1164,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     }
 
     // Invoice adjustment (flat/percent)
-    async function adjustInvoice(invoiceId: number, payload: { adjustmentType: string; flatRate?: number; specificAmount?: number; description?: string; includeCourtesyCredit?: boolean; }) {
+    async function adjustInvoice(invoiceId: number, payload: { adjustmentType: string; discountPercent?: number; description?: string; }) {
         const res = await fetchWithAuth(`${API}/invoices/${invoiceId}/adjust`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1454,6 +1553,11 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                             <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md">
                                 <div className="font-semibold text-lg mb-2">Courtesy Credit</div>
                                 <div className="text-sm text-gray-500 mb-2">{new Date().toLocaleDateString()}</div>
+                                {selectedInvoiceId ? (
+                                    <div className="text-sm text-blue-600 font-medium mb-2">For Invoice #{selectedInvoiceId} - Remaining Patient Balance: {currency(Number(selectedInvoice?.ptBalance ?? 0))}</div>
+                                ) : (
+                                    <div className="text-sm text-red-600 font-medium mb-2">⚠️ Please select an invoice from the Invoice tab first</div>
+                                )}
                                 <div className="mb-2">
                                     <label className="label">Adjustment Type</label>
                                     <select className="input w-full" value={courtesyType} onChange={e => setCourtesyType(e.target.value)}>
@@ -1469,7 +1573,14 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                     <input className="input w-full" value={depositDesc} onChange={e => setDepositDesc(e.target.value)} />
                                 </div>
                                 <div className="flex gap-2 mt-4">
-                                    <button className="btn-primary" onClick={() => { /* handle add courtesy */ }}>Add Courtesy</button>
+                                    <button 
+                                        className="btn-primary" 
+                                        onClick={addCourtesyCredit}
+                                        disabled={!selectedInvoiceId || !depositAmount || Number(depositAmount) <= 0}
+                                        style={!selectedInvoiceId || !depositAmount || Number(depositAmount) <= 0 ? {opacity: 0.5, cursor: 'not-allowed'} : {}}
+                                    >
+                                        Add Courtesy
+                                    </button>
                                     <button className="btn-light" onClick={() => setShowDepositType(null)}>Cancel</button>
                                 </div>
                             </div>
@@ -1591,7 +1702,10 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                             <div className="flex-1">
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <span className="text-gray-600">
-                                                        <b>Claim #{claim.id}</b> to <b>{claim.payerName ?? "—"}</b> :
+                                                        <b>Claim #{claim.id}</b> to <b>{claim.payerName ?? "—"}</b>
+                                                        {(claim.provider || claim.treatingProviderId) && <span> | Provider: <b>{claim.provider ?? claim.treatingProviderId}</b></span>}
+                                                        {claim.policyNumber && <span> | Policy: <b>{claim.policyNumber}</b></span>}
+                                                        <span> :</span>
                                                     </span>
                                                     <Badge tone="amber">
                                                         {claim.status === "IN_PROCESS"
@@ -1737,6 +1851,58 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                             </div>
                                         </div>
                                     )}
+                                    {/* Courtesy credit summary (inline, only shown when manually added from Deposit tab) */}
+                                    {(() => {
+                                        const cc = courtesyCreditsMap[inv.id] ?? [];
+                                        const showCourtesyCredit = cc.length > 0;
+                                        if (!showCourtesyCredit) return null;
+                                        const courtesy = cc[0];
+                                        return (
+                                            <div className="flex items-start gap-3 border-b px-3 py-2 text-sm bg-amber-50/40">
+                                                <button
+                                                    className="mr-2 p-1 rounded-full hover:bg-amber-100"
+                                                    title="View/Add Notes"
+                                                    onClick={e => handleOpenNotes(inv.id, e)}
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-amber-600">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.556 0 8.25-3.694 8.25-8.25S16.556 3.75 12 3.75 3.75 7.444 3.75 12s3.694 8.25 8.25 8.25z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6" />
+                                                    </svg>
+                                                </button>
+                                                <div className="min-w-[100px] text-gray-500">{courtesy.appliedDate || new Date().toLocaleDateString()}</div>
+                                                <div className="flex-1">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="text-gray-700">
+                                                            <b>Courtesy Credit Adjustment #{courtesy.id}:</b> {courtesy.adjustmentType}
+                                                        </span>
+                                                        <Badge tone="amber">Applied {currency(Number(courtesy.amount))}</Badge>
+                                                        {courtesy.description && <Badge tone="gray">{courtesy.description}</Badge>}
+                                                    </div>
+                                                </div>
+                                                <div className="ml-auto flex items-center gap-2">
+                                                    <IconBtn title="Edit Courtesy Credit" onClick={() => {
+                                                        setEditCourtesyModal({ invoiceId: inv.id, courtesy });
+                                                    }}>
+                                                        <span role="img" aria-label="edit">✏️</span>
+                                                    </IconBtn>
+                                                    <IconBtn title="Void Courtesy Credit" onClick={() => {
+                                                        if (confirm('Are you sure you want to void this courtesy credit?')) {
+                                                            void removeCourtesyCredit(inv.id, "Voided by user");
+                                                        }
+                                                    }}>
+                                                        <span role="img" aria-label="void">🚫</span>
+                                                    </IconBtn>
+                                                    <IconBtn title="Undo Courtesy Credit" onClick={() => {
+                                                        if (confirm('Are you sure you want to undo this courtesy credit?')) {
+                                                            void removeCourtesyCredit(inv.id, "Undone by user");
+                                                        }
+                                                    }}>
+                                                        <span role="img" aria-label="undo">↩️</span>
+                                                    </IconBtn>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                     {/* Mini invoice line row */}
                                     {first && (
                                         <div className="flex items-start gap-3 px-3 py-2 text-sm">
@@ -1760,7 +1926,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                 <IconBtn title="Print" onClick={() => window.print()}>🖨️</IconBtn>
                                                 <IconBtn title="Edit" onClick={() => setShowEditLinesFor(inv.id)}>✏️</IconBtn>
                                                 <IconBtn title="Transfer Outstanding" onClick={() => setTransferOpenFor(inv.id)}>🔁</IconBtn>
-                                                <IconBtn title="Adjustment" onClick={() => setShowAdjustmentFor(inv.id)}>➖</IconBtn>
+                                                <IconBtn title="Adjustment" onClick={() => setShowAdjustmentInvoiceFor(inv.id)}>➖</IconBtn>
                                             </div>
                                         </div>
                                     )}
@@ -2248,7 +2414,9 @@ export default function PatientBilling({ patientId, patientName }: Props) {
 
             {/* Adjustment Invoice Modal */}
             {showAdjustmentInvoiceFor && (
-                <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
+                <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={(e) => {
+                    if (e.target === e.currentTarget) setShowAdjustmentInvoiceFor(null);
+                }}>
                     <div className="w-full max-w-4xl rounded-2xl bg-white shadow-xl">
                         <div className="flex items-center justify-between border-b px-5 py-3 bg-purple-600 text-white rounded-t-2xl">
                             <h4 className="text-base font-semibold">Adjust Invoice #{showAdjustmentInvoiceFor}</h4>
@@ -2315,11 +2483,18 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                     const type = (document.getElementById('adj-invoice-type') as HTMLSelectElement)?.value;
                                     const percent = Number((document.getElementById('adj-invoice-percent') as HTMLInputElement)?.value);
                                     const description = (document.getElementById('adj-invoice-desc') as HTMLTextAreaElement)?.value;
-                                    if (!invoiceId || !type) return;
+                                    if (!invoiceId || !type) {
+                                        alert('Please select an adjustment type');
+                                        return;
+                                    }
                                     try {
-                                        await adjustInvoice(invoiceId, { adjustmentType: type, description });
-                                        if (percent > 0) await applyPercentAdjustment(invoiceId, percent);
-                                        alert(`Adjustment applied to invoice #${invoiceId}`);
+                                        await adjustInvoice(invoiceId, { 
+                                            adjustmentType: type, 
+                                            discountPercent: percent > 0 ? percent : undefined,
+                                            description: description || undefined
+                                        });
+                                        alert(`Invoice adjusted successfully`);
+                                        await loadAll();
                                     } catch (err) {
                                         alert("Error: " + (err as Error).message);
                                     }
@@ -2886,6 +3061,164 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                 <button type="submit" className="btn-primary">Save</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Invoice Modal */}
+            {showEditLinesFor && (() => {
+                const invoice = invoices.find(inv => inv.id === showEditLinesFor);
+                if (!invoice || !invoice.lines.length) return null;
+                const firstLine = invoice.lines[0];
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+                        <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-lg">
+                            <h3 className="text-lg font-semibold mb-4">Edit Invoice #{invoice.id}</h3>
+                            <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                const form = e.target as typeof e.target & {
+                                    code: { value: string };
+                                    description: { value: string };
+                                    provider: { value: string };
+                                    dos: { value: string };
+                                    rate: { value: string };
+                                };
+                                try {
+                                    await updateInvoice(invoice.id, {
+                                        code: form.code.value,
+                                        description: form.description.value,
+                                        provider: form.provider.value,
+                                        dos: form.dos.value,
+                                        rate: Number(form.rate.value),
+                                    });
+                                    setShowEditLinesFor(null);
+                                } catch (error) {
+                                    console.error("Failed to update invoice:", error);
+                                    alert("Failed to update invoice. Please try again.");
+                                }
+                            }}>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Code</label>
+                                        <input
+                                            name="code"
+                                            type="text"
+                                            className="input w-full"
+                                            defaultValue={firstLine.code}
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                        <input
+                                            name="description"
+                                            type="text"
+                                            className="input w-full"
+                                            defaultValue={firstLine.treatment}
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
+                                        <input
+                                            name="provider"
+                                            type="text"
+                                            className="input w-full"
+                                            defaultValue={firstLine.provider}
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Date of Service</label>
+                                        <input
+                                            name="dos"
+                                            type="date"
+                                            className="input w-full"
+                                            defaultValue={firstLine.dos}
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Rate</label>
+                                        <input
+                                            name="rate"
+                                            type="number"
+                                            step="0.01"
+                                            className="input w-full"
+                                            defaultValue={firstLine.charge}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-2 mt-6">
+                                    <button type="button" className="btn-light" onClick={() => setShowEditLinesFor(null)}>Cancel</button>
+                                    <button type="submit" className="btn-primary">Update Invoice</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {/* Edit Courtesy Credit Modal */}
+            {editCourtesyModal && (
+                <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
+                    <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
+                        <div className="flex items-center justify-between border-b px-5 py-3 bg-amber-600 text-white rounded-t-2xl">
+                            <h4 className="text-base font-semibold">Edit Courtesy Credit #{editCourtesyModal.courtesy.id}</h4>
+                            <button onClick={() => setEditCourtesyModal(null)} className="rounded p-1 hover:bg-amber-700" aria-label="Close">✕</button>
+                        </div>
+                        <div className="p-5">
+                            <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                const form = e.currentTarget as HTMLFormElement;
+                                try {
+                                    await updateCourtesyCredit(editCourtesyModal.invoiceId, {
+                                        adjustmentType: (form.elements.namedItem('adjustmentType') as HTMLSelectElement).value,
+                                        amount: Number((form.elements.namedItem('amount') as HTMLInputElement).value),
+                                        description: (form.elements.namedItem('description') as HTMLInputElement).value,
+                                    });
+                                    setEditCourtesyModal(null);
+                                    alert("Courtesy credit updated successfully");
+                                } catch (error) {
+                                    console.error("Failed to update courtesy credit:", error);
+                                    alert("Failed to update courtesy credit. Please try again.");
+                                }
+                            }}>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="label">Adjustment Type</label>
+                                        <select name="adjustmentType" className="input w-full" defaultValue={editCourtesyModal.courtesy.adjustmentType}>
+                                            {courtesyTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="label">Amount</label>
+                                        <input
+                                            name="amount"
+                                            type="number"
+                                            step="0.01"
+                                            className="input w-full"
+                                            defaultValue={editCourtesyModal.courtesy.amount}
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="label">Description</label>
+                                        <input
+                                            name="description"
+                                            type="text"
+                                            className="input w-full"
+                                            defaultValue={editCourtesyModal.courtesy.description || ''}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-2 mt-6">
+                                    <button type="button" className="btn-light" onClick={() => setEditCourtesyModal(null)}>Cancel</button>
+                                    <button type="submit" className="btn-primary">Update</button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
             )}

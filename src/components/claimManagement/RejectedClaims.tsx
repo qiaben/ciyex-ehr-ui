@@ -1,8 +1,17 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from 'react';
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { Edit, Eye, Paperclip, EyeOff } from "lucide-react";
 
 const API_BASE = "/api/patient-billing";
+
+type ClaimLineDetail = {
+  lineid: number;
+  dos: number[];
+  code: string;
+  description: string;
+  provider: string;
+  totalSubmittedAmount: number;
+};
 
 const RejectedClaims: React.FC = () => {
   // selection
@@ -20,6 +29,11 @@ const RejectedClaims: React.FC = () => {
   const [narrativeText, setNarrativeText] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Line details modal
+  const [showLineDetailsModal, setShowLineDetailsModal] = useState(false);
+  const [lineDetails, setLineDetails] = useState<ClaimLineDetail[]>([]);
+  const [lineDetailsLoading, setLineDetailsLoading] = useState(false);
 
   const [statusToChange, setStatusToChange] = useState("");
   const [remittanceDate, setRemittanceDate] = useState("");
@@ -209,9 +223,10 @@ const RejectedClaims: React.FC = () => {
     });
   };
 
-  // ✅ filter
+  // ✅ filter - Only show claims with REJECTED status
   const filteredClaims = claims.filter((claim: any) => {
     return (
+      claim.status === "REJECTED" &&
       (!searchPatient || (claim.patientName && claim.patientName.toLowerCase().includes(searchPatient.toLowerCase()))) &&
       (!searchClaim || (claim.id && claim.id.toString().includes(searchClaim)) || claim.createdOn?.includes(searchClaim)) &&
       (!filters.type || claim.type === filters.type) &&
@@ -238,6 +253,26 @@ const RejectedClaims: React.FC = () => {
   // ✅ Print functionality
   const handlePrint = () => {
     window.print();
+  };
+
+  // ✅ Fetch claim line details
+  const fetchLineDetails = async (claimId: number) => {
+    setLineDetailsLoading(true);
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/all-claims/${claimId}/line-details`);
+      if (!res.ok) throw new Error("Failed to fetch line details");
+      
+      const response = await res.json();
+      setLineDetails(response.data || []);
+      setShowLineDetailsModal(true);
+    } catch (err: any) {
+      console.error("Error fetching line details:", err);
+      alert("Failed to load procedure details");
+    } finally {
+      setLineDetailsLoading(false);
+    }
   };
 
   return (
@@ -553,7 +588,13 @@ const RejectedClaims: React.FC = () => {
                 <td className="p-2">{formatDate(claim.createdOn)}</td>
                 <td className="p-2">{claim.provider}</td>
                 <td className="p-2">
-                  <button className="text-blue-500">Show</button>
+                  <button 
+                    className="text-blue-500 hover:text-blue-700 hover:underline"
+                    onClick={() => fetchLineDetails(claim.id)}
+                    disabled={lineDetailsLoading}
+                  >
+                    {lineDetailsLoading ? "Loading..." : "Show"}
+                  </button>
                 </td>
                 <td className="p-2">{claim.status}</td>
                 <td className="p-2">{claim.eraStatus || ""}</td>
@@ -868,6 +909,86 @@ const RejectedClaims: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Line Details Modal */}
+      {showLineDetailsModal && (
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Claim Line Details</h2>
+              <button
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+                onClick={() => {
+                  setShowLineDetailsModal(false);
+                  setLineDetails([]);
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {lineDetails.length === 0 ? (
+              <p className="text-center text-gray-500 py-4">No line details found</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border text-sm">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="p-3 text-left border">DOS</th>
+                      <th className="p-3 text-left border">Code</th>
+                      <th className="p-3 text-left border">Description</th>
+                      <th className="p-3 text-left border">Provider</th>
+                      <th className="p-3 text-right border">Total Submitted Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lineDetails.map((line) => (
+                      <tr key={line.lineid} className="hover:bg-gray-50">
+                        <td className="p-3 border">
+                          {line.dos && line.dos.length > 0 ? (
+                            <div>
+                              {line.dos.map((dateNum, idx) => {
+                                const year = Math.floor(dateNum / 10000);
+                                const month = Math.floor((dateNum % 10000) / 100);
+                                const day = dateNum % 100;
+                                return (
+                                  <div key={idx}>
+                                    {`${month}/${day}/${year}`}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td className="p-3 border">{line.code || "-"}</td>
+                        <td className="p-3 border">{line.description || "-"}</td>
+                        <td className="p-3 border">{line.provider || "-"}</td>
+                        <td className="p-3 border text-right">
+                          ${line.totalSubmittedAmount?.toFixed(2) || "0.00"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="flex justify-end mt-4">
+              <button
+                className="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400"
+                onClick={() => {
+                  setShowLineDetailsModal(false);
+                  setLineDetails([]);
+                }}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
