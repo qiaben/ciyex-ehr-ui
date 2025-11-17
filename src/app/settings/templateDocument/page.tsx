@@ -14,8 +14,6 @@ import { fetchWithAuth } from "@/utils/fetchWithAuth";
    ========================================================= */
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const API = `${API_BASE}/api/template-documents`;
-// Organization context – adjust sourcing as needed (e.g. from auth/user context)
-const ORG_ID: number = Number(process.env.NEXT_PUBLIC_ORG_ID) || 0;
 
 // map UI context <-> backend enum
 const toServerContext = (c: "encounter" | "portal") =>
@@ -24,7 +22,6 @@ const fromServerContext = (c: "ENCOUNTER" | "PORTAL") =>
   (c === "ENCOUNTER" ? "encounter" : "portal") as "encounter" | "portal";
 
 type UpsertBody = {
-  orgId: number;
   name: string;
   context: "ENCOUNTER" | "PORTAL";
   content: string; // full <!doctype html> doc
@@ -38,7 +35,6 @@ type UpsertBody = {
 
 type ServerTemplate = {
   id: number;
-  orgId: number;
   name: string;
   context: "ENCOUNTER" | "PORTAL";
   content: string;
@@ -1359,9 +1355,6 @@ export default function TemplateStudio() {
   // Create-or-update on server
   async function performSave(name: string) {
     const body: UpsertBody = {
-      // Use orgId from runtime auth context (localStorage) to ensure it matches X-Org-Id header.
-      // Fallback to env ORG_ID if not present. This prevents SecurityException on mismatch.
-      orgId: Number((typeof window !== "undefined" ? localStorage.getItem("orgId") : null) ?? ORG_ID),
       name: name || title || "Untitled Template",
       context: toServerContext(tplOptions.context),
       content: templateText,
@@ -1453,8 +1446,6 @@ export default function TemplateStudio() {
 
       const createOne = async (name: string, content: string) => {
         const body: UpsertBody = {
-          // Dynamically resolve orgId to align with X-Org-Id header set by fetchWithAuth
-          orgId: Number((typeof window !== "undefined" ? localStorage.getItem("orgId") : null) ?? ORG_ID),
           name,
           context: toServerContext(tplOptions.context),
           content,
