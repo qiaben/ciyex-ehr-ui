@@ -121,6 +121,87 @@ type PatientPayment = {
 
 type AccountCredit = { balance: number };
 
+type PatientDepositDto = {
+    id: number;
+    patientId: number;
+    amount: number;
+    paymentMethod: PaymentMethod | string;
+    depositDate: number[]; // [year, month, day]
+    description?: string | null;
+};
+
+type ServerProviderData = {
+    id: number;
+    identification?: {
+        firstName?: string;
+        lastName?: string;
+    };
+};
+
+type ServerPatientData = {
+    id: number;
+    firstName?: string;
+    lastName?: string;
+};
+
+type ServerInsuranceCompanyData = {
+    id: number;
+    name: string;
+};
+
+type ServerInvoiceLineData = {
+    id: number;
+    dos: string | number[];
+    code: string;
+    treatment: string;
+    provider: string;
+    charge: number;
+    allowed?: number;
+    insWriteOff?: number;
+    insPortion?: number;
+    patientPortion?: number;
+};
+
+type ServerInvoiceData = {
+    id: number;
+    patientId: number;
+    status: InvoiceStatus;
+    lines: ServerInvoiceLineData[];
+    insWO?: number;
+    ptBalance?: number;
+    insBalance?: number;
+    totalCharge?: number;
+    insPaid?: number;
+    ptPaid?: number;
+};
+
+type ServerClaimData = {
+    id: number;
+    invoiceId: number;
+    patientId: number;
+    payerName?: string | null;
+    treatingProviderId?: string | null;
+    provider?: string | null;
+    billingEntity?: string | null;
+    policyNumber?: string | null;
+    policynumber?: string | null;
+    type?: "Electronic" | "Paper" | null;
+    notes?: string | null;
+    status: ClaimStatus;
+    attachments?: number;
+    eobAttached?: boolean;
+    createdOn?: string | number[] | null;
+    locked?: boolean;
+};
+
+type PatientPaymentData = {
+    id: number;
+    amount: number;
+    payment?: number;
+    paid?: number;
+    paymentMethod?: PaymentMethod | string;
+};
+
 type CourtesyCredit = {
     id: number;
     invoiceId: number;
@@ -130,6 +211,7 @@ type CourtesyCredit = {
     description?: string;
     appliedDate?: string;
     createdAt?: string;
+    isActive?: boolean;
 };
 
 type Provider = {
@@ -422,6 +504,66 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     
 
     
+    // =====================
+    // Patient Deposit Actions
+    // =====================
+    async function fetchPatientDeposits() {
+        try {
+            const res = await fetchWithAuth(`${API}/deposit`);
+            const body = await res.json();
+            if (body?.success && Array.isArray(body.data)) {
+                setPatientDeposits(body.data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch deposits:", error);
+        }
+    }
+
+    async function updatePatientDeposit(depositId: number, request: { amount: number; paymentMethod: string; notes?: string }) {
+        try {
+            const res = await fetchWithAuth(`${API}/deposit/${depositId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(request),
+            });
+            const body = await res.json();
+            if (body?.success) {
+                alert(body?.message || "Deposit updated successfully");
+                await fetchPatientDeposits();
+                setEditDepositModal(null);
+            } else {
+                alert(body?.message || "Failed to update deposit");
+            }
+        } catch (error) {
+            console.error("Failed to update deposit:", error);
+            alert("Failed to update deposit. Please try again.");
+        }
+    }
+
+    async function deletePatientDeposit(depositId: number) {
+        if (!confirm("Are you sure you want to delete this deposit?")) return;
+        try {
+            const res = await fetchWithAuth(`${API}/deposit/${depositId}`, {
+                method: "DELETE",
+            });
+            const body = await res.json();
+            if (body?.success) {
+                alert(body?.message || "Deposit deleted successfully");
+                await fetchPatientDeposits();
+            } else {
+                alert(body?.message || "Failed to delete deposit");
+            }
+        } catch (error) {
+            console.error("Failed to delete deposit:", error);
+            alert("Failed to delete deposit. Please try again.");
+        }
+    }
+
+    async function printPatientDeposit(depositId: number) {
+        alert(`Print functionality for deposit #${depositId} - To be implemented`);
+        // TODO: Implement print functionality
+    }
+
     // Patient Deposit logic
     async function addPatientDeposit() {
         if (!depositAmount || !depositMethod || !depositFromPatientId) return;
@@ -538,6 +680,9 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     const [editInsuranceModal, setEditInsuranceModal] = useState<{invoiceId: number, remit: InsuranceRemitLine} | null>(null);
     const [editPatientModal, setEditPatientModal] = useState<{invoiceId: number, payment: PatientPayment} | null>(null);
     const [editCourtesyModal, setEditCourtesyModal] = useState<{invoiceId: number, courtesy: CourtesyCredit} | null>(null);
+    // Patient deposits state
+    const [patientDeposits, setPatientDeposits] = useState<PatientDepositDto[]>([]);
+    const [editDepositModal, setEditDepositModal] = useState<PatientDepositDto | null>(null);
     // Notes state
     const [currentNotes, setCurrentNotes] = useState<Note[]>([]);
     const [editingNote, setEditingNote] = useState<Note | null>(null);
@@ -559,14 +704,14 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             .then((res) => res.json())
             .then((data) => {
                 if (data && data.success && Array.isArray(data.data)) {
-                    setProviders(data.data.map((p: any) => ({ id: p.id, name: (p.identification?.firstName || '') + ' ' + (p.identification?.lastName || '') })));
+                    setProviders(data.data.map((p: ServerProviderData) => ({ id: p.id, name: (p.identification?.firstName || '') + ' ' + (p.identification?.lastName || '') })));
                 }
             });
         fetchWithAuth("/api/patients")
             .then((res) => res.json())
             .then((data) => {
                 if (data && data.success && Array.isArray(data.data)) {
-                    setPatients(data.data.map((p: any) => ({ id: p.id, name: (p.firstName || '') + ' ' + (p.lastName || '') })));
+                    setPatients(data.data.map((p: ServerPatientData) => ({ id: p.id, name: (p.firstName || '') + ' ' + (p.lastName || '') })));
                 }
             });
     }, []);
@@ -681,8 +826,6 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     async function removeCourtesyCredit(invoiceId: number, reason?: string) {
         const res = await fetchWithAuth(`${API}/invoices/${invoiceId}/courtesy-credit`, {
             method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reason: reason || "Courtesy credit removed" }),
         });
         const resBody = await res.json();
         if (!resBody?.success) throw new Error(resBody?.message || "Failed to remove courtesy credit");
@@ -880,7 +1023,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
 
     // Pre-fetched payment summaries per invoice
     const [insPayMap, setInsPayMap] = useState<Record<number, InsuranceRemitLine[]>>({});
-    const [ptPayMap, setPtPayMap] = useState<Record<number, any[]>>({});
+    const [ptPayMap, setPtPayMap] = useState<Record<number, PatientPaymentData[]>>({});
     const [courtesyCreditsMap, setCourtesyCreditsMap] = useState<Record<number, CourtesyCredit[]>>({});
 
     // Patient payment allocations
@@ -902,14 +1045,14 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         if (!selectedInvoice) return 0;
         if (Number(selectedInvoice.ptPaid) > 0) return Number(selectedInvoice.ptPaid);
         const pp = ptPayMap[selectedInvoice.id] ?? [];
-        return sum(pp.map((p: any) => Number(p.amount ?? p.payment ?? p.paid ?? 0)));
+        return sum(pp.map((p: PatientPaymentData) => Number(p.amount ?? p.payment ?? p.paid ?? 0)));
     }, [selectedInvoice, ptPayMap]);
 
     const invoiceInsPaid = useMemo(() => {
         if (!selectedInvoice) return 0;
         if (Number(selectedInvoice.insPaid) > 0) return Number(selectedInvoice.insPaid);
         const ip = insPayMap[selectedInvoice.id] ?? [];
-        return sum(ip.map((r: any) => Number(r.insPay ?? 0)));
+        return sum(ip.map((r: InsuranceRemitLine) => Number(r.insPay ?? 0)));
     }, [selectedInvoice, insPayMap]);
 
     const [accountCredit, setAccountCredit] = useState<AccountCredit>({ balance: 0 });
@@ -989,7 +1132,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     /* =========================================================
        Load data (invoices, credit + payment GETs)
     ========================================================== */
-    const mapServerInvoice = (raw: any): Invoice => ({
+    const mapServerInvoice = (raw: ServerInvoiceData): Invoice => ({
         id: raw.id,
         patientId: raw.patientId,
         status: raw.status,
@@ -999,7 +1142,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         totalCharge: raw.totalCharge,
         insPaid: raw.insPaid ?? 0,
         ptPaid: raw.ptPaid ?? 0,
-        lines: (raw.lines || []).map((l: any) => ({
+        lines: (raw.lines || []).map((l: ServerInvoiceLineData) => ({
             id: l.id,
             dos: Array.isArray(l.dos)
                 ? `${l.dos[0]}-${String(l.dos[1]).padStart(2, "0")}-${String(l.dos[2]).padStart(2, "0")}`
@@ -1015,7 +1158,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         })),
     });
 
-    const mapServerClaim = (raw: any): Claim => ({
+    const mapServerClaim = (raw: ServerClaimData): Claim => ({
         id: raw.id,
         invoiceId: raw.invoiceId,
         patientId: raw.patientId,
@@ -1050,7 +1193,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             const clRes = await fetchWithAuth(`${API}/claims`);
             const clBody = await clRes.json();
             if (clBody?.success && Array.isArray(clBody.data)) {
-                const claimMap = (clBody.data as any[]).reduce((acc, raw) => {
+                const claimMap = (clBody.data as ServerClaimData[]).reduce((acc, raw) => {
                     const c = mapServerClaim(raw);
                     if (!acc[c.invoiceId]) acc[c.invoiceId] = c;
                     return acc;
@@ -1072,13 +1215,13 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                     return {
                         id: inv.id,
                         ins: Array.isArray(insJ?.data) ? (insJ.data as InsuranceRemitLine[]) : [],
-                        pt: Array.isArray(ptJ?.data) ? (ptJ.data as any[]) : [],
-                        cc: ccJ?.success && ccJ?.data ? [ccJ.data as CourtesyCredit] : [],
+                        pt: Array.isArray(ptJ?.data) ? (ptJ.data as PatientPaymentData[]) : [],
+                        cc: ccJ?.success && Array.isArray(ccJ?.data) ? (ccJ.data as CourtesyCredit[]) : [],
                     };
                 })
             );
             const nextIns: Record<number, InsuranceRemitLine[]> = {};
-            const nextPt: Record<number, any[]> = {};
+            const nextPt: Record<number, PatientPaymentData[]> = {};
             const nextCc: Record<number, CourtesyCredit[]> = {};
             all.forEach(({ id, ins, pt, cc }) => {
                 nextIns[id] = ins;
@@ -1113,7 +1256,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             // Providers: expect data.data to be an array
             setProviders(
                 provData.success && Array.isArray(provData.data)
-                    ? provData.data.map((p: any) => ({
+                    ? provData.data.map((p: ServerProviderData) => ({
                         id: p.id,
                         name: `${p.identification?.firstName ?? ""} ${p.identification?.lastName ?? ""}`.trim()
                     }))
@@ -1122,7 +1265,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             // Patients: expect data.data.content to be an array (paginated)
             setPatients(
                 patData.success && patData.data && Array.isArray(patData.data.content)
-                    ? patData.data.content.map((p: any) => ({
+                    ? patData.data.content.map((p: ServerPatientData) => ({
                         id: p.id,
                         name: `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim()
                     }))
@@ -1130,7 +1273,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             );
             setInsuranceCompanies(
                 insData.success && Array.isArray(insData.data)
-                    ? insData.data.map((i: any) => ({
+                    ? insData.data.map((i: ServerInsuranceCompanyData) => ({
                         id: i.id,
                         name: i.name
                     }))
@@ -1144,6 +1287,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     useEffect(() => {
         void loadAll();
         void loadDropdowns();
+        void fetchPatientDeposits();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [patientId]);
 
@@ -1268,7 +1412,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         setShowVoidFor(null);
     }
 
-    async function updateClaim(invoiceId: number, payload: Partial<Claim> & Record<string, any>) {
+    async function updateClaim(invoiceId: number, payload: Partial<Claim> & Record<string, string | number | boolean | null | undefined>) {
         const res = await fetchWithAuth(`${API}/invoices/${invoiceId}/claim`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -1362,6 +1506,27 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         setAccountCredit({ balance: body.data?.balance ?? 0 });
     }
 
+    async function deleteInvoice(invoiceId: number) {
+        if (!confirm("Are you sure you want to delete this invoice? This action cannot be undone.")) return;
+        try {
+            const res = await fetchWithAuth(`${API}/invoices/${invoiceId}`, {
+                method: "DELETE",
+            });
+            const body = await res.json();
+            if (!body?.success) throw new Error(body?.message || "Failed to delete invoice");
+            // Remove invoice from state
+            setInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId));
+            // Clear selection if deleted invoice was selected
+            if (selectedInvoiceId === invoiceId) {
+                const remaining = invoices.filter((inv) => inv.id !== invoiceId);
+                setSelectedInvoiceId(remaining.length > 0 ? remaining[0].id : null);
+            }
+            alert("Invoice deleted successfully");
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Failed to delete invoice");
+        }
+    }
+
     // Payment methods for deposit modals
     const paymentMethods = [
         { value: "CREDIT_CARD", label: "Credit Card" },
@@ -1446,7 +1611,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                     { id: "DEPOSIT", label: "Deposit" },
                 ]}
                 value={tab}
-                onChange={(id) => { setTab(id as any); setShowDepositType(null); }}
+                onChange={(id) => { setTab(id as typeof tab); setShowDepositType(null); }}
             />
             {/* Deposit Tab Implementation */}
             {tab === "DEPOSIT" && (
@@ -1456,6 +1621,61 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                         <button className="btn-light" onClick={() => { setShowDepositType("INSURANCE"); }}>Add Insurance Deposit</button>
                         <button className="btn-light" onClick={() => { setShowDepositType("COURTESY"); }}>Add Courtesy Credit</button>
                     </div>
+
+                    {/* Patient Deposits List */}
+                    {patientDeposits.length > 0 && (
+                        <SectionCard title="Patient Deposits" actions={null}>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="border-b bg-gray-50">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left font-medium">Deposit ID</th>
+                                            <th className="px-3 py-2 text-left font-medium">Date</th>
+                                            <th className="px-3 py-2 text-left font-medium">Amount</th>
+                                            <th className="px-3 py-2 text-left font-medium">Payment Method</th>
+                                            <th className="px-3 py-2 text-left font-medium">Description</th>
+                                            <th className="px-3 py-2 text-center font-medium">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {patientDeposits.map((deposit) => {
+                                            const depositDateStr = Array.isArray(deposit.depositDate)
+                                                ? `${deposit.depositDate[0]}-${String(deposit.depositDate[1]).padStart(2, "0")}-${String(deposit.depositDate[2]).padStart(2, "0")}`
+                                                : deposit.depositDate || "—";
+                                            return (
+                                                <tr key={deposit.id} className="border-b hover:bg-gray-50">
+                                                    <td className="px-3 py-2">#{deposit.id}</td>
+                                                    <td className="px-3 py-2">{depositDateStr}</td>
+                                                    <td className="px-3 py-2 font-medium">{currency(deposit.amount)}</td>
+                                                    <td className="px-3 py-2">{deposit.paymentMethod}</td>
+                                                    <td className="px-3 py-2">{deposit.description || "—"}</td>
+                                                    <td className="px-3 py-2">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <IconBtn title="Edit Deposit" onClick={() => setEditDepositModal(deposit)}>
+                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                                                                </svg>
+                                                            </IconBtn>
+                                                            <IconBtn title="Void Deposit" onClick={() => deletePatientDeposit(deposit.id)}>
+                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-red-600">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                                                </svg>
+                                                            </IconBtn>
+                                                            <IconBtn title="Print Deposit" onClick={() => printPatientDeposit(deposit.id)}>
+                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
+                                                                </svg>
+                                                            </IconBtn>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </SectionCard>
+                    )}
 
                     {/* Patient Deposit Modal */}
                     {showDepositType === "PATIENT" && (
@@ -1593,58 +1813,107 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             {tab === "INVOICE" && (
                 <div className="space-y-4">
                     {selectedInvoiceId === null ? (
-                        invoices.map((inv) => {
-                            const first = inv.lines[0];
-                            const claim = claims[inv.id];
-                            const effectiveStatus: InvoiceStatus =
-                                (inv.status === "PAID" && Number(inv.ptBalance ?? 0) === 0 && Number(inv.insBalance ?? 0) === 0 ? "PAID" : inv.status);
-                            const rowTone =
-                                effectiveStatus === "OPEN"
-                                    ? "bg-red-50"
-                                    : effectiveStatus === "PARTIALLY_PAID"
-                                        ? "bg-amber-50"
-                                        : (effectiveStatus === "PAID" ? "bg-green-50" : "bg-gray-50");
-                            const ip = insPayMap[inv.id] ?? [];
-                            const pp = ptPayMap[inv.id] ?? [];
-                            const ptPaid = Number(inv.ptPaid) > 0 ? Number(inv.ptPaid) : sum(pp.map((p: any) => Number(p.amount ?? p.payment ?? p.paid ?? 0)));
-                            const insPaid = Number(inv.insPaid) > 0 ? Number(inv.insPaid) : sum(ip.map((r: any) => Number(r.insPay ?? 0)));
-                            const showInsuranceSummary = ip.length > 0;
-                            const showPatientSummary = pp.length > 0;
-                            return (
-                                <div key={inv.id} className="rounded-2xl border border-gray-200 bg-white shadow-sm cursor-pointer" onClick={() => setSelectedInvoiceId(inv.id)}>
-                                    <div className={`flex items-center gap-4 border-b px-3 py-2 text-sm ${rowTone}`}>
-                                        <Badge
-                                            tone={effectiveStatus === "OPEN" ? "red" : effectiveStatus === "PARTIALLY_PAID" ? "amber" : "green"}
-                                        >
-                                            INVOICE #{inv.id} ({first?.dos ?? "—"})
-                                        </Badge>
-                                        <div className="ml-2 grid flex-1 grid-cols-4 gap-3 md:grid-cols-6">
-                                            <RowStat label="Pt Balance" value={currency(Number(inv.ptBalance ?? 0))} tone="red" />
-                                            <RowStat label="Ins Balance" value={currency(Number(inv.insBalance ?? 0))} />
-                                            <RowStat label="Invoice Balance" value={currency(Number(inv.ptBalance ?? 0) + Number(inv.insBalance ?? 0))} bold />
-                                            <RowStat label="Ins WO" value={currency(Number(inv.insWO ?? inv.lines.reduce((a, l) => a + Math.max(0, Number(l.charge || 0) - Number(l.allowed || 0)), 0)))} />
-                                            <RowStat label="Pt Paid" value={currency(ptPaid)} />
-                                            <RowStat label="Ins Paid" value={currency(insPaid)} />
-                                        </div>
-                                        {/* Four action icons: Backdate, Account Adjustment, Adjustment Invoice, Statement */}
-                                        <div className="ml-auto flex items-center gap-2">
-                                            <IconBtn title="Backdate Invoice" onClick={() => setShowBackdateFor(inv.id)}>
-                                                <span role="img" aria-label="backdate">📅</span>
-                                            </IconBtn>
-                                            <IconBtn title="Account Adjustment" onClick={() => setShowAccountAdjustmentFor(inv.id)}>
-                                                <span role="img" aria-label="account-adjustment">💲</span>
-                                            </IconBtn>
-                                            <IconBtn title="Adjustment Invoice" onClick={() => setShowAdjustmentInvoiceFor(inv.id)}>
-                                                <span role="img" aria-label="adjustment-invoice">📝</span>
-                                            </IconBtn>
-                                            <IconBtn title="Statement" onClick={() => alert(`Statement for Invoice #${inv.id}`)}>
-                                                <span role="img" aria-label="statement">📄</span>
-                                            </IconBtn>
+                        <>
+                            {/* Patient Deposits displayed as top-level items */}
+                            {patientDeposits.map((deposit) => {
+                                const depositDateStr = Array.isArray(deposit.depositDate) 
+                                    ? `${deposit.depositDate[1].toString().padStart(2, '0')}/${deposit.depositDate[2].toString().padStart(2, '0')}/${deposit.depositDate[0]}`
+                                    : new Date().toLocaleDateString();
+                                
+                                return (
+                                    <div key={`deposit-${deposit.id}`} className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+                                        <div className="flex items-center gap-4 px-3 py-2 text-sm bg-blue-50">
+                                            <Badge tone="blue">
+                                                Patient Deposit#{deposit.id} ({depositDateStr})
+                                            </Badge>
+                                            <div className="flex-1 flex items-center gap-4">
+                                                <span className="text-gray-700">with Cash:</span>
+                                                <span className="font-bold text-green-600">{currency(deposit.amount)}/{currency(deposit.amount)}</span>
+                                            </div>
+                                            {/* Action icons: Edit, Void, Print */}
+                                            <div className="ml-auto flex items-center gap-2">
+                                                <IconBtn 
+                                                    title="Print Deposit" 
+                                                    onClick={() => printPatientDeposit(deposit.id)}
+                                                >
+                                                    🖨️
+                                                </IconBtn>
+                                                <IconBtn 
+                                                    title="Edit Deposit" 
+                                                    onClick={() => setEditDepositModal(deposit)}
+                                                >
+                                                    ✏️
+                                                </IconBtn>
+                                                <IconBtn 
+                                                    title="Void Deposit" 
+                                                    onClick={() => {
+                                                        if (confirm(`Are you sure you want to void deposit #${deposit.id}?`)) {
+                                                            void deletePatientDeposit(deposit.id);
+                                                        }
+                                                    }}
+                                                >
+                                                    🗑️
+                                                </IconBtn>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            );
-                        })
+                                );
+                            })}
+                            
+                            {/* Invoices */}
+                            {invoices.map((inv) => {
+                                const first = inv.lines[0];
+                                const claim = claims[inv.id];
+                                const effectiveStatus: InvoiceStatus =
+                                    (inv.status === "PAID" && Number(inv.ptBalance ?? 0) === 0 && Number(inv.insBalance ?? 0) === 0 ? "PAID" : inv.status);
+                                const rowTone =
+                                    effectiveStatus === "OPEN"
+                                        ? "bg-red-50"
+                                        : effectiveStatus === "PARTIALLY_PAID"
+                                            ? "bg-amber-50"
+                                            : (effectiveStatus === "PAID" ? "bg-green-50" : "bg-gray-50");
+                                const ip = insPayMap[inv.id] ?? [];
+                                const pp = ptPayMap[inv.id] ?? [];
+                                const ptPaid = Number(inv.ptPaid) > 0 ? Number(inv.ptPaid) : sum(pp.map((p: PatientPaymentData) => Number(p.amount ?? p.payment ?? p.paid ?? 0)));
+                                const insPaid = Number(inv.insPaid) > 0 ? Number(inv.insPaid) : sum(ip.map((r: InsuranceRemitLine) => Number(r.insPay ?? 0)));
+                                const showInsuranceSummary = ip.length > 0;
+                                const showPatientSummary = pp.length > 0;
+                                return (
+                                    <div key={inv.id} className="rounded-2xl border border-gray-200 bg-white shadow-sm cursor-pointer" onClick={() => setSelectedInvoiceId(inv.id)}>
+                                        <div className={`flex items-center gap-4 border-b px-3 py-2 text-sm ${rowTone}`}>
+                                            <Badge
+                                                tone={effectiveStatus === "OPEN" ? "red" : effectiveStatus === "PARTIALLY_PAID" ? "amber" : "green"}
+                                            >
+                                                INVOICE #{inv.id} ({first?.dos ?? "—"})
+                                            </Badge>
+                                            <div className="ml-2 grid flex-1 grid-cols-4 gap-3 md:grid-cols-6">
+                                                <RowStat label="Pt Balance" value={currency(Number(inv.ptBalance ?? 0))} tone="red" />
+                                                <RowStat label="Ins Balance" value={currency(Number(inv.insBalance ?? 0))} />
+                                                <RowStat label="Invoice Balance" value={currency(Number(inv.ptBalance ?? 0) + Number(inv.insBalance ?? 0))} bold />
+                                                <RowStat label="Ins WO" value={currency(Number(inv.insWO ?? inv.lines.reduce((a, l) => a + Math.max(0, Number(l.charge || 0) - Number(l.allowed || 0)), 0)))} />
+                                                <RowStat label="Pt Paid" value={currency(ptPaid)} />
+                                                <RowStat label="Ins Paid" value={currency(insPaid)} />
+                                            </div>
+                                            {/* Four action icons: Backdate, Account Adjustment, Adjustment Invoice, Statement */}
+                                            <div className="ml-auto flex items-center gap-2">
+                                                <IconBtn title="Backdate Invoice" onClick={() => setShowBackdateFor(inv.id)}>
+                                                    <span role="img" aria-label="backdate">📅</span>
+                                                </IconBtn>
+                                                <IconBtn title="Account Adjustment" onClick={() => setShowAccountAdjustmentFor(inv.id)}>
+                                                    <span role="img" aria-label="account-adjustment">💲</span>
+                                                </IconBtn>
+                                                <IconBtn title="Adjustment Invoice" onClick={() => setShowAdjustmentInvoiceFor(inv.id)}>
+                                                    <span role="img" aria-label="adjustment-invoice">📝</span>
+                                                </IconBtn>
+                                                <IconBtn title="Statement" onClick={() => alert(`Statement for Invoice #${inv.id}`)}>
+                                                    <span role="img" aria-label="statement">📄</span>
+                                                </IconBtn>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </>
                     ) : (
                         (() => {
                             const inv = invoices.find(i => i.id === selectedInvoiceId);
@@ -1661,8 +1930,8 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                         : (effectiveStatus === "PAID" ? "bg-green-50" : "bg-gray-50");
                             const ip = insPayMap[inv.id] ?? [];
                             const pp = ptPayMap[inv.id] ?? [];
-                            const ptPaid = Number(inv.ptPaid) > 0 ? Number(inv.ptPaid) : sum(pp.map((p: any) => Number(p.amount ?? p.payment ?? p.paid ?? 0)));
-                            const insPaid = Number(inv.insPaid) > 0 ? Number(inv.insPaid) : sum(ip.map((r: any) => Number(r.insPay ?? 0)));
+                            const ptPaid = Number(inv.ptPaid) > 0 ? Number(inv.ptPaid) : sum(pp.map((p: PatientPaymentData) => Number(p.amount ?? p.payment ?? p.paid ?? 0)));
+                            const insPaid = Number(inv.insPaid) > 0 ? Number(inv.insPaid) : sum(ip.map((r: InsuranceRemitLine) => Number(r.insPay ?? 0)));
                             const showInsuranceSummary = ip.length > 0;
                             const showPatientSummary = pp.length > 0;
                             return (
@@ -1820,7 +2089,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                             <div className="min-w-[100px] text-gray-500">Patient</div>
                                             <div className="flex-1">
                                                 <div className="flex flex-wrap items-center gap-2">
-                                                    <Badge tone="green">Payments {currency(sum(pp.map((p: any) => Number(p.amount ?? p.payment ?? p.paid ?? 0))) )}</Badge>
+                                                    <Badge tone="green">Payments {currency(sum(pp.map((p: PatientPaymentData) => Number(p.amount ?? p.payment ?? p.paid ?? 0))) )}</Badge>
                                                     <Badge tone="gray">{pp.length} entr{pp.length === 1 ? "y" : "ies"}</Badge>
                                                 </div>
                                             </div>
@@ -1833,7 +2102,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                 </IconBtn>
                                                 <IconBtn title="Edit Patient Payment" onClick={() => {
                                                     const pay = pp[0];
-                                                    if (pay) setEditPatientModal({ invoiceId: inv.id, payment: pay });
+                                                    if (pay) setEditPatientModal({ invoiceId: inv.id, payment: { id: pay.id, amount: Number(pay.amount ?? pay.payment ?? pay.paid ?? 0), paymentMethod: pay.paymentMethod } });
                                                 }}>
                                                     <span role="img" aria-label="edit">✏️</span>
                                                 </IconBtn>
@@ -1851,14 +2120,12 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                             </div>
                                         </div>
                                     )}
-                                    {/* Courtesy credit summary (inline, only shown when manually added from Deposit tab) */}
+                                    {/* Courtesy credit summary (inline, shown for each courtesy credit applied) */}
                                     {(() => {
                                         const cc = courtesyCreditsMap[inv.id] ?? [];
-                                        const showCourtesyCredit = cc.length > 0;
-                                        if (!showCourtesyCredit) return null;
-                                        const courtesy = cc[0];
-                                        return (
-                                            <div className="flex items-start gap-3 border-b px-3 py-2 text-sm bg-amber-50/40">
+                                        if (cc.length === 0) return null;
+                                        return cc.map((courtesy) => (
+                                            <div key={courtesy.id} className="flex items-start gap-3 border-b px-3 py-2 text-sm bg-amber-50/40">
                                                 <button
                                                     className="mr-2 p-1 rounded-full hover:bg-amber-100"
                                                     title="View/Add Notes"
@@ -1869,39 +2136,39 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6" />
                                                     </svg>
                                                 </button>
-                                                <div className="min-w-[100px] text-gray-500">{courtesy.appliedDate || new Date().toLocaleDateString()}</div>
+                                                <div className="min-w-[100px] text-gray-500">
+                                                    {courtesy.createdAt ? new Date(courtesy.createdAt).toLocaleDateString() : new Date().toLocaleDateString()}
+                                                </div>
                                                 <div className="flex-1">
                                                     <div className="flex flex-wrap items-center gap-2">
                                                         <span className="text-gray-700">
                                                             <b>Courtesy Credit Adjustment #{courtesy.id}:</b> {courtesy.adjustmentType}
                                                         </span>
-                                                        <Badge tone="amber">Applied {currency(Number(courtesy.amount))}</Badge>
+                                                        <Badge tone="amber">{currency(Number(courtesy.amount))}</Badge>
                                                         {courtesy.description && <Badge tone="gray">{courtesy.description}</Badge>}
+                                                        {!courtesy.isActive && <Badge tone="red">Voided</Badge>}
                                                     </div>
                                                 </div>
                                                 <div className="ml-auto flex items-center gap-2">
-                                                    <IconBtn title="Edit Courtesy Credit" onClick={() => {
-                                                        setEditCourtesyModal({ invoiceId: inv.id, courtesy });
-                                                    }}>
-                                                        <span role="img" aria-label="edit">✏️</span>
-                                                    </IconBtn>
-                                                    <IconBtn title="Void Courtesy Credit" onClick={() => {
-                                                        if (confirm('Are you sure you want to void this courtesy credit?')) {
-                                                            void removeCourtesyCredit(inv.id, "Voided by user");
-                                                        }
-                                                    }}>
-                                                        <span role="img" aria-label="void">🚫</span>
-                                                    </IconBtn>
-                                                    <IconBtn title="Undo Courtesy Credit" onClick={() => {
-                                                        if (confirm('Are you sure you want to undo this courtesy credit?')) {
-                                                            void removeCourtesyCredit(inv.id, "Undone by user");
-                                                        }
-                                                    }}>
-                                                        <span role="img" aria-label="undo">↩️</span>
-                                                    </IconBtn>
+                                                    {courtesy.isActive !== false && (
+                                                        <>
+                                                            <IconBtn title="Edit Courtesy Credit" onClick={() => {
+                                                                setEditCourtesyModal({ invoiceId: inv.id, courtesy });
+                                                            }}>
+                                                                <span role="img" aria-label="edit">✏️</span>
+                                                            </IconBtn>
+                                                            <IconBtn title="Void Courtesy Credit" onClick={() => {
+                                                                if (confirm('Are you sure you want to void this courtesy credit? This will remove it from the invoice.')) {
+                                                                    void removeCourtesyCredit(inv.id, "Voided by user");
+                                                                }
+                                                            }}>
+                                                                <span role="img" aria-label="void">🚫</span>
+                                                            </IconBtn>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </div>
-                                        );
+                                        ));
                                     })()}
                                     {/* Mini invoice line row */}
                                     {first && (
@@ -1927,16 +2194,21 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                 <IconBtn title="Edit" onClick={() => setShowEditLinesFor(inv.id)}>✏️</IconBtn>
                                                 <IconBtn title="Transfer Outstanding" onClick={() => setTransferOpenFor(inv.id)}>🔁</IconBtn>
                                                 <IconBtn title="Adjustment" onClick={() => setShowAdjustmentInvoiceFor(inv.id)}>➖</IconBtn>
+                                                <IconBtn title="Delete Invoice" onClick={() => deleteInvoice(inv.id)}>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-red-600">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                                    </svg>
+                                                </IconBtn>
                                             </div>
                                         </div>
                                     )}
                                     {transferOpenFor === inv.id && (
                                         <div className="relative">
                                             <div className="absolute z-10 ml-3 mt-2 w-64 rounded-md border bg-white p-1 shadow">
-                                                <button className="w-full rounded px-3 py-2 text-left hover:bg-gray-50" onClick={() => { transferOutstandingToPatient(inv.id, Number(inv.ptBalance ?? 0)); setTransferOpenFor(null); }}>
+                                                <button className="w-full rounded px-3 py-2 text-left hover:bg-gray-50" onClick={() => { transferOutstandingToPatient(inv.id, Number(inv.insBalance ?? 0)); setTransferOpenFor(null); }}>
                                                     Transfer Outstanding To Patient
                                                 </button>
-                                                <button className="w-full rounded px-3 py-2 text-left hover:bg-gray-50" onClick={() => { transferOutstandingToInsurance(inv.id, Number(inv.insBalance ?? 0)); setTransferOpenFor(null); }}>
+                                                <button className="w-full rounded px-3 py-2 text-left hover:bg-gray-50" onClick={() => { transferOutstandingToInsurance(inv.id, Number(inv.ptBalance ?? 0)); setTransferOpenFor(null); }}>
                                                     Transfer Outstanding To Insurance
                                                 </button>
                                             </div>
@@ -3159,6 +3431,126 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                     </div>
                 );
             })()}
+
+            {/* Edit Patient Deposit Modal */}
+            {editDepositModal && (
+                <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
+                    <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
+                        <div className="flex items-center justify-between border-b px-5 py-3 bg-blue-600 text-white rounded-t-2xl">
+                            <h4 className="text-base font-semibold">Edit Patient Deposit #{editDepositModal.id}</h4>
+                            <button onClick={() => setEditDepositModal(null)} className="rounded p-1 hover:bg-blue-700" aria-label="Close">✕</button>
+                        </div>
+                        <div className="p-5">
+                            <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                const form = e.currentTarget as HTMLFormElement;
+                                try {
+                                    await updatePatientDeposit(editDepositModal.id, {
+                                        amount: Number((form.elements.namedItem('amount') as HTMLInputElement).value),
+                                        paymentMethod: (form.elements.namedItem('paymentMethod') as HTMLSelectElement).value,
+                                        notes: (form.elements.namedItem('notes') as HTMLInputElement).value,
+                                    });
+                                } catch (error) {
+                                    console.error("Failed to update deposit:", error);
+                                }
+                            }}>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="label">Amount</label>
+                                        <input
+                                            name="amount"
+                                            type="number"
+                                            step="0.01"
+                                            className="input w-full"
+                                            defaultValue={editDepositModal.amount}
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="label">Payment Method</label>
+                                        <select name="paymentMethod" className="input w-full" defaultValue={editDepositModal.paymentMethod}>
+                                            {paymentMethods.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="label">Notes</label>
+                                        <input
+                                            name="notes"
+                                            type="text"
+                                            className="input w-full"
+                                            defaultValue={editDepositModal.description || ''}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-2 mt-6">
+                                    <button type="button" className="btn-light" onClick={() => setEditDepositModal(null)}>Cancel</button>
+                                    <button type="submit" className="btn-primary">Update</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Patient Deposit Modal */}
+            {editDepositModal && (
+                <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
+                    <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
+                        <div className="flex items-center justify-between border-b px-5 py-3 bg-blue-600 text-white rounded-t-2xl">
+                            <h4 className="text-base font-semibold">Edit Patient Deposit #{editDepositModal.id}</h4>
+                            <button onClick={() => setEditDepositModal(null)} className="rounded p-1 hover:bg-blue-700" aria-label="Close">✕</button>
+                        </div>
+                        <div className="p-5">
+                            <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                const form = e.currentTarget as HTMLFormElement;
+                                try {
+                                    await updatePatientDeposit(editDepositModal.id, {
+                                        amount: Number((form.elements.namedItem('amount') as HTMLInputElement).value),
+                                        paymentMethod: (form.elements.namedItem('paymentMethod') as HTMLSelectElement).value,
+                                        notes: (form.elements.namedItem('notes') as HTMLInputElement).value,
+                                    });
+                                } catch (error) {
+                                    console.error("Failed to update deposit:", error);
+                                }
+                            }}>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="label">Amount</label>
+                                        <input
+                                            name="amount"
+                                            type="number"
+                                            step="0.01"
+                                            className="input w-full"
+                                            defaultValue={editDepositModal.amount}
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="label">Payment Method</label>
+                                        <select name="paymentMethod" className="input w-full" defaultValue={editDepositModal.paymentMethod}>
+                                            {paymentMethods.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="label">Notes</label>
+                                        <input
+                                            name="notes"
+                                            type="text"
+                                            className="input w-full"
+                                            defaultValue={editDepositModal.description || ''}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-2 mt-6">
+                                    <button type="button" className="btn-light" onClick={() => setEditDepositModal(null)}>Cancel</button>
+                                    <button type="submit" className="btn-primary">Update</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Edit Courtesy Credit Modal */}
             {editCourtesyModal && (
