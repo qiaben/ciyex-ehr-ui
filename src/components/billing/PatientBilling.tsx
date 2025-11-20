@@ -229,6 +229,188 @@ type InsuranceCompany = {
     name: string;
 };
 
+type InvoiceLineDetail = {
+    id: number;
+    dos: number[];
+    code: string;
+    treatment: string;
+    provider: string;
+    charge: number;
+    allowed?: number;
+    insWriteOff?: number;
+    insPortion?: number;
+    patientPortion?: number;
+};
+
+type ClaimLineDetail = {
+    lineId: number;
+    dos: number[];
+    code: string;
+    description: string;
+    provider: string;
+    totalSubmittedAmount: number;
+};
+
+type InsurancePaymentDetail = {
+    remitId: number;
+    invoiceId: number;
+    invoiceNumber: string;
+    paymentDate: number[];
+    chequeNumber: string;
+    bankBranchNumber: string;
+    insWriteoff: number;
+    patientAmount: number;
+    insuranceAmount: number;
+    previousTotalBalance: number;
+    paymentAmount: number;
+    appliedWO: number;
+    ptPaid: number;
+    insPaid: number;
+    lineDetails: Array<{
+        lineId: number;
+        description: string;
+        providerName: string;
+        amount: number;
+        patient: number;
+        insurance: number;
+        previousBalance: number;
+        payment: number;
+    }>;
+};
+
+type PatientPaymentDetail = {
+    paymentId: number;
+    invoiceId: number;
+    invoiceNumber: string;
+    paymentDate: number[];
+    paymentMethod: string;
+    chequeNumber: string;
+    bankBranchNumber: string;
+    patientAmount: number;
+    previousTotalBalance: number;
+    paymentAmount: number;
+    ptHis: number;
+    insPaid: number;
+    lineDetails: Array<{
+        lineId: number;
+        description: string;
+        providerName: string;
+        amount: number;
+        patient: number;
+        insurance: number;
+        previousBalance: number;
+        payment: number;
+    }>;
+};
+
+// Print Invoice Types
+type PrintInvoiceTransaction = {
+    date: number[]; // [year, month, day]
+    description: string | null;
+    provider: string | null;
+    amount: number | null;
+    credit: number | null;
+    balance: number;
+    transactionType: string;
+    code: string | null;
+    procedureDescription: string | null;
+    paymentMethod?: string | null;
+};
+
+type PrintInvoiceClaim = {
+    claimId: number;
+    claimNumber: string;
+    insuranceName: string;
+    localId: string;
+    status: string;
+};
+
+type PrintInvoicePaymentLine = {
+    code: string;
+    amount: number;
+};
+
+type PrintInvoiceInsurancePayment = {
+    paymentId: number;
+    paymentDate: number[];
+    description: string;
+    insuranceName: string;
+    amount: number;
+    credit: number;
+    lines: PrintInvoicePaymentLine[];
+};
+
+type PrintInvoicePatientPayment = {
+    paymentId: number;
+    paymentDate: number[];
+    description: string;
+    paymentMethod: string;
+    amount: number;
+    credit: number;
+};
+
+type PrintInvoicePatientDeposit = {
+    depositId: number;
+    depositDate: number[];
+    description: string;
+    paymentMethod: string | null;
+    amount: number;
+};
+
+type PrintInvoiceFinancialSummary = {
+    totalCharges: number;
+    totalPatientPayments: number;
+    totalInsurancePayments: number;
+    totalAdjustment: number;
+    outstandingBalance: number;
+    estimatedRemainingInsurance: number;
+    estimatedRemainingInsuranceAdjustment: number;
+};
+
+type PrintInvoiceAgingSummary = {
+    balance0_30: number;
+    balance30_60: number;
+    balance60_90: number;
+    balance90plus: number;
+    accountCredit?: number;
+};
+
+type PrintInvoiceAppointments = {
+    nextScheduledTreatment: string;
+    nextScheduledHygiene: string;
+};
+
+type PrintInvoicePracticeInfo = {
+    practiceName: string;
+    address: string;
+    phone: string;
+    email: string;
+    website: string | null;
+};
+
+type PatientInvoicePrintDto = {
+    practice: PrintInvoicePracticeInfo;
+    patientId: number;
+    patientName: string;
+    patientPhone: string;
+    patientEmail: string;
+    patientAddress: string;
+    invoiceId: number;
+    invoiceDate: number[];
+    invoiceNumber: string;
+    status: string;
+    transactions: PrintInvoiceTransaction[];
+    claims: PrintInvoiceClaim[];
+    insurancePayments: PrintInvoiceInsurancePayment[];
+    patientPayments: PrintInvoicePatientPayment[];
+    patientDeposits: PrintInvoicePatientDeposit[];
+    courtesyCredits: any[];
+    financialSummary: PrintInvoiceFinancialSummary;
+    agingSummary: PrintInvoiceAgingSummary;
+    appointments: PrintInvoiceAppointments;
+    notes: string[];
+};
+
 /* =========================================================
    Small UI helpers
 ========================================================= */
@@ -330,6 +512,34 @@ const styles = `
 .input{border:1px solid #e5e7eb;border-radius:.375rem;padding:.375rem .75rem;font-size:.875rem;outline:none}
 .input:focus{box-shadow:0 0 0 2px #93c5fd;border-color:#60a5fa}
 .label{margin-bottom:.25rem;display:block;font-size:.75rem;font-weight:500;color:#64748b}
+
+/* Print Styles */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    #print-invoice-content, #print-invoice-content * {
+        visibility: visible;
+    }
+    #print-invoice-content {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        max-height: none;
+        overflow: visible;
+    }
+    .no-print {
+        display: none !important;
+    }
+    #print-invoice-modal {
+        position: static;
+        background: white;
+    }
+    @page {
+        margin: 0.5in;
+    }
+}
 `;
 const StyleInjector: React.FC = () => (
     <style id="billing-inline-styles-v6" dangerouslySetInnerHTML={{ __html: styles }} />
@@ -347,6 +557,11 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     const [attachmentClaim, setAttachmentClaim] = React.useState<Claim | null>(null);
     const [showAttachmentConfirm, setShowAttachmentConfirm] = React.useState(false);
     const [lockLoading, setLockLoading] = React.useState(false);
+
+    // Print Invoice Statement
+    const [showPrintInvoice, setShowPrintInvoice] = React.useState(false);
+    const [printInvoiceData, setPrintInvoiceData] = React.useState<PatientInvoicePrintDto | null>(null);
+    const [printInvoiceLoading, setPrintInvoiceLoading] = React.useState(false);
 
     async function handleLockClaim(claim: Claim) {
         setLockLoading(true);
@@ -501,7 +716,258 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             </div>
         );
     }
-    
+
+    // Print Invoice Statement Modal
+    function PrintInvoiceModal({ data, onClose }: { data: PatientInvoicePrintDto; onClose: () => void }) {
+        const [notesText, setNotesText] = React.useState<string>(data.notes?.join('\n') || '');
+
+        const formatDate = (dateArray: number[]) => {
+            if (!dateArray || dateArray.length < 3) return "";
+            return `${dateArray[1].toString().padStart(2, '0')}/${dateArray[2].toString().padStart(2, '0')}/${dateArray[0]}`;
+        };
+
+        const formatCurrency = (amount: number | null | undefined) => {
+            if (amount === null || amount === undefined) return "$0.00";
+            return `$${Math.abs(amount).toFixed(2)}`;
+        };
+
+        const handlePrint = () => {
+            window.print();
+        };
+
+        const getTodayDate = () => {
+            const today = new Date();
+            return `${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getDate().toString().padStart(2, '0')}/${today.getFullYear()}`;
+        };
+
+        const handleAddNotes = () => {
+            // TODO: Implement API call to save notes
+            alert('Add Notes functionality - to be implemented');
+        };
+
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" id="print-invoice-modal">
+                <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-hidden flex flex-col" id="print-invoice-content">
+                    {/* Header with Close and Print buttons - hidden during print */}
+                    <div className="flex justify-between items-center px-6 py-3 border-b bg-gray-50 no-print">
+                        <h2 className="text-lg font-semibold text-gray-800">Patient Account Statement</h2>
+                        <div className="flex gap-2">
+                            <button className="btn-light text-sm px-4 py-2" onClick={onClose}>Close</button>
+                            <button className="btn-light text-sm px-4 py-2" onClick={handleAddNotes}>Add Notes</button>
+                            <button className="btn-primary text-sm px-4 py-2" onClick={handlePrint}>Print</button>
+                        </div>
+                    </div>
+
+                    {/* Scrollable Content */}
+                    <div className="overflow-y-auto flex-1">
+                        <div className="p-6">
+                            {/* Practice Header with Logo */}
+                            <div className="mb-6 pb-4 border-b-4 border-blue-900">
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-4">
+                                        {/* Logo placeholder */}
+                                        <div className="w-20 h-20 bg-blue-900 rounded flex items-center justify-center text-white font-bold text-xs">
+                                            LOGO
+                                        </div>
+                                        <div>
+                                            <h1 className="text-xl font-bold text-blue-900">{data.practice.practiceName}</h1>
+                                            <p className="text-sm text-gray-700">{data.practice.address}</p>
+                                            <p className="text-sm text-gray-700">{data.practice.email}</p>
+                                            <p className="text-sm text-gray-700">
+                                                {data.practice.website ? (
+                                                    <a href={data.practice.website} className="text-blue-600 underline">{data.practice.website}</a>
+                                                ) : 'http://www.rockawaydentist.com/'}
+                                            </p>
+                                            <p className="text-sm text-gray-700">{data.practice.phone}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <h2 className="text-2xl font-bold text-blue-900 mb-2">Patient Account Statement</h2>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Patient Info and Statement Date */}
+                            <div className="grid grid-cols-2 gap-8 mb-6">
+                                <div>
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Patient Name</label>
+                                        <p className="text-sm text-gray-900">{data.patientName}</p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Statement Date</label>
+                                        <p className="text-sm text-gray-900">{getTodayDate()}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Transactions Table */}
+                            <div className="mb-6">
+                                <table className="w-full text-xs border-collapse">
+                                    <thead>
+                                        <tr className="bg-blue-900 text-white">
+                                            <th className="border border-gray-400 px-2 py-2 text-left font-semibold">Date</th>
+                                            <th className="border border-gray-400 px-2 py-2 text-left font-semibold">Description</th>
+                                            <th className="border border-gray-400 px-2 py-2 text-left font-semibold">Provider</th>
+                                            <th className="border border-gray-400 px-2 py-2 text-right font-semibold">Amount</th>
+                                            <th className="border border-gray-400 px-2 py-2 text-right font-semibold">Credit</th>
+                                            <th className="border border-gray-400 px-2 py-2 text-right font-semibold">Balance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {data.transactions.map((transaction, index) => {
+                                            const isAlternate = index % 2 === 1;
+                                            return (
+                                                <tr key={index} className={isAlternate ? 'bg-blue-50' : 'bg-white'}>
+                                                    <td className="border border-gray-300 px-2 py-1 text-gray-900">{formatDate(transaction.date)}</td>
+                                                    <td className="border border-gray-300 px-2 py-1 text-gray-900">
+                                                        {transaction.description || 
+                                                         (transaction.code && transaction.procedureDescription 
+                                                            ? `${transaction.code} ${transaction.procedureDescription}` 
+                                                            : transaction.code || '')}
+                                                    </td>
+                                                    <td className="border border-gray-300 px-2 py-1 text-gray-900">{transaction.provider || ""}</td>
+                                                    <td className="border border-gray-300 px-2 py-1 text-right text-gray-900">
+                                                        {transaction.amount !== null && transaction.amount !== undefined ? formatCurrency(transaction.amount) : ""}
+                                                    </td>
+                                                    <td className="border border-gray-300 px-2 py-1 text-right text-gray-900">
+                                                        {transaction.credit !== null && transaction.credit !== undefined ? formatCurrency(transaction.credit) : ""}
+                                                    </td>
+                                                    <td className="border border-gray-300 px-2 py-1 text-right font-semibold text-gray-900">
+                                                        {formatCurrency(transaction.balance)}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {/* Outstanding Balance Row */}
+                                        <tr className="bg-blue-900 text-white font-bold">
+                                            <td colSpan={5} className="border border-gray-400 px-2 py-2 text-right text-sm">
+                                                Outstanding Balance
+                                            </td>
+                                            <td className="border border-gray-400 px-2 py-2 text-right text-sm">
+                                                {formatCurrency(data.financialSummary.outstandingBalance)}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Financial Summary Table */}
+                            <div className="mb-6">
+                                <table className="w-full text-xs">
+                                    <tbody>
+                                        <tr className="border-b">
+                                            <td className="py-2 px-2 font-semibold text-gray-800">Total Charges</td>
+                                            <td className="py-2 px-2 text-right text-gray-900">{formatCurrency(data.financialSummary.totalCharges)}</td>
+                                            <td className="py-2 px-2 font-semibold text-gray-800">Total Insurance Payments</td>
+                                            <td className="py-2 px-2 text-right text-gray-900">{formatCurrency(data.financialSummary.totalInsurancePayments)}</td>
+                                        </tr>
+                                        <tr className="border-b">
+                                            <td className="py-2 px-2 font-semibold text-gray-800">Total Patient Payments</td>
+                                            <td className="py-2 px-2 text-right text-gray-900">{formatCurrency(data.financialSummary.totalPatientPayments)}</td>
+                                            <td className="py-2 px-2 font-semibold text-gray-800">Total Adjustment</td>
+                                            <td className="py-2 px-2 text-right text-gray-900">{formatCurrency(data.financialSummary.totalAdjustment)}</td>
+                                        </tr>
+                                        <tr className="border-b">
+                                            <td className="py-2 px-2"></td>
+                                            <td className="py-2 px-2"></td>
+                                            <td className="py-2 px-2 font-semibold text-gray-800">Outstanding Balance</td>
+                                            <td className="py-2 px-2 text-right font-bold text-gray-900">{formatCurrency(data.financialSummary.outstandingBalance)}</td>
+                                        </tr>
+                                        <tr className="border-b">
+                                            <td className="py-2 px-2"></td>
+                                            <td className="py-2 px-2"></td>
+                                            <td className="py-2 px-2 text-sm text-gray-700">Estimated Remaining Insurance</td>
+                                            <td className="py-2 px-2 text-right text-sm text-gray-700">{formatCurrency(data.financialSummary.estimatedRemainingInsurance)}</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="py-2 px-2"></td>
+                                            <td className="py-2 px-2"></td>
+                                            <td className="py-2 px-2 text-sm text-gray-700">Estimated Remaining Insurance Adjustment</td>
+                                            <td className="py-2 px-2 text-right text-sm text-gray-700">{formatCurrency(data.financialSummary.estimatedRemainingInsuranceAdjustment)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Your Portion - Large Blue Box */}
+                            <div className="mb-6 bg-blue-900 text-white p-6 rounded text-center">
+                                <h3 className="text-lg font-bold mb-2">Your Portion</h3>
+                                <p className="text-4xl font-bold">{formatCurrency(data.financialSummary.outstandingBalance)}</p>
+                            </div>
+
+                            {/* Aging Summary */}
+                            <div className="mb-6">
+                                <table className="w-full text-xs border-collapse">
+                                    <thead>
+                                        <tr className="bg-blue-100 border border-gray-400">
+                                            <th className="border-r border-gray-400 px-3 py-2 font-semibold text-gray-800">Balance 0-30 days</th>
+                                            <th className="border-r border-gray-400 px-3 py-2 font-semibold text-gray-800">&gt;30 days</th>
+                                            <th className="border-r border-gray-400 px-3 py-2 font-semibold text-gray-800">&gt;60 days</th>
+                                            <th className="border-r border-gray-400 px-3 py-2 font-semibold text-gray-800">&gt;90 days</th>
+                                            <th className="px-3 py-2 font-semibold text-gray-800">Account Credit</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr className="text-center bg-white">
+                                            <td className="border border-gray-400 px-3 py-2 text-gray-900">{formatCurrency(data.agingSummary.balance0_30)}</td>
+                                            <td className="border border-gray-400 px-3 py-2 text-gray-900">{formatCurrency(data.agingSummary.balance30_60)}</td>
+                                            <td className="border border-gray-400 px-3 py-2 text-gray-900">{formatCurrency(data.agingSummary.balance60_90)}</td>
+                                            <td className="border border-gray-400 px-3 py-2 text-gray-900">{formatCurrency(data.agingSummary.balance90plus)}</td>
+                                            <td className="border border-gray-400 px-3 py-2 text-gray-900">{formatCurrency(data.agingSummary.accountCredit || 0)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <p className="text-xs text-gray-600 italic mt-2">* These transactions will not affect the running balance.</p>
+                            </div>
+
+                            {/* Appointments Section */}
+                            <div className="grid grid-cols-2 gap-6 mb-6 text-xs">
+                                <div>
+                                    <h3 className="font-bold text-gray-800 mb-1">Next Scheduled Treatment Appointment</h3>
+                                    <p className="text-gray-700">{data.appointments?.nextScheduledTreatment || "No Scheduled Appointment"}</p>
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-gray-800 mb-1">Next Scheduled Hygiene Appointment</h3>
+                                    <p className="text-gray-700">{data.appointments?.nextScheduledHygiene || "No Scheduled Appointment"}</p>
+                                </div>
+                            </div>
+
+                            {/* Statement Notes */}
+                            <div className="border-t pt-4">
+                                <div className="flex justify-between items-center mb-2">
+                                    <h3 className="font-bold text-sm text-gray-800">Statement Notes:</h3>
+                                    <button 
+                                        className="text-xs text-blue-600 hover:underline no-print"
+                                        onClick={onClose}
+                                    >
+                                        x
+                                    </button>
+                                </div>
+                                <textarea 
+                                    className="w-full border border-gray-300 rounded p-2 text-xs min-h-[80px] resize-none"
+                                    placeholder="Write notes..."
+                                    value={notesText}
+                                    onChange={(e) => setNotesText(e.target.value)}
+                                />
+                                <div className="flex justify-end gap-2 mt-2 no-print">
+                                    <button className="btn-light text-xs px-4 py-1.5" onClick={onClose}>Done</button>
+                                    <button 
+                                        className="bg-blue-600 text-white text-xs px-4 py-1.5 rounded hover:bg-blue-700"
+                                        onClick={handleAddNotes}
+                                    >
+                                        Add Notes
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     
     // =====================
@@ -562,6 +1028,26 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     async function printPatientDeposit(depositId: number) {
         alert(`Print functionality for deposit #${depositId} - To be implemented`);
         // TODO: Implement print functionality
+    }
+
+    // Print Invoice Statement
+    async function fetchPrintInvoice(invoiceId: number) {
+        setPrintInvoiceLoading(true);
+        try {
+            const res = await fetchWithAuth(`${API}/invoices/${invoiceId}/print`);
+            const body = await res.json();
+            if (body?.success && body.data) {
+                setPrintInvoiceData(body.data);
+                setShowPrintInvoice(true);
+            } else {
+                alert(body?.message || "Failed to load invoice for printing");
+            }
+        } catch (error) {
+            console.error("Failed to fetch print invoice:", error);
+            alert("Failed to load invoice statement. Please try again.");
+        } finally {
+            setPrintInvoiceLoading(false);
+        }
     }
 
     // Patient Deposit logic
@@ -697,6 +1183,24 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [previewType, setPreviewType] = useState<string | null>(null);
     const [previewOpen, setPreviewOpen] = useState(false);
+
+    // Expandable row states
+    const [expandedInvoiceId, setExpandedInvoiceId] = useState<number | null>(null);
+    const [expandedClaimId, setExpandedClaimId] = useState<number | null>(null);
+    const [expandedInsPaymentId, setExpandedInsPaymentId] = useState<number | null>(null);
+    const [expandedPtPaymentId, setExpandedPtPaymentId] = useState<number | null>(null);
+
+    // Detailed data states
+    const [invoiceLinesDetail, setInvoiceLinesDetail] = useState<InvoiceLineDetail[]>([]);
+    const [claimLinesDetail, setClaimLinesDetail] = useState<ClaimLineDetail[]>([]);
+    const [insPaymentDetail, setInsPaymentDetail] = useState<InsurancePaymentDetail | null>(null);
+    const [ptPaymentDetail, setPtPaymentDetail] = useState<PatientPaymentDetail | null>(null);
+
+    // Loading states
+    const [loadingInvoiceLines, setLoadingInvoiceLines] = useState(false);
+    const [loadingClaimLines, setLoadingClaimLines] = useState(false);
+    const [loadingInsPaymentDetail, setLoadingInsPaymentDetail] = useState(false);
+    const [loadingPtPaymentDetail, setLoadingPtPaymentDetail] = useState(false);
 
     // Fetch providers and patients for dropdowns
     useEffect(() => {
@@ -938,6 +1442,113 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             await deleteNote(showNotesFor.invoiceId, noteId);
         }
     };
+
+    // =====================
+    // Expandable Row Actions - Fetch Detailed Data
+    // =====================
+    async function fetchInvoiceLines(invoiceId: number) {
+        if (expandedInvoiceId === invoiceId) {
+            // If already expanded, collapse it
+            setExpandedInvoiceId(null);
+            setInvoiceLinesDetail([]);
+            return;
+        }
+        
+        setLoadingInvoiceLines(true);
+        try {
+            const res = await fetchWithAuth(`${API}/invoices/${invoiceId}/lines`);
+            const data = await res.json();
+            if (data?.success && Array.isArray(data.data)) {
+                setInvoiceLinesDetail(data.data);
+                setExpandedInvoiceId(invoiceId);
+            } else {
+                throw new Error(data?.message || "Failed to fetch invoice lines");
+            }
+        } catch (error) {
+            alert((error as Error).message);
+            setInvoiceLinesDetail([]);
+        } finally {
+            setLoadingInvoiceLines(false);
+        }
+    }
+
+    async function fetchClaimLines(claimId: number) {
+        if (expandedClaimId === claimId) {
+            // If already expanded, collapse it
+            setExpandedClaimId(null);
+            setClaimLinesDetail([]);
+            return;
+        }
+        
+        setLoadingClaimLines(true);
+        try {
+            const res = await fetchWithAuth(`${API}/claims/${claimId}/lines`);
+            const data = await res.json();
+            if (data?.success && Array.isArray(data.data)) {
+                setClaimLinesDetail(data.data);
+                setExpandedClaimId(claimId);
+            } else {
+                throw new Error(data?.message || "Failed to fetch claim lines");
+            }
+        } catch (error) {
+            alert((error as Error).message);
+            setClaimLinesDetail([]);
+        } finally {
+            setLoadingClaimLines(false);
+        }
+    }
+
+    async function fetchInsurancePaymentDetails(invoiceId: number, remitId: number) {
+        if (expandedInsPaymentId === remitId) {
+            // If already expanded, collapse it
+            setExpandedInsPaymentId(null);
+            setInsPaymentDetail(null);
+            return;
+        }
+        
+        setLoadingInsPaymentDetail(true);
+        try {
+            const res = await fetchWithAuth(`${API}/invoices/${invoiceId}/insurance-payments/${remitId}/details`);
+            const data = await res.json();
+            if (data?.success && data.data) {
+                setInsPaymentDetail(data.data);
+                setExpandedInsPaymentId(remitId);
+            } else {
+                throw new Error(data?.message || "Failed to fetch insurance payment details");
+            }
+        } catch (error) {
+            alert((error as Error).message);
+            setInsPaymentDetail(null);
+        } finally {
+            setLoadingInsPaymentDetail(false);
+        }
+    }
+
+    async function fetchPatientPaymentDetails(invoiceId: number, paymentId: number) {
+        if (expandedPtPaymentId === paymentId) {
+            // If already expanded, collapse it
+            setExpandedPtPaymentId(null);
+            setPtPaymentDetail(null);
+            return;
+        }
+        
+        setLoadingPtPaymentDetail(true);
+        try {
+            const res = await fetchWithAuth(`${API}/invoices/${invoiceId}/patient-payments/${paymentId}/details`);
+            const data = await res.json();
+            if (data?.success && data.data) {
+                setPtPaymentDetail(data.data);
+                setExpandedPtPaymentId(paymentId);
+            } else {
+                throw new Error(data?.message || "Failed to fetch patient payment details");
+            }
+        } catch (error) {
+            alert((error as Error).message);
+            setPtPaymentDetail(null);
+        } finally {
+            setLoadingPtPaymentDetail(false);
+        }
+    }
 
     // Notes Popover/Modal - Enhanced to use portal, anchor to row, and smooth input
   
@@ -1895,7 +2506,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                 <RowStat label="Ins Paid" value={currency(insPaid)} />
                                             </div>
                                             {/* Four action icons: Backdate, Account Adjustment, Adjustment Invoice, Statement */}
-                                            <div className="ml-auto flex items-center gap-2">
+                                            <div className="ml-auto flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                                 <IconBtn title="Backdate Invoice" onClick={() => setShowBackdateFor(inv.id)}>
                                                     <span role="img" aria-label="backdate">📅</span>
                                                 </IconBtn>
@@ -1905,7 +2516,11 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                 <IconBtn title="Adjustment Invoice" onClick={() => setShowAdjustmentInvoiceFor(inv.id)}>
                                                     <span role="img" aria-label="adjustment-invoice">📝</span>
                                                 </IconBtn>
-                                                <IconBtn title="Statement" onClick={() => alert(`Statement for Invoice #${inv.id}`)}>
+                                                <IconBtn 
+                                                    title="Statement" 
+                                                    onClick={() => void fetchPrintInvoice(inv.id)}
+                                                    disabled={printInvoiceLoading}
+                                                >
                                                     <span role="img" aria-label="statement">📄</span>
                                                 </IconBtn>
                                             </div>
@@ -1956,60 +2571,95 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                     </div>
                                     {/* Claim summary row (if exists) */}
                                     {claim && claim.status !== "DRAFT" ? (
-                                        <div className="flex items-start gap-3 border-b px-3 py-2 text-sm">
-                                            <button
-                                                className="mr-2 p-1 rounded-full hover:bg-amber-100"
-                                                title="View/Add Notes"
-                                                onClick={e => handleOpenNotes(inv.id, e)}
+                                        <>
+                                            <div 
+                                                className="flex items-start gap-3 border-b px-3 py-2 text-sm cursor-pointer hover:bg-gray-50"
+                                                onClick={() => fetchClaimLines(claim.id)}
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-amber-600">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.556 0 8.25-3.694 8.25-8.25S16.556 3.75 12 3.75 3.75 7.444 3.75 12s3.694 8.25 8.25 8.25z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6" />
-                                                </svg>
-                                            </button>
-                                            <div className="min-w-[100px] text-gray-500">{claim.createdOn || first?.dos}</div>
-                                            <div className="flex-1">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="text-gray-600">
-                                                        <b>Claim #{claim.id}</b> to <b>{claim.payerName ?? "—"}</b>
-                                                        {(claim.provider || claim.treatingProviderId) && <span> | Provider: <b>{claim.provider ?? claim.treatingProviderId}</b></span>}
-                                                        {claim.policyNumber && <span> | Policy: <b>{claim.policyNumber}</b></span>}
-                                                        <span> :</span>
-                                                    </span>
-                                                    <Badge tone="amber">
-                                                        {claim.status === "IN_PROCESS"
-                                                            ? "Claim in process"
-                                                            : claim.status.replaceAll("_", " ").toLowerCase()}
-                                                    </Badge>
-                                                    <Badge tone="blue">Status Response (A1): Th…</Badge>
+                                                <button
+                                                    className="mr-2 p-1 rounded-full hover:bg-amber-100"
+                                                    title="View/Add Notes"
+                                                    onClick={(e) => { e.stopPropagation(); handleOpenNotes(inv.id, e); }}
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-amber-600">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.556 0 8.25-3.694 8.25-8.25S16.556 3.75 12 3.75 3.75 7.444 3.75 12s3.694 8.25 8.25 8.25z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6" />
+                                                    </svg>
+                                                </button>
+                                                <div className="min-w-[100px] text-gray-500">{claim.createdOn || first?.dos}</div>
+                                                <div className="flex-1">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="text-gray-600">
+                                                            <b>Claim #{claim.id}</b> to <b>{claim.payerName ?? "—"}</b>
+                                                            {(claim.provider || claim.treatingProviderId) && <span> | Provider: <b>{claim.provider ?? claim.treatingProviderId}</b></span>}
+                                                            {claim.policyNumber && <span> | Policy: <b>{claim.policyNumber}</b></span>}
+                                                            <span> :</span>
+                                                            {expandedClaimId === claim.id && <span className="ml-2 text-blue-600">▼</span>}
+                                                            {expandedClaimId !== claim.id && <span className="ml-2 text-gray-400">▶</span>}
+                                                        </span>
+                                                        <Badge tone="amber">
+                                                            {claim.status === "IN_PROCESS"
+                                                                ? "Claim in process"
+                                                                : claim.status.replaceAll("_", " ").toLowerCase()}
+                                                        </Badge>
+                                                        <Badge tone="blue">Status Response (A1): Th…</Badge>
+                                                    </div>
+                                                </div>
+                                                <div className="ml-auto flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                                    <IconBtn title="Print Claim" onClick={() => window.print()}>🖨️</IconBtn>
+                                                    <IconBtn title="Edit" onClick={() => setShowClaimEditFor(inv.id)} disabled={claim.locked}>✏️</IconBtn>
+                                                    <IconBtn title="Close Claim" onClick={() => { void closeClaim(inv.id); }} disabled={claim.locked}>✅</IconBtn>
+                                                    <IconBtn title="Attachments" onClick={() => setShowAttachmentFor(inv.id)}>📎</IconBtn>
+                                                    <IconBtn title="Void & Re-Create" onClick={() => setShowVoidFor(inv.id)} disabled={claim.locked}>🗑️</IconBtn>
+                                                    <IconBtn title="EOB" onClick={() => setShowEobFor(inv.id)}>📄</IconBtn>
+                                                    <IconBtn title="Submit Claim" onClick={() => { void submitClaim(inv.id); }} disabled={claim.locked}>📤</IconBtn>
+                                                    {/* More Actions icon next to Submit Claim */}
+                                                    {renderMoreActions(claim)}
                                                 </div>
                                             </div>
-                                            <div className="ml-auto flex items-center gap-2">
-                                                <IconBtn title="Print" onClick={() => window.print()}>🖨️</IconBtn>
-                                                <IconBtn title="Edit" onClick={() => setShowClaimEditFor(inv.id)} disabled={claim.locked}>✏️</IconBtn>
-                                                <IconBtn title="Close Claim" onClick={() => { void closeClaim(inv.id); }} disabled={claim.locked}>✅</IconBtn>
-                                                <IconBtn title="Attachments" onClick={() => setShowAttachmentFor(inv.id)}>📎</IconBtn>
-                                                <IconBtn title="Void & Re-Create" onClick={() => setShowVoidFor(inv.id)} disabled={claim.locked}>🗑️</IconBtn>
-                                                <IconBtn title="EOB" onClick={() => setShowEobFor(inv.id)}>📄</IconBtn>
-                                                <IconBtn title="Submit Claim" onClick={() => { void submitClaim(inv.id); }} disabled={claim.locked}>📤</IconBtn>
-                                                {/* More Actions icon next to Submit Claim */}
-                                                {renderMoreActions(claim)}
-    {/* Add modal for Change Claim Status */}
-    {showStatusModal && statusModalClaim && <StatusModal claim={statusModalClaim} onClose={() => setShowStatusModal(false)} />}
-    {/* Add modal for Submit Attachments */}
-    {showAttachmentConfirm && attachmentClaim && (
-        <AttachmentConfirmModal
-            claim={attachmentClaim}
-            onClose={() => setShowAttachmentConfirm(false)}
-            onOk={() => {
-                setShowAttachmentConfirm(false);
-                setShowAttachmentModal(true);
-            }}
-        />
-    )}
-    {showAttachmentModal && attachmentClaim && <AttachmentModal claim={attachmentClaim} onClose={() => setShowAttachmentModal(false)} />}
-                                            </div>
-                                        </div>
+                                            {/* Expanded Claim Lines */}
+                                            {expandedClaimId === claim.id && (
+                                                <div className="px-3 py-2 bg-amber-50/30 border-t">
+                                                    {loadingClaimLines ? (
+                                                        <div className="text-center py-4 text-gray-500">Loading claim lines...</div>
+                                                    ) : claimLinesDetail.length > 0 ? (
+                                                        <div className="overflow-x-auto">
+                                                            <table className="min-w-full text-sm">
+                                                                <thead className="text-left border-b">
+                                                                    <tr>
+                                                                        <th className="p-2">Line ID</th>
+                                                                        <th className="p-2">Date of Service</th>
+                                                                        <th className="p-2">Code</th>
+                                                                        <th className="p-2">Description</th>
+                                                                        <th className="p-2">Provider</th>
+                                                                        <th className="p-2">Total Submitted Amount</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {claimLinesDetail.map((line) => {
+                                                                        const dosStr = Array.isArray(line.dos) 
+                                                                            ? `${line.dos[1].toString().padStart(2, '0')}/${line.dos[2].toString().padStart(2, '0')}/${line.dos[0]}`
+                                                                            : line.dos;
+                                                                        return (
+                                                                            <tr key={line.lineId} className="border-b hover:bg-white">
+                                                                                <td className="p-2">{line.lineId}</td>
+                                                                                <td className="p-2">{dosStr}</td>
+                                                                                <td className="p-2 font-mono">{line.code}</td>
+                                                                                <td className="p-2">{line.description}</td>
+                                                                                <td className="p-2">{line.provider}</td>
+                                                                                <td className="p-2 font-semibold">{currency(line.totalSubmittedAmount)}</td>
+                                                                            </tr>
+                                                                        );
+                                                                    })}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-center py-4 text-gray-500">No claim lines found</div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </>
                                     ) : (
                                         <div className="flex items-center justify-between border-b px-3 py-2 text-sm">
                                             <div className="text-gray-600">No active claim yet for invoice #{inv.id}.</div>
@@ -2025,100 +2675,306 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                     )}
                                     {/* Insurance payment summary (inline, only after insurance paid) */}
                                     {showInsuranceSummary && (
-                                        <div className="flex items-start gap-3 border-b px-3 py-2 text-sm bg-blue-50/40">
-                                            <button
-                                                className="mr-2 p-1 rounded-full hover:bg-blue-100"
-                                                title="View/Add Notes"
-                                                onClick={e => handleOpenNotes(inv.id, e)}
+                                        <>
+                                            <div 
+                                                className="flex items-start gap-3 border-b px-3 py-2 text-sm bg-blue-50/40 cursor-pointer hover:bg-blue-100/40"
+                                                onClick={() => {
+                                                    const remit = ip[0];
+                                                    if (remit) fetchInsurancePaymentDetails(inv.id, remit.id);
+                                                }}
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.556 0 8.25-3.694 8.25-8.25S16.556 3.75 12 3.75 3.75 7.444 3.75 12s3.694 8.25 8.25 8.25z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6" />
-                                                </svg>
-                                            </button>
-                                            <div className="min-w-[100px] text-gray-500">Insurance</div>
-                                            <div className="flex-1">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <Badge tone="blue">Submitted {currency(Number(sum(ip.map(r => r.submitted))))}</Badge>
-                                                    <Badge tone="gray">Allowed {currency(Number(sum(ip.map(r => r.allowed))))}</Badge>
-                                                    <Badge tone="green">Paid {currency(Number(sum(ip.map(r => r.insPay))))}</Badge>
-                                                    <Badge tone="purple">Write-off {currency(Number(sum(ip.map(r => r.insWriteOff))))}</Badge>
+                                                <button
+                                                    className="mr-2 p-1 rounded-full hover:bg-blue-100"
+                                                    title="View/Add Notes"
+                                                    onClick={(e) => { e.stopPropagation(); handleOpenNotes(inv.id, e); }}
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.556 0 8.25-3.694 8.25-8.25S16.556 3.75 12 3.75 3.75 7.444 3.75 12s3.694 8.25 8.25 8.25z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6" />
+                                                    </svg>
+                                                </button>
+                                                <div className="min-w-[100px] text-gray-500">Insurance</div>
+                                                <div className="flex-1">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <Badge tone="blue">Submitted {currency(Number(sum(ip.map(r => r.submitted))))}</Badge>
+                                                        <Badge tone="gray">Allowed {currency(Number(sum(ip.map(r => r.allowed))))}</Badge>
+                                                        <Badge tone="green">Paid {currency(Number(sum(ip.map(r => r.insPay))))}</Badge>
+                                                        <Badge tone="purple">Write-off {currency(Number(sum(ip.map(r => r.insWriteOff))))}</Badge>
+                                                        {ip[0] && expandedInsPaymentId === ip[0].id && <span className="ml-2 text-blue-600">▼</span>}
+                                                        {ip[0] && expandedInsPaymentId !== ip[0].id && <span className="ml-2 text-gray-400">▶</span>}
+                                                    </div>
+                                                </div>
+                                                <div className="ml-auto flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                                    <IconBtn title="Void Insurance Payment" onClick={() => {
+                                                        const remit = ip[0];
+                                                        if (remit) void voidInsurancePayment(inv.id, remit.id, "Payer reversal / posted in error");
+                                                    }}>
+                                                        <span role="img" aria-label="void">🚫</span>
+                                                    </IconBtn>
+                                                    <IconBtn title="Edit Insurance Payment" onClick={() => {
+                                                        const remit = ip[0];
+                                                        if (remit) setEditInsuranceModal({ invoiceId: inv.id, remit });
+                                                    }}>
+                                                        <span role="img" aria-label="edit">✏️</span>
+                                                    </IconBtn>
+                                                    <IconBtn title="Refund Insurance Payment" onClick={() => {
+                                                        const remit = ip[0];
+                                                        if (remit) void refundInsurancePayment(inv.id, remit.id, 10, "Overpayment per EOB");
+                                                    }}>
+                                                        <span role="img" aria-label="refund">⋯</span>
+                                                    </IconBtn>
+                                                    <IconBtn title="Transfer Credit to Patient" onClick={() => {
+                                                        const remit = ip[0];
+                                                        if (remit) void transferInsuranceCreditToPatient(inv.id, remit.id, 20, "Move insurance overpay to patient account credit");
+                                                    }}>
+                                                        <span role="img" aria-label="transfer">🔁</span>
+                                                    </IconBtn>
                                                 </div>
                                             </div>
-                                            <div className="ml-auto flex items-center gap-2">
-                                                <IconBtn title="Void Insurance Payment" onClick={() => {
-                                                    const remit = ip[0];
-                                                    if (remit) void voidInsurancePayment(inv.id, remit.id, "Payer reversal / posted in error");
-                                                }}>
-                                                    <span role="img" aria-label="void">🚫</span>
-                                                </IconBtn>
-                                                <IconBtn title="Edit Insurance Payment" onClick={() => {
-                                                    const remit = ip[0];
-                                                    if (remit) setEditInsuranceModal({ invoiceId: inv.id, remit });
-                                                }}>
-                                                    <span role="img" aria-label="edit">✏️</span>
-                                                </IconBtn>
-                                                <IconBtn title="Refund Insurance Payment" onClick={() => {
-                                                    const remit = ip[0];
-                                                    if (remit) void refundInsurancePayment(inv.id, remit.id, 10, "Overpayment per EOB");
-                                                }}>
-                                                    <span role="img" aria-label="refund">⋯</span>
-                                                </IconBtn>
-                                                <IconBtn title="Transfer Credit to Patient" onClick={() => {
-                                                    const remit = ip[0];
-                                                    if (remit) void transferInsuranceCreditToPatient(inv.id, remit.id, 20, "Move insurance overpay to patient account credit");
-                                                }}>
-                                                    <span role="img" aria-label="transfer">🔁</span>
-                                                </IconBtn>
-                                            </div>
-                                        </div>
+                                            {/* Expanded Insurance Payment Details */}
+                                            {ip[0] && expandedInsPaymentId === ip[0].id && insPaymentDetail && (
+                                                <div className="px-3 py-2 bg-blue-50/20 border-t">
+                                                    {loadingInsPaymentDetail ? (
+                                                        <div className="text-center py-4 text-gray-500">Loading payment details...</div>
+                                                    ) : (
+                                                        <div className="space-y-3">
+                                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Payment Date</div>
+                                                                    <div className="font-medium">
+                                                                        {Array.isArray(insPaymentDetail.paymentDate) 
+                                                                            ? `${insPaymentDetail.paymentDate[1].toString().padStart(2, '0')}/${insPaymentDetail.paymentDate[2].toString().padStart(2, '0')}/${insPaymentDetail.paymentDate[0]}`
+                                                                            : insPaymentDetail.paymentDate}
+                                                                    </div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Cheque Number</div>
+                                                                    <div className="font-medium">{insPaymentDetail.chequeNumber || '—'}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Bank/Branch</div>
+                                                                    <div className="font-medium">{insPaymentDetail.bankBranchNumber || '—'}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Invoice #</div>
+                                                                    <div className="font-medium">{insPaymentDetail.invoiceNumber}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Ins Writeoff</div>
+                                                                    <div className="font-medium">{currency(insPaymentDetail.insWriteoff)}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Patient Amount</div>
+                                                                    <div className="font-medium">{currency(insPaymentDetail.patientAmount)}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Insurance Amount</div>
+                                                                    <div className="font-medium text-green-600">{currency(insPaymentDetail.insuranceAmount)}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Previous Balance</div>
+                                                                    <div className="font-medium">{currency(insPaymentDetail.previousTotalBalance)}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Payment Amount</div>
+                                                                    <div className="font-medium text-blue-600">{currency(insPaymentDetail.paymentAmount)}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Applied WO</div>
+                                                                    <div className="font-medium">{currency(insPaymentDetail.appliedWO)}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Pt Paid</div>
+                                                                    <div className="font-medium">{currency(insPaymentDetail.ptPaid)}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Ins Paid</div>
+                                                                    <div className="font-medium">{currency(insPaymentDetail.insPaid)}</div>
+                                                                </div>
+                                                            </div>
+                                                            {insPaymentDetail.lineDetails && insPaymentDetail.lineDetails.length > 0 && (
+                                                                <div className="overflow-x-auto mt-3">
+                                                                    <table className="min-w-full text-sm">
+                                                                        <thead className="text-left border-b">
+                                                                            <tr>
+                                                                                <th className="p-2">Line ID</th>
+                                                                                <th className="p-2">Description</th>
+                                                                                <th className="p-2">Provider</th>
+                                                                                <th className="p-2">Amount</th>
+                                                                                <th className="p-2">Patient</th>
+                                                                                <th className="p-2">Insurance</th>
+                                                                                <th className="p-2">Previous Balance</th>
+                                                                                <th className="p-2">Payment</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {insPaymentDetail.lineDetails.map((line, idx) => (
+                                                                                <tr key={idx} className="border-b hover:bg-white">
+                                                                                    <td className="p-2">{line.lineId}</td>
+                                                                                    <td className="p-2">{line.description}</td>
+                                                                                    <td className="p-2">{line.providerName}</td>
+                                                                                    <td className="p-2">{currency(line.amount)}</td>
+                                                                                    <td className="p-2">{currency(line.patient)}</td>
+                                                                                    <td className="p-2">{currency(line.insurance)}</td>
+                                                                                    <td className="p-2">{currency(line.previousBalance)}</td>
+                                                                                    <td className="p-2 font-semibold">{currency(line.payment)}</td>
+                                                                                </tr>
+                                                                            ))}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                     {/* Patient payment summary (inline, only after insurance paid) */}
                                     {showPatientSummary && (
-                                        <div className="flex items-start gap-3 border-b px-3 py-2 text-sm bg-purple-50/40">
-                                            <button
-                                                className="mr-2 p-1 rounded-full hover:bg-purple-100"
-                                                title="View/Add Notes"
-                                                onClick={e => handleOpenNotes(inv.id, e)}
+                                        <>
+                                            <div 
+                                                className="flex items-start gap-3 border-b px-3 py-2 text-sm bg-purple-50/40 cursor-pointer hover:bg-purple-100/40"
+                                                onClick={() => {
+                                                    const pay = pp[0];
+                                                    if (pay) fetchPatientPaymentDetails(inv.id, pay.id);
+                                                }}
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-purple-600">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.556 0 8.25-3.694 8.25-8.25S16.556 3.75 12 3.75 3.75 7.444 3.75 12s3.694 8.25 8.25 8.25z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6" />
-                                                </svg>
-                                            </button>
-                                            <div className="min-w-[100px] text-gray-500">Patient</div>
-                                            <div className="flex-1">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <Badge tone="green">Payments {currency(sum(pp.map((p: PatientPaymentData) => Number(p.amount ?? p.payment ?? p.paid ?? 0))) )}</Badge>
-                                                    <Badge tone="gray">{pp.length} entr{pp.length === 1 ? "y" : "ies"}</Badge>
+                                                <button
+                                                    className="mr-2 p-1 rounded-full hover:bg-purple-100"
+                                                    title="View/Add Notes"
+                                                    onClick={(e) => { e.stopPropagation(); handleOpenNotes(inv.id, e); }}
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-purple-600">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.556 0 8.25-3.694 8.25-8.25S16.556 3.75 12 3.75 3.75 7.444 3.75 12s3.694 8.25 8.25 8.25z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6" />
+                                                    </svg>
+                                                </button>
+                                                <div className="min-w-[100px] text-gray-500">Patient</div>
+                                                <div className="flex-1">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <Badge tone="green">Payments {currency(sum(pp.map((p: PatientPaymentData) => Number(p.amount ?? p.payment ?? p.paid ?? 0))) )}</Badge>
+                                                        <Badge tone="gray">{pp.length} entr{pp.length === 1 ? "y" : "ies"}</Badge>
+                                                        {pp[0] && expandedPtPaymentId === pp[0].id && <span className="ml-2 text-purple-600">▼</span>}
+                                                        {pp[0] && expandedPtPaymentId !== pp[0].id && <span className="ml-2 text-gray-400">▶</span>}
+                                                    </div>
+                                                </div>
+                                                <div className="ml-auto flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                                    <IconBtn title="Void Patient Payment" onClick={() => {
+                                                        const pay = pp[0];
+                                                        if (pay) void voidPatientPayment(inv.id, pay.id, "Duplicate collection at front desk");
+                                                    }}>
+                                                        <span role="img" aria-label="void">🚫</span>
+                                                    </IconBtn>
+                                                    <IconBtn title="Edit Patient Payment" onClick={() => {
+                                                        const pay = pp[0];
+                                                        if (pay) setEditPatientModal({ invoiceId: inv.id, payment: { id: pay.id, amount: Number(pay.amount ?? pay.payment ?? pay.paid ?? 0), paymentMethod: pay.paymentMethod } });
+                                                    }}>
+                                                        <span role="img" aria-label="edit">✏️</span>
+                                                    </IconBtn>
+                                                    <IconBtn title="Refund Patient Payment" onClick={() => {
+                                                        const pay = pp[0];
+                                                        if (pay) void refundPatientPayment(inv.id, pay.id, 10, "Partial refund");
+                                                    }}>
+                                                        <span role="img" aria-label="refund">⋯</span>
+                                                    </IconBtn>
+                                                    <IconBtn title="Transfer Credit to Insurance" onClick={() => {
+                                                        // Not implemented: transfer patient credit to insurance
+                                                    }}>
+                                                        <span role="img" aria-label="transfer">🔁</span>
+                                                    </IconBtn>
                                                 </div>
                                             </div>
-                                            <div className="ml-auto flex items-center gap-2">
-                                                <IconBtn title="Void Patient Payment" onClick={() => {
-                                                    const pay = pp[0];
-                                                    if (pay) void voidPatientPayment(inv.id, pay.id, "Duplicate collection at front desk");
-                                                }}>
-                                                    <span role="img" aria-label="void">🚫</span>
-                                                </IconBtn>
-                                                <IconBtn title="Edit Patient Payment" onClick={() => {
-                                                    const pay = pp[0];
-                                                    if (pay) setEditPatientModal({ invoiceId: inv.id, payment: { id: pay.id, amount: Number(pay.amount ?? pay.payment ?? pay.paid ?? 0), paymentMethod: pay.paymentMethod } });
-                                                }}>
-                                                    <span role="img" aria-label="edit">✏️</span>
-                                                </IconBtn>
-                                                <IconBtn title="Refund Patient Payment" onClick={() => {
-                                                    const pay = pp[0];
-                                                    if (pay) void refundPatientPayment(inv.id, pay.id, 10, "Partial refund");
-                                                }}>
-                                                    <span role="img" aria-label="refund">⋯</span>
-                                                </IconBtn>
-                                                <IconBtn title="Transfer Credit to Insurance" onClick={() => {
-                                                    // Not implemented: transfer patient credit to insurance
-                                                }}>
-                                                    <span role="img" aria-label="transfer">🔁</span>
-                                                </IconBtn>
-                                            </div>
-                                        </div>
+                                            {/* Expanded Patient Payment Details */}
+                                            {pp[0] && expandedPtPaymentId === pp[0].id && ptPaymentDetail && (
+                                                <div className="px-3 py-2 bg-purple-50/20 border-t">
+                                                    {loadingPtPaymentDetail ? (
+                                                        <div className="text-center py-4 text-gray-500">Loading payment details...</div>
+                                                    ) : (
+                                                        <div className="space-y-3">
+                                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Payment Date</div>
+                                                                    <div className="font-medium">
+                                                                        {Array.isArray(ptPaymentDetail.paymentDate) 
+                                                                            ? `${ptPaymentDetail.paymentDate[1].toString().padStart(2, '0')}/${ptPaymentDetail.paymentDate[2].toString().padStart(2, '0')}/${ptPaymentDetail.paymentDate[0]}`
+                                                                            : ptPaymentDetail.paymentDate}
+                                                                    </div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Payment Method</div>
+                                                                    <div className="font-medium">{ptPaymentDetail.paymentMethod || '—'}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Cheque Number</div>
+                                                                    <div className="font-medium">{ptPaymentDetail.chequeNumber || '—'}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Bank/Branch</div>
+                                                                    <div className="font-medium">{ptPaymentDetail.bankBranchNumber || '—'}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Invoice #</div>
+                                                                    <div className="font-medium">{ptPaymentDetail.invoiceNumber}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Patient Amount</div>
+                                                                    <div className="font-medium text-purple-600">{currency(ptPaymentDetail.patientAmount)}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Previous Balance</div>
+                                                                    <div className="font-medium">{currency(ptPaymentDetail.previousTotalBalance)}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Payment Amount</div>
+                                                                    <div className="font-medium text-green-600">{currency(ptPaymentDetail.paymentAmount)}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Pt His</div>
+                                                                    <div className="font-medium">{currency(ptPaymentDetail.ptHis)}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500">Ins Paid</div>
+                                                                    <div className="font-medium">{currency(ptPaymentDetail.insPaid)}</div>
+                                                                </div>
+                                                            </div>
+                                                            {ptPaymentDetail.lineDetails && ptPaymentDetail.lineDetails.length > 0 && (
+                                                                <div className="overflow-x-auto mt-3">
+                                                                    <table className="min-w-full text-sm">
+                                                                        <thead className="text-left border-b">
+                                                                            <tr>
+                                                                                <th className="p-2">Line ID</th>
+                                                                                <th className="p-2">Description</th>
+                                                                                <th className="p-2">Provider</th>
+                                                                                <th className="p-2">Amount</th>
+                                                                                <th className="p-2">Patient</th>
+                                                                                <th className="p-2">Insurance</th>
+                                                                                <th className="p-2">Previous Balance</th>
+                                                                                <th className="p-2">Payment</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {ptPaymentDetail.lineDetails.map((line, idx) => (
+                                                                                <tr key={idx} className="border-b hover:bg-white">
+                                                                                    <td className="p-2">{line.lineId}</td>
+                                                                                    <td className="p-2">{line.description}</td>
+                                                                                    <td className="p-2">{line.providerName}</td>
+                                                                                    <td className="p-2">{currency(line.amount)}</td>
+                                                                                    <td className="p-2">{currency(line.patient)}</td>
+                                                                                    <td className="p-2">{currency(line.insurance)}</td>
+                                                                                    <td className="p-2">{currency(line.previousBalance)}</td>
+                                                                                    <td className="p-2 font-semibold">{currency(line.payment)}</td>
+                                                                                </tr>
+                                                                            ))}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                     {/* Courtesy credit summary (inline, shown for each courtesy credit applied) */}
                                     {(() => {
@@ -2172,35 +3028,90 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                     })()}
                                     {/* Mini invoice line row */}
                                     {first && (
-                                        <div className="flex items-start gap-3 px-3 py-2 text-sm">
-                                            <button
-                                                className="mr-2 p-1 rounded-full hover:bg-gray-100"
-                                                title="View/Add Notes"
-                                                onClick={e => handleOpenNotes(inv.id, e)}
+                                        <>
+                                            <div 
+                                                className="flex items-start gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50"
+                                                onClick={() => fetchInvoiceLines(inv.id)}
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-gray-600">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.556 0 8.25-3.694 8.25-8.25S16.556 3.75 12 3.75 3.75 7.444 3.75 12s3.694 8.25 8.25 8.25z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6" />
-                                                </svg>
-                                            </button>
-                                            <div className="min-w-[100px] text-gray-500">{first.dos}</div>
-                                            <div className="flex-1">
-                                                <span className="text-gray-700">
-                                                    Invoice #{inv.id}: [ {first.treatment} ] <b>{currency(Number(first.charge ?? 0))}</b>
-                                                </span>
-                                            </div>
-                                            <div className="ml-auto flex items-center gap-2">
-                                                <IconBtn title="Print" onClick={() => window.print()}>🖨️</IconBtn>
-                                                <IconBtn title="Edit" onClick={() => setShowEditLinesFor(inv.id)}>✏️</IconBtn>
-                                                <IconBtn title="Transfer Outstanding" onClick={() => setTransferOpenFor(inv.id)}>🔁</IconBtn>
-                                                <IconBtn title="Adjustment" onClick={() => setShowAdjustmentInvoiceFor(inv.id)}>➖</IconBtn>
-                                                <IconBtn title="Delete Invoice" onClick={() => deleteInvoice(inv.id)}>
-                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-red-600">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                                <button
+                                                    className="mr-2 p-1 rounded-full hover:bg-gray-100"
+                                                    title="View/Add Notes"
+                                                    onClick={(e) => { e.stopPropagation(); handleOpenNotes(inv.id, e); }}
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-gray-600">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.556 0 8.25-3.694 8.25-8.25S16.556 3.75 12 3.75 3.75 7.444 3.75 12s3.694 8.25 8.25 8.25z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6" />
                                                     </svg>
-                                                </IconBtn>
+                                                </button>
+                                                <div className="min-w-[100px] text-gray-500">{first.dos}</div>
+                                                <div className="flex-1">
+                                                    <span className="text-gray-700">
+                                                        Invoice #{inv.id}: [ {first.treatment} ] <b>{currency(Number(first.charge ?? 0))}</b>
+                                                        {expandedInvoiceId === inv.id && <span className="ml-2 text-blue-600">▼</span>}
+                                                        {expandedInvoiceId !== inv.id && <span className="ml-2 text-gray-400">▶</span>}
+                                                    </span>
+                                                </div>
+                                                <div className="ml-auto flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                                    <IconBtn title="Print" onClick={() => void fetchPrintInvoice(inv.id)} disabled={printInvoiceLoading}>🖨️</IconBtn>
+                                                    <IconBtn title="Edit" onClick={() => setShowEditLinesFor(inv.id)}>✏️</IconBtn>
+                                                    <IconBtn title="Transfer Outstanding" onClick={() => setTransferOpenFor(inv.id)}>🔁</IconBtn>
+                                                    <IconBtn title="Adjustment" onClick={() => setShowAdjustmentInvoiceFor(inv.id)}>➖</IconBtn>
+                                                    <IconBtn title="Delete Invoice" onClick={() => deleteInvoice(inv.id)}>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-red-600">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                                        </svg>
+                                                    </IconBtn>
+                                                </div>
                                             </div>
-                                        </div>
+                                            {/* Expanded Invoice Lines */}
+                                            {expandedInvoiceId === inv.id && (
+                                                <div className="px-3 py-2 bg-gray-50 border-t">
+                                                    {loadingInvoiceLines ? (
+                                                        <div className="text-center py-4 text-gray-500">Loading invoice lines...</div>
+                                                    ) : invoiceLinesDetail.length > 0 ? (
+                                                        <div className="overflow-x-auto">
+                                                            <table className="min-w-full text-sm">
+                                                                <thead className="text-left border-b">
+                                                                    <tr>
+                                                                        <th className="p-2">Date of Service</th>
+                                                                        <th className="p-2">Code</th>
+                                                                        <th className="p-2">Treatment</th>
+                                                                        <th className="p-2">Provider</th>
+                                                                        <th className="p-2">Charge</th>
+                                                                        <th className="p-2">Allowed</th>
+                                                                        <th className="p-2">Ins Write-Off</th>
+                                                                        <th className="p-2">Ins Portion</th>
+                                                                        <th className="p-2">Patient Portion</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {invoiceLinesDetail.map((line) => {
+                                                                        const dosStr = Array.isArray(line.dos) 
+                                                                            ? `${line.dos[1].toString().padStart(2, '0')}/${line.dos[2].toString().padStart(2, '0')}/${line.dos[0]}`
+                                                                            : line.dos;
+                                                                        return (
+                                                                            <tr key={line.id} className="border-b hover:bg-white">
+                                                                                <td className="p-2">{dosStr}</td>
+                                                                                <td className="p-2 font-mono">{line.code}</td>
+                                                                                <td className="p-2">{line.treatment}</td>
+                                                                                <td className="p-2">{line.provider}</td>
+                                                                                <td className="p-2 font-semibold">{currency(line.charge)}</td>
+                                                                                <td className="p-2">{currency(line.allowed ?? 0)}</td>
+                                                                                <td className="p-2">{currency(line.insWriteOff ?? 0)}</td>
+                                                                                <td className="p-2">{currency(line.insPortion ?? 0)}</td>
+                                                                                <td className="p-2">{currency(line.patientPortion ?? 0)}</td>
+                                                                            </tr>
+                                                                        );
+                                                                    })}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-center py-4 text-gray-500">No invoice lines found</div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                     {transferOpenFor === inv.id && (
                                         <div className="relative">
@@ -2234,6 +3145,33 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                 onEdit={handleEditNote}
                 onDelete={handleDeleteNote}
             />
+
+            {/* Add modal for Change Claim Status */}
+            {showStatusModal && statusModalClaim && <StatusModal claim={statusModalClaim} onClose={() => setShowStatusModal(false)} />}
+            
+            {/* Add modal for Submit Attachments */}
+            {showAttachmentConfirm && attachmentClaim && (
+                <AttachmentConfirmModal
+                    claim={attachmentClaim}
+                    onClose={() => setShowAttachmentConfirm(false)}
+                    onOk={() => {
+                        setShowAttachmentConfirm(false);
+                        setShowAttachmentModal(true);
+                    }}
+                />
+            )}
+            {showAttachmentModal && attachmentClaim && <AttachmentModal claim={attachmentClaim} onClose={() => setShowAttachmentModal(false)} />}
+
+            {/* Print Invoice Statement Modal */}
+            {showPrintInvoice && printInvoiceData && (
+                <PrintInvoiceModal 
+                    data={printInvoiceData} 
+                    onClose={() => {
+                        setShowPrintInvoice(false);
+                        setPrintInvoiceData(null);
+                    }} 
+                />
+            )}
 
             {/* ================= CLAIM TAB ================= */}
             {tab === "CLAIM" && selectedInvoice && selectedClaim && (
