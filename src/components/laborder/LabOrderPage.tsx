@@ -137,6 +137,7 @@ function Modal({
   wide?: boolean;
 }) {
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }
