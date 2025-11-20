@@ -2,7 +2,7 @@
 FROM node:24-alpine AS builder
 
 # Install pnpm
-RUN npm install -g pnpm@8
+RUN npm install -g pnpm@9
 
 WORKDIR /app
 
@@ -24,7 +24,7 @@ FROM node:24-alpine AS runner
 WORKDIR /app
 
 # Install pnpm
-RUN npm install -g pnpm@8
+RUN npm install -g pnpm@9
 
 # Set environment to production
 ENV NODE_ENV=production
