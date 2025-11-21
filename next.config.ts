@@ -7,8 +7,16 @@ const nextConfig: NextConfig = {
     // REMOVE this once the codebase is free of blocking TS errors.
     ignoreBuildErrors: true,
   },
-  // Next.js 16 uses Turbopack by default - add empty config to silence warning
-  turbopack: {},
+  // Configure Turbopack for SVG imports as React components
+  turbopack: {
+    rules: {
+      "*.svg": {
+        loaders: ["@svgr/webpack"],
+        as: "*.js",
+      },
+    },
+  },
+  // Webpack config for fallback/compatibility
   webpack(config) {
     config.module.rules.push({
       test: /\.svg$/,
