@@ -15,8 +15,8 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
-# Build the application
-RUN pnpm run build
+# Build the application with webpack (Next.js 16 uses Turbopack by default)
+RUN pnpm next build --webpack
 
 # Production stage
 FROM node:24-alpine AS runner
