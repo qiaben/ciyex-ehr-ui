@@ -92,7 +92,10 @@ jobs:
 
       - name: Update manifest image tags for deployment
         run: |
-          sed -i "s|IMAGE_URL:IMAGE_TAG|${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}|g" k8s/overlays/stage/kustomization.yaml
+          sed -i "s|newName: IMAGE_URL|newName: ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}|g" k8s/overlays/stage/kustomization.yaml
+          sed -i "s|newTag: IMAGE_TAG|newTag: ${{ env.VERSION }}|g" k8s/overlays/stage/kustomization.yaml
+          echo "Updated kustomization.yaml:"
+          cat k8s/overlays/stage/kustomization.yaml
 
       - name: Deploy to Stage
         run: kubectl apply -k k8s/overlays/stage/
