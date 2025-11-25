@@ -229,7 +229,7 @@ const RejectedClaims: React.FC = () => {
       claim.status === "REJECTED" &&
       (!searchPatient || (claim.patientName && claim.patientName.toLowerCase().includes(searchPatient.toLowerCase()))) &&
       (!searchClaim || (claim.id && claim.id.toString().includes(searchClaim)) || claim.createdOn?.includes(searchClaim)) &&
-      (!filters.type || claim.type === filters.type) &&
+      (!filters.type || (claim.type && claim.type.toLowerCase() === filters.type.toLowerCase())) &&
       (!filters.carrier || claim.provider === filters.carrier) &&
       (!filters.attachment || (filters.attachment === "yes" ? claim.hasAttachment : !claim.hasAttachment)) &&
       !hiddenClaims.has(claim.id)

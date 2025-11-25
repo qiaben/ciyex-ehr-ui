@@ -502,7 +502,7 @@ useEffect(() => {
   window.addEventListener("focus", onFocus);
   document.addEventListener("visibilitychange", onVis);
 
-  const POLL_MS = 6000; // 6s; adjust if you like
+  const POLL_MS = 300000; // 5 minutes; adjust if you like
   const timer = setInterval(() => {
     if (!document.hidden) loadAll();
   }, POLL_MS);

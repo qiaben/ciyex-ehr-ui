@@ -3179,9 +3179,17 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                     <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
                         <div className="flex flex-wrap items-center gap-2 text-sm">
                             <div>
-                                <span className="font-semibold">Claim #{selectedClaim.id}</span> · For{" "}
-                                <span className="font-semibold">{patientName}</span> · To{" "}
+                                <span className="font-semibold">Claim #{selectedClaim.id}</span>
+                                {" · For "}
+                                <span className="font-semibold">{patientName}</span>
+                                {" · To "}
                                 <span className="font-semibold">{selectedClaim.payerName ?? "—"}</span>
+                                {((selectedClaim.provider || selectedClaim.treatingProviderId)) && (
+                                    <span> | Provider: <b>{selectedClaim.provider ?? selectedClaim.treatingProviderId}</b></span>
+                                )}
+                                {selectedClaim.policyNumber && (
+                                    <span> | Policy: <b>{selectedClaim.policyNumber}</b></span>
+                                )}
                             </div>
                             <div className="ml-auto flex items-center gap-2">
                                 <button className="btn-light" onClick={() => setShowClaimComposeFor(selectedInvoice.id)}>
