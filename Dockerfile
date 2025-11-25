@@ -15,6 +15,9 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
+# Copy env file for staging
+RUN cp .env.stage .env.local || true
+
 # Build the application (Next.js 16 uses Turbopack by default)
 RUN pnpm run build
 
