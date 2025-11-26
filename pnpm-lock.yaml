@@ -108,6 +108,9 @@ importers:
       '@eslint/eslintrc':
         specifier: ^3
         version: 3.3.1
+      '@eslint/js':
+        specifier: ^9.39.1
+        version: 9.39.1
       '@next/eslint-plugin-next':
         specifier: ^16.0.3
         version: 16.0.3

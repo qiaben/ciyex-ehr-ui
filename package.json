@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint ."
+    "lint": "eslint ."
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.15",
@@ -44,6 +44,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@eslint/js": "^9.39.1",
     "@next/eslint-plugin-next": "^16.0.3",
     "@svgr/webpack": "^8.1.0",
     "@types/next": "^8.0.7",
