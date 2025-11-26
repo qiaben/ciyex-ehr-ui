@@ -50,7 +50,7 @@ type ApiResponse<T> = {
 type BackendCategory = { name: string; active: boolean };
 
 type SettingsDto = {
-    orgId: number;
+    orgId?: number;
     maxUploadSizeMB: number;
     enableAudio: boolean;
     encryptionEnabled?: boolean;
@@ -72,36 +72,6 @@ const safeParseJSON = <T,>(str: string | null, fallback: T): T => {
     } catch {
         return fallback;
     }
-};
-
-const tryDecodeOrgIdFromToken = (): number | null => {
-    try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-        if (!token) return null;
-        const parts = token.split('.');
-        if (parts.length < 2) return null;
-        const payload = JSON.parse(atob(parts[1]));
-        const ids: unknown = payload?.orgIds;
-        if (Array.isArray(ids) && ids.length > 0 && Number.isFinite(Number(ids[0]))) {
-            return Number(ids[0]);
-        }
-        return null;
-    } catch {
-        return null;
-    }
-};
-
-const resolveOrgId = (): number | null => {
-    if (typeof window === 'undefined') return null;
-    const rawOrgId = localStorage.getItem('orgId');
-    if (rawOrgId && Number.isFinite(Number(rawOrgId))) return Number(rawOrgId);
-
-    const orgIds = safeParseJSON<number[] | null>(localStorage.getItem('orgIds'), null);
-    if (Array.isArray(orgIds) && orgIds.length > 0 && Number.isFinite(Number(orgIds[0]))) {
-        return Number(orgIds[0]);
-    }
-
-    return tryDecodeOrgIdFromToken();
 };
 
 // Merge backend categories with defaults
@@ -170,7 +140,6 @@ const ToggleSwitch = ({ checked, onChange, id, disabled }: ToggleProps) => (
 
 export default function DocumentSettingsPage() {
     const [activeSection, setActiveSection] = useState<Section>('categories');
-    const [orgId, setOrgId] = useState<number | null>(null);
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -191,21 +160,6 @@ export default function DocumentSettingsPage() {
     const [uploadSettings, setUploadSettings] = useState({ maxSize: '50 MB', audio: false, encrypt: false });
     const [editing, setEditing] = useState({ categories: false, filetypes: false, uploads: false });
 
-    // Resolve orgId
-    useEffect(() => {
-        const id = resolveOrgId();
-        if (id) setOrgId(id);
-        else setError('No orgId found in localStorage/token');
-
-        const onStorage = () => {
-            const newId = resolveOrgId();
-            if (newId && newId !== orgId) setOrgId(newId);
-        };
-        window.addEventListener('storage', onStorage);
-        return () => window.removeEventListener('storage', onStorage);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     // Auto-hide success banner
     useEffect(() => {
         if (!message) return;
@@ -216,11 +170,10 @@ export default function DocumentSettingsPage() {
     // Load settings
     useEffect(() => {
         const load = async () => {
-            if (!orgId) return;
             setLoading(true);
             setError(null);
             try {
-                const res = await fetchWithAuth(`${API_BASE}/api/document-settings/${orgId}`, {
+                const res = await fetchWithAuth(`${API_BASE}/api/document-settings`, {
                     method: 'GET',
                     cache: 'no-store',
                 });
@@ -247,14 +200,10 @@ export default function DocumentSettingsPage() {
             }
         };
         load();
-    }, [orgId]);
+    }, []);
 
     // Save settings
     const handleSave = async () => {
-        if (!orgId) {
-            setError('No org selected');
-            return;
-        }
         setSaving(true);
         setMessage(null);
         setError(null);
@@ -264,7 +213,6 @@ export default function DocumentSettingsPage() {
 
         try {
             const body: SettingsDto = {
-                orgId,
                 maxUploadSizeMB: parseMb(uploadSettings.maxSize),
                 enableAudio: uploadSettings.audio,
                 encryptionEnabled: uploadSettings.encrypt,
@@ -318,7 +266,6 @@ export default function DocumentSettingsPage() {
 
     // Add category
     const addCategory = async () => {
-        if (!orgId) return;
         if (!editing.categories) return;
         const name = newCategory.trim();
         if (!name) {
@@ -335,7 +282,7 @@ export default function DocumentSettingsPage() {
 
         try {
             const res = await fetchWithAuth(
-                `${API_BASE}/api/document-settings/${orgId}/categories/${encodeURIComponent(name)}/true`,
+                `${API_BASE}/api/document-settings/categories/${encodeURIComponent(name)}/true`,
                 { method: 'POST' },
             );
             const payload: ApiResponse<BackendCategory[]> = await res.json();
@@ -390,7 +337,7 @@ export default function DocumentSettingsPage() {
 
                                    <button
                                        onClick={handleSave}
-                                       disabled={saving || loading || !orgId}
+                                       disabled={saving || loading}
                                        className={`save-btn px-5 py-2 rounded-lg font-medium shadow transition-colors
                                      bg-sky-600 hover:bg-sky-500 text-white
                                      dark:bg-sky-500 dark:hover:bg-sky-400 disabled:opacity-60`}
@@ -399,11 +346,6 @@ export default function DocumentSettingsPage() {
                                    </button>
                                </div>
 
-                               {!orgId && (
-                                   <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 p-3 rounded-lg ring-1 ring-red-200 dark:ring-red-900">
-                                       No orgId found. Ensure <code>orgId</code> or <code>orgIds</code> (array) exist in localStorage, or the JWT contains <code>orgIds</code>.
-                                   </div>
-                               )}
                                {error && (
                                    <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 p-3 rounded-lg ring-1 ring-red-200 dark:ring-red-900">
                                        {error}
@@ -433,7 +375,7 @@ export default function DocumentSettingsPage() {
                                                        onChange={(e) => setNewCategory(e.target.value)}
                                                        onKeyDown={onAddKey}
                                                        placeholder="Category name"
-                                                       disabled={!editing.categories || loading || !orgId}
+                                                       disabled={!editing.categories || loading}
                                                        className={`w-56 px-3 py-2 rounded-lg border text-slate-900 dark:text-slate-100 placeholder-slate-400 ${
                                                            editing.categories
                                                                ? 'bg-slate-50 border-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 dark:bg-slate-900 dark:border-slate-600 dark:focus:ring-sky-400 dark:focus:border-sky-400'
@@ -443,7 +385,7 @@ export default function DocumentSettingsPage() {
                                                    <button
                                                        type="button"
                                                        onClick={addCategory}
-                                                       disabled={!editing.categories || loading || !orgId}
+                                                       disabled={!editing.categories || loading}
                                                        className="px-4 py-2 rounded-lg shadow text-white transition-colors bg-green-600 hover:bg-green-500 disabled:bg-slate-300 dark:disabled:bg-slate-700"
                                                    >
                                                        + Add
@@ -482,7 +424,7 @@ export default function DocumentSettingsPage() {
                                                            checked={cat.enabled}
                                                            onChange={() => toggleCategory(cat.id)}
                                                            id={`category-${cat.id}`}
-                                                           disabled={!editing.categories || loading || !orgId}
+                                                           disabled={!editing.categories || loading}
                                                        />
                                                    </div>
                                                ))}
@@ -520,7 +462,7 @@ export default function DocumentSettingsPage() {
                                                            checked={!!fileTypes[type]}
                                                            onChange={() => setFileTypes((prev) => ({ ...prev, [type]: !prev[type] }))}
                                                            id={`filetype-${type}`}
-                                                           disabled={!editing.filetypes || loading || !orgId}
+                                                           disabled={!editing.filetypes || loading}
                                                        />
                                                    </div>
                                                ))}
@@ -556,7 +498,7 @@ export default function DocumentSettingsPage() {
                                                        value={uploadSettings.maxSize}
                                                        onChange={(e) => setUploadSettings({ ...uploadSettings, maxSize: e.target.value })}
                                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 dark:bg-slate-900 dark:text-slate-100 dark:border-slate-600 dark:focus:ring-sky-400 dark:focus:border-sky-400 disabled:opacity-60 disabled:cursor-not-allowed"
-                                                       disabled={!editing.uploads || loading || !orgId}
+                                                       disabled={!editing.uploads || loading}
                                                    >
                                                        {['25 MB', '50 MB', '100 MB', '150 MB', '250 MB'].map((size) => (
                                                            <option key={size} value={size}>
@@ -575,7 +517,7 @@ export default function DocumentSettingsPage() {
                                                        checked={uploadSettings.audio}
                                                        onChange={() => setUploadSettings({ ...uploadSettings, audio: !uploadSettings.audio })}
                                                        id="audio-uploads"
-                                                       disabled={!editing.uploads || loading || !orgId}
+                                                       disabled={!editing.uploads || loading}
                                                    />
                                                </div>
 
@@ -591,7 +533,7 @@ export default function DocumentSettingsPage() {
                                                        checked={uploadSettings.encrypt}
                                                        onChange={() => setUploadSettings({ ...uploadSettings, encrypt: !uploadSettings.encrypt })}
                                                        id="encrypt-files"
-                                                       disabled={!editing.uploads || loading || !orgId}
+                                                       disabled={!editing.uploads || loading}
                                                    />
                                                </div>
                                            </div>
