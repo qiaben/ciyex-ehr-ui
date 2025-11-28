@@ -3,6 +3,7 @@ import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { Edit, Eye, Paperclip, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 
+
 const API_BASE = "/api/patient-billing";
 
 // Type definitions

@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -1162,6 +1161,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             alert("Error: " + (err as Error).message);
         }
     }
+
     // Edit modals for insurance and patient payments
     const [editInsuranceModal, setEditInsuranceModal] = useState<{invoiceId: number, remit: InsuranceRemitLine} | null>(null);
     const [editPatientModal, setEditPatientModal] = useState<{invoiceId: number, payment: PatientPayment} | null>(null);
@@ -1178,6 +1178,89 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     const [providers, setProviders] = useState<Provider[]>([]);
     const [patients, setPatients] = useState<Patient[]>([]);
     const [insuranceCompanies, setInsuranceCompanies] = useState<InsuranceCompany[]>([]);
+
+    // Transfer Credit Modal state (move to top-level)
+    const [showTransferCreditModal, setShowTransferCreditModal] = useState<{ invoiceId: number, payment: PatientPaymentData } | null>(null);
+    const [transferToPatientId, setTransferToPatientId] = useState<number | null>(null);
+    const [transferAmount, setTransferAmount] = useState<string>("");
+    const [transferLoading, setTransferLoading] = useState(false);
+
+    // Modal for transferring patient credit to another patient
+    const TransferCreditModal = () => {
+        if (!showTransferCreditModal) return null;
+        return (
+            <div style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                width: "100vw",
+                height: "100vh",
+                background: "rgba(0,0,0,0.15)",
+                zIndex: 1000,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+            }} onClick={() => setShowTransferCreditModal(null)}>
+                <div style={{ background: "#fff", borderRadius: 8, minWidth: 340, maxWidth: 400, padding: 24, boxShadow: "0 2px 16px #0002" }} onClick={e => e.stopPropagation()}>
+                    <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 18 }}>Transfer Credit to Another Patient</div>
+                    <div className="mb-3">
+                        <label className="label">Select Patient</label>
+                        <select
+                            className="input w-full"
+                            value={transferToPatientId ?? ''}
+                            onChange={e => setTransferToPatientId(Number(e.target.value) || null)}
+                        >
+                            <option value="">-- Select Patient --</option>
+                            {patients.filter(p => p.id !== patientId).map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="mb-3">
+                        <label className="label">Amount</label>
+                        <input
+                            className="input w-full"
+                            type="number"
+                            min={0.01}
+                            step={0.01}
+                            value={transferAmount}
+                            onChange={e => setTransferAmount(e.target.value)}
+                            placeholder="Enter amount"
+                        />
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        <button className="btn-light" onClick={() => setShowTransferCreditModal(null)} disabled={transferLoading}>Cancel</button>
+                        <button
+                            className="btn-primary"
+                            disabled={transferLoading || !transferToPatientId || !transferAmount || Number(transferAmount) <= 0}
+                            onClick={async () => {
+                                if (!showTransferCreditModal || !transferToPatientId || !transferAmount) return;
+                                setTransferLoading(true);
+                                try {
+                                    await transferPatientCreditToPatient(
+                                        patientId,
+                                        transferToPatientId,
+                                        Number(transferAmount),
+                                        `Transferred from patient #${patientId} to #${transferToPatientId}`
+                                    );
+                                    setShowTransferCreditModal(null);
+                                    setTransferToPatientId(null);
+                                    setTransferAmount("");
+                                    alert("Credit transferred successfully.");
+                                } catch (err: any) {
+                                    alert(err?.message || "Transfer failed");
+                                } finally {
+                                    setTransferLoading(false);
+                                }
+                            }}
+                        >
+                            {transferLoading ? "Transferring..." : "Transfer"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     // Preview modal state
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -1303,14 +1386,15 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     }
 
     async function transferPatientCreditToPatient(fromPatientId: number, toPatientId: number, amount: number, note: string) {
-        const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patient-billing/patients/${fromPatientId}/transfer-credit/${toPatientId}`, {
+        const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patient-billing/${patientId}/patients/${fromPatientId}/${toPatientId}/transfer-credit`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ amount, note }),
+            body: JSON.stringify({ amount }),
         });
         const data = await res.json();
         if (!data?.success) throw new Error(data?.message || "Failed to transfer patient credit");
         await loadAll();
+        return data;
     }
 
     // =====================
@@ -1346,7 +1430,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             body: JSON.stringify(body),
         });
         const data = await res.json();
-        if (!data?.success) throw new Error(data?.message || "Failed to update invoice");
+            if (!showTransferCreditModal) return null; 
         await loadAll();
     }
 
@@ -2878,10 +2962,13 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                     }}>
                                                         <span role="img" aria-label="refund">⋯</span>
                                                     </IconBtn>
-                                                    <IconBtn title="Transfer Credit to Insurance" onClick={() => {
-                                                        // Not implemented: transfer patient credit to insurance
+                                                    <IconBtn title="Transfer Credit to Patient" onClick={() => {
+                                                        const pay = pp[0];
+                                                        if (pay) setShowTransferCreditModal({ invoiceId: inv.id, payment: pay });
                                                     }}>
-                                                        <span role="img" aria-label="transfer">🔁</span>
+                                                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                            <path d="M10 2V18M10 18L5 13M10 18L15 13" stroke="#7C3AED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                        </svg>
                                                     </IconBtn>
                                                 </div>
                                             </div>
@@ -3784,6 +3871,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                 </div>
             )}
 
+            <TransferCreditModal />
             {/* ...existing code... */}
             {showEditLinesFor && (
                 <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
