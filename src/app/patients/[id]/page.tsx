@@ -12,6 +12,7 @@ import Link from "next/link";
 import DemographicsFlat from "@/components/DemographicsFlat";
 import HistoryFlat from "@/components/HistoryFlat";
 import PatientRelationshipsTab from "@/components/PatientRelationshipsTab";
+import PaymentFlat from "@/components/PaymentFlat";
 import {
     AppointmentsFlat,
     BillingFlat,
@@ -609,13 +610,19 @@ export default function PatientDashboardPage() {
                 const res = await fetchWithAuth(
                     `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}`
                 );
+                
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                
                 const text = await res.text();
+                if (!text || text.trim() === "") {
+                    throw new Error("Empty response from server");
+                }
+                
                 const data =
                     res.headers.get("content-type")?.includes("application/xml") || text.startsWith("<")
                         ? await parseXmlResponse(text)
                         : JSON.parse(text);
 
-                if (!res.ok) throw new Error(data.message || `HTTP error! status: ${res.status}`);
                 if (data.success) {
                     const fetched = data.data as Patient;
                     setPatient(fetched);
@@ -908,6 +915,7 @@ export default function PatientDashboardPage() {
         { key: "immunizations", label: "Immunizations" },
         { key: "healthcareservices", label: "Healthcare Services" },
         { key: "relationships", label: "Relationships" },
+        { key: "payment", label: "Payment" },
     ];
 
     const renderTabContent = (tabKey: string) => {
@@ -1220,6 +1228,9 @@ export default function PatientDashboardPage() {
                 return <DocumentsFlat />;
             case "relationships":
                 return <PatientRelationshipsTab patientId={Number(patient.id)} />;
+            
+            case "payment":
+                return <PaymentFlat patientId={Number(patient.id)} />;
 
             default:
                 return (
