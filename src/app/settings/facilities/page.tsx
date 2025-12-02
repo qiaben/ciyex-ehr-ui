@@ -57,7 +57,7 @@ interface ToastNotification {
 }
 
 /* ------------ Toast Notification Component ------------ */
-const ToastNotification: React.FC<{
+const ToastNotificationComponent: React.FC<{
     notification: ToastNotification;
     onClose: (id: number) => void;
 }> = ({ notification, onClose }) => {
@@ -1243,7 +1243,7 @@ export default function FacilitiesPage() {
             {/* Toast Notifications Container */}
             <div className="fixed bottom-4 right-4 z-50 space-y-3">
                 {notifications.map((notification, idx) => (
-                    <ToastNotification
+                    <ToastNotificationComponent
                         key={`${notification.id}-${idx}`}
                         notification={notification}
                         onClose={hideNotification}

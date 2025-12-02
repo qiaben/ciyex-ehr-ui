@@ -50,7 +50,7 @@ const ConfigCard: React.FC<{ title: string; children: React.ReactNode }> = ({
 );
 
 /* ------------ Toast Notification Component ------------ */
-const ToastNotification: React.FC<{
+const ToastNotificationComponent: React.FC<{
     notification: ToastNotification;
     onClose: (id: number) => void;
 }> = ({ notification, onClose }) => {
@@ -526,7 +526,7 @@ export default function RegionalFormattingSettingsPage() {
             {/* Toast Notifications Container */}
             <div className="fixed bottom-4 right-4 z-50 space-y-3">
                 {notifications.map((notification) => (
-                    <ToastNotification
+                    <ToastNotificationComponent
                         key={notification.id}
                         notification={notification}
                         onClose={hideNotification}
