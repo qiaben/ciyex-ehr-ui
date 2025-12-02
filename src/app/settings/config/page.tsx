@@ -146,6 +146,8 @@ function normalizeIntegrations(obj: any) {
     const root = obj?.integrations ?? obj ?? {};
     return {
         storage_type: S(root.storage_type ?? root.storageType),
+        payment_provider: S(root.payment_provider ?? root.paymentProvider ?? 'stripe'),
+        payment_enabled: S(root.payment_enabled ?? root.paymentEnabled ?? 'false'),
 
         practice_db: { schema: S(root.practice_db?.schema ?? root.practiceDb?.schema) },
 
@@ -162,9 +164,9 @@ function normalizeIntegrations(obj: any) {
             webhookSecret: S(root.stripe?.webhookSecret),
         },
 
-        sphere: {
-            merchantId: S(root.sphere?.merchantId),
-            apiKey: S(root.sphere?.apiKey),
+        gps: {
+            securityKey: S(root.gps?.securityKey),
+            transactUrl: S(root.gps?.transactUrl),
         },
 
         twilio: {
@@ -191,15 +193,15 @@ function normalizeIntegrations(obj: any) {
 
         ai: {
             vendor: S(root.ai?.vendor),
-            azure: {
+            azure: { 
                 endpoint: S(root.ai?.azure?.endpoint),
                 apiVersion: S(root.ai?.azure?.apiVersion),
                 deployment: S(root.ai?.azure?.deployment),
                 apiKey: S(root.ai?.azure?.apiKey),
                 useManagedIdentity: S(root.ai?.azure?.useManagedIdentity),
                 timeoutMs: S(root.ai?.azure?.timeoutMs),
-            },
-            defaults: {
+            }, 
+            defaults: {   
                 temperature: S(root.ai?.defaults?.temperature),
                 maxTokens: S(root.ai?.defaults?.maxTokens),
                 topP: S(root.ai?.defaults?.topP),
@@ -637,7 +639,6 @@ export default function Page() {
     });
 
     // Provider selections
-    const [paymentProvider, setPaymentProvider] = useState<'stripe' | 'sphere'>('stripe');
     const [insuranceProvider, setInsuranceProvider] = useState<'sikka' | 'zuub'>('sikka');
     const [googleMode, setGoogleMode] = useState<'auth' | 'recaptcha'>('auth'); // NEW
 
@@ -683,6 +684,8 @@ export default function Page() {
             // Build the nested config structure - backend will flatten it
             const payload: any = {
                 storage_type: cfg.storage_type,
+                payment_provider: cfg.payment_provider,
+                payment_enabled: toBool(cfg.payment_enabled),
                 practice_db: {
                     schema: cfg.practice_db?.schema,
                 },
@@ -697,9 +700,9 @@ export default function Page() {
                     apiKey: cfg.stripe?.apiKey,
                     webhookSecret: cfg.stripe?.webhookSecret,
                 },
-                sphere: {
-                    merchantId: cfg.sphere?.merchantId,
-                    apiKey: cfg.sphere?.apiKey,
+                gps: {
+                    securityKey: cfg.gps?.securityKey,
+                    transactUrl: cfg.gps?.transactUrl,
                 },
                 twilio: {
                     accountSid: cfg.twilio?.accountSid,
@@ -1055,9 +1058,9 @@ export default function Page() {
                                 </div>
                             </SettingsCard>
 
-                            {/* 3) Payments (Stripe & Sphere) with provider switch */}
+                            {/* 3) Payments (Stripe & GPS) with provider switch */}
                             <SettingsCard
-                                title="Payments (Stripe & Sphere)"
+                                title="Payments (Stripe & GPS)"
                                 iconPath={paths.card}
                                 isOpen={open === 'payments'}
                                 isEditing={editing.payments}
@@ -1069,14 +1072,67 @@ export default function Page() {
                                     <Segmented
                                         options={[
                                             { value: 'stripe', label: 'Stripe' },
-                                            { value: 'sphere', label: 'Sphere' },
+                                            { value: 'gps', label: 'GPS' },
                                         ]}
-                                        value={paymentProvider}
-                                        onChange={(v) => setPaymentProvider(v as 'stripe' | 'sphere')}
+                                        value={cfg.payment_provider || 'stripe'}
+                                        onChange={(v) => {
+                                            // When switching providers, set the new provider to inactive by default
+                                            setCfg((c) => ({ ...c, payment_provider: v, payment_enabled: 'false' }));
+                                        }}
                                     />
                                 }
                             >
-                                {paymentProvider === 'stripe' && (
+                                {/* Payment Status - Single Compact Container */}
+                                <div className="mb-4 rounded-xl border border-neutral-200 bg-white p-3 dark:border-[#1b2437] dark:bg-[#0B1220]">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                                                {(cfg.payment_provider || 'stripe') === 'stripe' ? 'Stripe' : 'GPS'}
+                                            </div>
+                                            <div className={cx(
+                                                'flex items-center gap-1 text-[11px] font-medium',
+                                                cfg.payment_enabled === 'true'
+                                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                                    : 'text-neutral-500 dark:text-neutral-400'
+                                            )}>
+                                                <span className={cx(
+                                                    'inline-block h-1.5 w-1.5 rounded-full',
+                                                    cfg.payment_enabled === 'true'
+                                                        ? 'bg-emerald-500'
+                                                        : 'bg-neutral-400 dark:bg-neutral-500'
+                                                )} />
+                                                {cfg.payment_enabled === 'true' ? 'Active' : 'Inactive'}
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const newValue = cfg.payment_enabled === 'true' ? 'false' : 'true';
+                                                setCfg((c) => ({ ...c, payment_enabled: newValue }));
+                                            }}
+                                            disabled={!editing.payments}
+                                            className={cx(
+                                                'relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none',
+                                                cfg.payment_enabled === 'true'
+                                                    ? 'bg-emerald-500'
+                                                    : 'bg-neutral-300 dark:bg-neutral-600',
+                                                !editing.payments && 'opacity-50 cursor-not-allowed'
+                                            )}
+                                            aria-label="Toggle payment gateway"
+                                        >
+                                            <span
+                                                className={cx(
+                                                    'inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform',
+                                                    cfg.payment_enabled === 'true'
+                                                        ? 'translate-x-4'
+                                                        : 'translate-x-0.5'
+                                                )}
+                                            />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {(cfg.payment_provider || 'stripe') === 'stripe' && (
                                     <div className="grid gap-4 md:grid-cols-2">
                                         <div>
                                             <label htmlFor="stripe.apiKey" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
@@ -1098,26 +1154,33 @@ export default function Page() {
                                     </div>
                                 )}
 
-                                {paymentProvider === 'sphere' && (
+                                {(cfg.payment_provider || 'stripe') === 'gps' && (
                                     <div className="grid gap-4 md:grid-cols-2">
                                         <div>
-                                            <label htmlFor="sphere.merchantId" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                                                Sphere Merchant ID
+                                            <label htmlFor="gps.securityKey" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                                GPS Security Key
                                             </label>
-                                            <TextInput
-                                                id="sphere.merchantId"
-                                                name="sphere[merchantId]"
-                                                placeholder="MERCHANT001"
-                                                icon={paths.store}
+                                            <PasswordField
+                                                id="gps.securityKey"
+                                                name="gps[securityKey]"
+                                                placeholder="6457Thfj624V5r7WUwc5v6a68Zsd6YEm"
                                                 editable={editing.payments}
-                                                {...bind(['sphere', 'merchantId'])}
+                                                {...bind(['gps', 'securityKey'])}
                                             />
                                         </div>
                                         <div>
-                                            <label htmlFor="sphere.apiKey" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                                                Sphere API Key
+                                            <label htmlFor="gps.transactUrl" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                                GPS Transaction URL
                                             </label>
-                                            <PasswordField id="sphere.apiKey" name="sphere[apiKey]" editable={editing.payments} {...bind(['sphere', 'apiKey'])} />
+                                            <TextInput
+                                                id="gps.transactUrl"
+                                                name="gps[transactUrl]"
+                                                placeholder="https://secure.networkmerchants.com/api/transact.php"
+                                                type="url"
+                                                icon={paths.link}
+                                                editable={editing.payments}
+                                                {...bind(['gps', 'transactUrl'])}
+                                            />
                                         </div>
                                     </div>
                                 )}
