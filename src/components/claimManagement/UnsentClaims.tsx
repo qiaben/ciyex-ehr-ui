@@ -3,9 +3,6 @@ import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { Edit, Eye, Paperclip, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-
-const API_BASE = "/api/patient-billing";
-
 // Type definitions
 type Claim = {
   id: number;
@@ -191,15 +188,11 @@ const UnsentClaims: React.FC = () => {
 
   // ✅ Filter claims
   const filteredClaims = claims.filter((claim: Claim) => {
-  // ✅ Filter claims: Only show unsent claims (status DRAFT or IN_PROCESS)
-  const filteredClaims = claims.filter((claim: any) => {
-    const unsentStatuses = ["DRAFT", "IN_PROCESS"];
     return (
       !hiddenClaims.has(claim.id) &&
-      unsentStatuses.includes(claim.status) &&
       (!searchPatient || (claim.patientName && claim.patientName.toLowerCase().includes(searchPatient.toLowerCase()))) &&
       (!searchClaim || (claim.id && claim.id.toString().includes(searchClaim)) || claim.createdOn?.includes(searchClaim)) &&
-      (!filters.type || (claim.type && claim.type.toLowerCase() === filters.type.toLowerCase())) &&
+      (!filters.type || claim.type === filters.type) &&
       (!filters.carrier || claim.provider === filters.carrier) &&
       (!filters.attachment || (filters.attachment === "yes" ? claim.hasAttachment : !claim.hasAttachment))
     );
@@ -223,35 +216,7 @@ const UnsentClaims: React.FC = () => {
 
   const selectedCount = selectedClaims.size;
 
-  // ✅ SEND CLAIM TO INSURANCE
-  const handleSendClaim = async (claimIds: number[]) => {
-    if (!claimIds.length) return;
-    setActionLoading(true);
-    setActionError(null);
-    try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL;
-      for (const claimId of claimIds) {
-        const res = await fetchWithAuth(
-          `${API_URL}/api/all-claims/${claimId}/sends`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-        const response = await res.json();
-        if (!res.ok || !response.success) {
-          throw new Error(response.message || "Failed to send claim");
-        }
-      }
-      // Remove sent claims from state immediately after successful send
-      setClaims(prevClaims => prevClaims.filter(claim => !claimIds.includes(claim.id)));
-      setSelectedClaims(new Set());
-    } catch (err: any) {
-      setActionError(err.message || "Error sending claim");
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  // ✅ UPDATE - Change Status
 const handleChangeStatus = async () => {
   if (!statusToChange || selectedClaims.size === 0) return;
 
@@ -605,8 +570,8 @@ const handleChangeStatus = async () => {
           className="border px-2 py-1 rounded"
         >
           <option value="">Filter by Claim Type</option>
-          <option value="manual">manual</option>
-          <option value="electronic">electronic</option>
+          <option value="manual">Manual</option>
+          <option value="electronic">Electronic</option>
         </select>
         <select
           value={filters.carrier}
@@ -683,14 +648,12 @@ const handleChangeStatus = async () => {
           {loading ? (
             <tr>
               <td colSpan={13} className="text-center p-4">
-              <td colSpan={12} className="text-center p-4">
                 Loading...
               </td>
             </tr>
           ) : filteredClaims.length === 0 ? (
             <tr>
               <td colSpan={13} className="text-center p-4">
-              <td colSpan={12} className="text-center p-4">
                 No claims found
               </td>
             </tr>
@@ -732,7 +695,7 @@ const handleChangeStatus = async () => {
                 <td className="p-2">
                   <div className="flex flex-col gap-1">
                     {claim.clearingHouseStatus ? (
-                      <>
+                      <React.Fragment>
                         <span className={`text-xs px-2 py-1 rounded ${
                           claim.clearingHouseStatus === 'ACCEPTED' ? 'bg-green-100 text-green-800' :
                           claim.clearingHouseStatus === 'REJECTED' ? 'bg-red-100 text-red-800' :
@@ -747,7 +710,7 @@ const handleChangeStatus = async () => {
                         >
                           Check Status
                         </button>
-                      </>
+                      </React.Fragment>
                     ) : (
                       <span className="text-xs text-gray-400">-</span>
                     )}
@@ -810,22 +773,6 @@ const handleChangeStatus = async () => {
             })
           )}
         </tbody>
-
-      {/* Bulk Send Button */}
-      {selectedClaims.size > 0 && filteredClaims.length > 0 && (
-        <tr>
-          <td colSpan={12} className="p-2">
-            <button
-              className="border px-4 py-2 rounded bg-blue-500 text-white"
-              onClick={() => handleSendClaim(Array.from(selectedClaims))}
-              disabled={actionLoading}
-            >
-              Send Selected Claims
-            </button>
-            {actionError && <span className="ml-4 text-red-500">{actionError}</span>}
-          </td>
-        </tr>
-      )}
       </table>
 
       {filteredClaims.length > 8 && (
@@ -944,11 +891,11 @@ const handleChangeStatus = async () => {
                 <button
                   type="button"
                   className={`w-full px-6 py-3 rounded border-2 text-left font-medium transition-all ${
-                    typeToConvert === "manual"
+                    typeToConvert === "Manual"
                       ? "border-blue-500 bg-blue-50 text-blue-700"
                       : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
                   }`}
-                  onClick={() => setTypeToConvert("manual")}
+                  onClick={() => setTypeToConvert("Manual")}
                 >
                   To Manual
                 </button>
@@ -956,11 +903,11 @@ const handleChangeStatus = async () => {
                 <button
                   type="button"
                   className={`w-full px-6 py-3 rounded border-2 text-left font-medium transition-all ${
-                    typeToConvert === "electronic"
+                    typeToConvert === "Electronic"
                       ? "border-blue-500 bg-blue-50 text-blue-700"
                       : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
                   }`}
-                  onClick={() => setTypeToConvert("electronic")}
+                  onClick={() => setTypeToConvert("Electronic")}
                 >
                   To Electronic
                 </button>
