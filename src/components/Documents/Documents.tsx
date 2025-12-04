@@ -649,9 +649,16 @@ function logFormData(label: string, fd: FormData) {
 }
 
 /* ======================= Page ======================= */
-export default function Page() {
-  // ⚙️ CONFIGURATION - Change these values as needed
-  const patientId = "1"; // 👈 Change this to filter documents by patient
+interface DocumentsProps {
+  patientId?: number;
+}
+
+export default function Page({ patientId: propPatientId }: DocumentsProps = {}) {
+  // ⚙️ CONFIGURATION - Can be overridden via prop or will use default
+  // Get patientId from prop, or use localStorage, or default to "1"
+  const patientId = propPatientId !== undefined 
+    ? String(propPatientId)
+    : (typeof window !== "undefined" ? localStorage.getItem("patientId") || "1" : "1");
 
   // Alerts
   const { banners, push: pushBanner, remove: removeBanner } = useBanners();
