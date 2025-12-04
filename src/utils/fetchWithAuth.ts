@@ -37,7 +37,28 @@ export async function fetchWithAuth(
   });
 
   if (res.status === 401) {
-    console.warn("⚠️ 401 Unauthorized:", input);
+    console.warn("⚠️ 401 Unauthorized - Token expired, redirecting to sign-in:", input);
+    
+    // Clear all auth data
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("token");
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("userEmail");
+      localStorage.removeItem("userFullName");
+      localStorage.removeItem("authMethod");
+      localStorage.removeItem("orgId");
+      localStorage.removeItem("orgIds");
+      localStorage.removeItem("facilityId");
+      localStorage.removeItem("role");
+      localStorage.removeItem("groups");
+      localStorage.removeItem("userId");
+      localStorage.removeItem("primaryGroup");
+      localStorage.removeItem("selectedTenant");
+      sessionStorage.removeItem("token");
+      
+      // Redirect to sign-in page
+      window.location.href = "/signin";
+    }
   }
   return res;
 }

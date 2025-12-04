@@ -7,19 +7,38 @@ export interface AccessibleTenantsResponse {
 export const getAccessibleTenants = async (token: string): Promise<AccessibleTenantsResponse> => {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
   
-  const response = await fetch(`${apiUrl}/api/tenants/accessible`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
+  try {
+    const response = await fetch(`${apiUrl}/api/tenants/accessible`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
-  if (!response.ok) {
-    throw new Error('Failed to fetch accessible tenants');
+    if (!response.ok) {
+      // If endpoint doesn't exist or returns error, return default response
+      if (response.status === 404 || response.status === 401 || response.status === 403) {
+        console.warn('Tenants endpoint not available, using default single tenant mode');
+        return {
+          hasFullAccess: true,
+          tenants: [],
+          requiresSelection: false,
+        };
+      }
+      throw new Error(`Failed to fetch accessible tenants: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data || data;
+  } catch (error) {
+    console.warn('Error fetching accessible tenants, defaulting to single tenant mode:', error);
+    // Return default response to allow app to continue
+    return {
+      hasFullAccess: true,
+      tenants: [],
+      requiresSelection: false,
+    };
   }
-
-  const data = await response.json();
-  return data.data;
 };
 
 export const getSelectedTenant = (): string | null => {

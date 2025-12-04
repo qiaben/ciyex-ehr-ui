@@ -254,6 +254,16 @@ function normalizeIntegrations(obj: any) {
             webhookSecret: S(root.ghl?.webhookSecret),
             locationId: S(root.ghl?.locationId),
         },
+
+        dentalExchange: {
+            username: S(root.dentalExchange?.username ?? root.dental_xchange_username),
+            password: S(root.dentalExchange?.password ?? root.dental_xchange_password),
+            apiKey: S(root.dentalExchange?.apiKey ?? root.dental_xchange_api_key),
+            baseUrl: S(root.dentalExchange?.baseUrl ?? root.dental_xchange_base_url),
+            dxcGroupId: S(root.dentalExchange?.dxcGroupId ?? root.dental_xchange_dxc_group_id),
+            environment: S(root.dentalExchange?.environment ?? root.dental_xchange_environment),
+            enabled: S(root.dentalExchange?.enabled ?? root.dental_xchange_enabled),
+        },
     };
 }
 
@@ -605,7 +615,8 @@ type SectionId =
     | 'ai'
     | 'insurance'   // Insurance Verification (Sikka & Zuub)
     | 'documents'
-    | 'ghl';        // GoHighLevel Integration
+    | 'ghl'         // GoHighLevel Integration
+    | 'dentalExchange'; // Dental Exchange Clearinghouse
 
 export default function Page() {
     const [open, setOpen] = useState<SectionId | null>(null);
@@ -622,6 +633,7 @@ export default function Page() {
         insurance: false,
         documents: false,
         ghl: false,
+        dentalExchange: false,
     });
     const [flashBtn, setFlashBtn] = useState<Record<SectionId, boolean>>({
         core: false,
@@ -636,6 +648,7 @@ export default function Page() {
         insurance: false,
         documents: false,
         ghl: false,
+        dentalExchange: false,
     });
 
     // Provider selections
@@ -671,6 +684,7 @@ export default function Page() {
         insurance: 'Insurance Verification (Sikka & Zuub)',
         documents: 'Document Storage',
         ghl: 'GoHighLevel Integration',
+        dentalExchange: 'Dental Exchange Clearinghouse',
     };
 
     // ---- Save handler ----
@@ -779,6 +793,15 @@ export default function Page() {
                     webhookSecret: cfg.ghl?.webhookSecret,
                     locationId: cfg.ghl?.locationId,
                 },
+                dentalExchange: {
+                    username: cfg.dentalExchange?.username,
+                    password: cfg.dentalExchange?.password,
+                    apiKey: cfg.dentalExchange?.apiKey,
+                    baseUrl: cfg.dentalExchange?.baseUrl,
+                    dxcGroupId: cfg.dentalExchange?.dxcGroupId,
+                    environment: cfg.dentalExchange?.environment,
+                    enabled: cfg.dentalExchange?.enabled,
+                },
             };
 
             // Remove empty nested objects to keep payload clean
@@ -827,6 +850,7 @@ export default function Page() {
                 insurance: false,
                 documents: false,
                 ghl: false,
+                dentalExchange: false,
             });
 
             // flash "Saved" on all sections briefly
@@ -843,6 +867,7 @@ export default function Page() {
                 insurance: true,
                 documents: true,
                 ghl: true,
+                dentalExchange: true,
             });
             setTimeout(
                 () =>
@@ -859,6 +884,7 @@ export default function Page() {
                         insurance: false,
                         documents: false,
                         ghl: false,
+                        dentalExchange: false,
                     }),
                 1200
             );
@@ -1743,6 +1769,111 @@ export default function Page() {
                                             icon={paths.id}
                                             editable={editing.ghl}
                                             {...bind(['ghl', 'locationId'])}
+                                        />
+                                    </div>
+                                </div>
+                            </SettingsCard>
+
+                            {/* 14) Dental Exchange Clearinghouse */}
+                            <SettingsCard
+                                title="Dental Exchange Clearinghouse"
+                                iconPath={paths.shield}
+                                isOpen={open === 'dentalExchange'}
+                                isEditing={editing.dentalExchange}
+                                savedFlash={flashBtn.dentalExchange}
+                                onToggle={() => toggleOpen('dentalExchange')}
+                                onEdit={() => startEdit('dentalExchange')}
+                                onDone={() => endEdit('dentalExchange')}
+                            >
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label htmlFor="dentalExchange.username" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            Username
+                                        </label>
+                                        <TextInput
+                                            id="dentalExchange.username"
+                                            name="dentalExchange[username]"
+                                            placeholder="support@qiaben.com"
+                                            icon={paths.user}
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'username'])}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="dentalExchange.password" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            Password
+                                        </label>
+                                        <PasswordField
+                                            id="dentalExchange.password"
+                                            name="dentalExchange[password]"
+                                            placeholder="Enter password"
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'password'])}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="dentalExchange.apiKey" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            API Key
+                                        </label>
+                                        <PasswordField
+                                            id="dentalExchange.apiKey"
+                                            name="dentalExchange[apiKey]"
+                                            placeholder="84b25980d68e816f7057151387d272e"
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'apiKey'])}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="dentalExchange.baseUrl" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            Base URL
+                                        </label>
+                                        <TextInput
+                                            id="dentalExchange.baseUrl"
+                                            name="dentalExchange[baseUrl]"
+                                            placeholder="https://xconnect-api.dentalxchange.com"
+                                            icon={paths.link}
+                                            type="url"
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'baseUrl'])}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="dentalExchange.dxcGroupId" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            DXC Group ID
+                                        </label>
+                                        <TextInput
+                                            id="dentalExchange.dxcGroupId"
+                                            name="dentalExchange[dxcGroupId]"
+                                            placeholder="-149229"
+                                            icon={paths.id}
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'dxcGroupId'])}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="dentalExchange.environment" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            Environment
+                                        </label>
+                                        <TextInput
+                                            id="dentalExchange.environment"
+                                            name="dentalExchange[environment]"
+                                            placeholder="sandbox"
+                                            icon={paths.cog}
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'environment'])}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="dentalExchange.enabled" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            Enabled
+                                        </label>
+                                        <TextInput
+                                            id="dentalExchange.enabled"
+                                            name="dentalExchange[enabled]"
+                                            placeholder="true"
+                                            icon={paths.checkCircle}
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'enabled'])}
                                         />
                                     </div>
                                 </div>

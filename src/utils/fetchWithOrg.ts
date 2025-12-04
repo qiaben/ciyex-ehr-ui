@@ -55,15 +55,40 @@ export async function fetchWithOrg(input: RequestInfo, init: RequestInit = {}) {
         headers.delete("Authorization");
     }
 
-    return fetch(url, {
+    const res = await fetch(url, {
         ...init,
         headers,
         cache: "no-store",
         credentials: "include", // safe if your API ever uses cookies
     });
 
+    // Handle 401 Unauthorized - token expired
+    if (res.status === 401) {
+        console.warn("⚠️ 401 Unauthorized - Token expired, redirecting to sign-in:", url);
+        
+        // Clear all auth data
+        if (typeof window !== "undefined") {
+            localStorage.removeItem("token");
+            localStorage.removeItem("authToken");
+            localStorage.removeItem("userEmail");
+            localStorage.removeItem("userFullName");
+            localStorage.removeItem("authMethod");
+            localStorage.removeItem("orgId");
+            localStorage.removeItem("orgIds");
+            localStorage.removeItem("facilityId");
+            localStorage.removeItem("role");
+            localStorage.removeItem("groups");
+            localStorage.removeItem("userId");
+            localStorage.removeItem("primaryGroup");
+            localStorage.removeItem("selectedTenant");
+            sessionStorage.removeItem("token");
+            
+            // Redirect to sign-in page
+            window.location.href = "/signin";
+        }
+    }
 
-
+    return res;
 }
 
 
