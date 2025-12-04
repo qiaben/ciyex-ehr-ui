@@ -1225,7 +1225,7 @@ export default function PatientDashboardPage() {
             
 
             case "documents":
-                return <DocumentsFlat />;
+                return <DocumentsFlat patientId={Number(patient.id)} />;
             case "relationships":
                 return <PatientRelationshipsTab patientId={Number(patient.id)} />;
             
