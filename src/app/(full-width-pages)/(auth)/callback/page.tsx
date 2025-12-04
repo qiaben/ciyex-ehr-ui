@@ -97,11 +97,11 @@ export default function AuthCallback() {
                             console.log("User already has selected practice:", existingTenant);
                             console.log("Skipping practice selection, going to dashboard");
                             router.push("/dashboard");
-                        } else if (tenantsData.requiresSelection) {
+                        } else if (tenantsData.requiresSelection && tenantsData.tenants.length > 1) {
                             // Multi-tenant user without selected practice, redirect to practice selection
                             console.log("User has multiple tenants, redirecting to practice selection");
                             router.push("/select-practice");
-                        } else if (tenantsData.tenants.length === 1) {
+                        } else if (tenantsData.tenants && tenantsData.tenants.length === 1) {
                             // Single tenant, auto-select and redirect to dashboard
                             console.log("User has single tenant, auto-selecting:", tenantsData.tenants[0]);
                             setSelectedTenant(tenantsData.tenants[0]);
@@ -113,7 +113,8 @@ export default function AuthCallback() {
                         }
                     } catch (tenantErr) {
                         console.error("Failed to check tenants:", tenantErr);
-                        // Fallback to dashboard
+                        // Fallback to dashboard - don't block login
+                        console.log("Continuing to dashboard despite tenant check failure");
                         router.push("/dashboard");
                     }
                 } else {

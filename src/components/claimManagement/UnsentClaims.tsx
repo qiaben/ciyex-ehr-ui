@@ -3,8 +3,6 @@ import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { Edit, Eye, Paperclip, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const API_BASE = "/api/patient-billing";
-
 // Type definitions
 type Claim = {
   id: number;
@@ -17,6 +15,9 @@ type Claim = {
   notes?: string;
   description?: string;
   hasAttachment?: boolean;
+  clearingHouseStatus?: string;
+  clearingHouseStatusMessage?: string;
+  validationErrors?: string[];
 };
 
 type ClaimLineDetail = {
@@ -26,6 +27,21 @@ type ClaimLineDetail = {
   description: string;
   provider: string;
   totalSubmittedAmount: number;
+};
+
+type ClaimSubmissionResult = {
+  claimId: number;
+  success: boolean;
+  message: string;
+  clearingHouseStatus?: string;
+  validationErrors?: string[];
+};
+
+type PatientSearchResult = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  mrn: string;
 };
 
 const UnsentClaims: React.FC = () => {
@@ -42,7 +58,7 @@ const UnsentClaims: React.FC = () => {
 
   // ✅ Patient search
   const [patientSearchQuery, setPatientSearchQuery] = useState("");
-  const [patientSearchResults, setPatientSearchResults] = useState<any[]>([]);
+  const [patientSearchResults, setPatientSearchResults] = useState<PatientSearchResult[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
 
@@ -55,6 +71,12 @@ const UnsentClaims: React.FC = () => {
   const [showEditNarrativeModal, setShowEditNarrativeModal] = useState(false);
   const [selectedClaimForAction, setSelectedClaimForAction] = useState<Claim | null>(null);
   const [narrativeText, setNarrativeText] = useState("");
+  
+  // Dental Exchange submission states
+  const [showSubmissionModal, setShowSubmissionModal] = useState(false);
+  const [submissionInProgress, setSubmissionInProgress] = useState(false);
+  const [submissionResults, setSubmissionResults] = useState<ClaimSubmissionResult[]>([]);
+  const [validationErrors, setValidationErrors] = useState<Map<number, string[]>>(new Map());
   
   // Line details modal
   const [showLineDetailsModal, setShowLineDetailsModal] = useState(false);
@@ -86,7 +108,7 @@ const UnsentClaims: React.FC = () => {
       const response = await res.json();
       setPatientSearchResults(response.data?.content || []);
       setShowPatientDropdown(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Patient search error:", err);
       setPatientSearchResults([]);
     }
@@ -118,11 +140,11 @@ const UnsentClaims: React.FC = () => {
       const response = await res.json();
       setClaims(response.data || []);
       setUniqueCarriers(
-        Array.from(new Set((response.data || []).map((c: any) => String(c.provider)).filter(Boolean)))
+        Array.from(new Set((response.data || []).map((c: Claim) => String(c.provider)).filter(Boolean)))
       );
       setError(null);
-    } catch (err: any) {
-      setError(err.message || "Error fetching patient claims");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error fetching patient claims");
     } finally {
       setLoading(false);
     }
@@ -143,11 +165,11 @@ const UnsentClaims: React.FC = () => {
         })
         .then(data => {
           setClaims(data);
-          setUniqueCarriers(Array.from(new Set(data.map((c: any) => String(c.provider)).filter(Boolean))));
+          setUniqueCarriers(Array.from(new Set(data.map((c: Claim) => String(c.provider)).filter(Boolean))));
           setError(null);
         })
         .catch(err => {
-          setError(err.message || "Error fetching claims");
+          setError(err instanceof Error ? err.message : "Error fetching claims");
         })
         .finally(() => setLoading(false));
     }
@@ -165,7 +187,7 @@ const UnsentClaims: React.FC = () => {
   };
 
   // ✅ Filter claims
-  const filteredClaims = claims.filter((claim: any) => {
+  const filteredClaims = claims.filter((claim: Claim) => {
     return (
       !hiddenClaims.has(claim.id) &&
       (!searchPatient || (claim.patientName && claim.patientName.toLowerCase().includes(searchPatient.toLowerCase()))) &&
@@ -188,7 +210,7 @@ const UnsentClaims: React.FC = () => {
     if (selectedClaims.size === filteredClaims.length) {
       setSelectedClaims(new Set());
     } else {
-      setSelectedClaims(new Set(filteredClaims.map((c: any) => c.id)));
+      setSelectedClaims(new Set(filteredClaims.map((c: Claim) => c.id)));
     }
   };
 
@@ -227,8 +249,8 @@ const handleChangeStatus = async () => {
     setInsurancePaymentAmount("");
 
     window.location.reload();
-  } catch (err: any) {
-    setActionError(err.message || "Error changing status");
+  } catch (err: unknown) {
+    setActionError(err instanceof Error ? err.message : "Error changing status");
   } finally {
     setActionLoading(false);
   }
@@ -264,8 +286,8 @@ const handleChangeStatus = async () => {
       setTypeToConvert("");
 
       window.location.reload();
-    } catch (err: any) {
-      setActionError(err.message || "Error converting type");
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : "Error converting type");
     } finally {
       setActionLoading(false);
     }
@@ -291,11 +313,181 @@ const handleChangeStatus = async () => {
       const response = await res.json();
       setLineDetails(response.data || []);
       setShowLineDetailsModal(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching line details:", err);
       alert("Failed to load procedure details");
     } finally {
       setLineDetailsLoading(false);
+    }
+  };
+
+  // ✅ Validate claims before submission (only called when submitting to Dental Exchange)
+  const validateClaims = async (claimIds: number[]) => {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+    const errors = new Map<number, string[]>();
+
+    try {
+      for (const claimId of claimIds) {
+        try {
+          const res = await fetchWithAuth(`${API_URL}/api/dental-exchange/validate-claim/${claimId}`);
+          if (!res.ok) {
+            // If endpoint doesn't exist, skip validation
+            if (res.status === 404 || res.status === 401) {
+              console.warn(`Dental Exchange validation endpoint not available (${res.status})`);
+              continue;
+            }
+          }
+          const response = await res.json();
+          
+          if (!res.ok || !response.valid) {
+            errors.set(claimId, response.errors || ['Validation failed']);
+          }
+        } catch (err) {
+          // Skip individual claim validation errors
+          console.warn(`Validation error for claim ${claimId}:`, err);
+        }
+      }
+    } catch (err: unknown) {
+      console.error("Validation error:", err);
+    }
+
+    setValidationErrors(errors);
+    return errors.size === 0;
+  };
+
+  // ✅ Submit claims to Dental Exchange (only called manually by user)
+  const submitClaimsToDentalExchange = async () => {
+    if (selectedClaims.size === 0) {
+      alert("Please select claims to submit");
+      return;
+    }
+
+    // Check if Dental Exchange is configured
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+    try {
+      // Test if the endpoint exists
+      const testRes = await fetch(`${API_URL}/api/dental-exchange/validate-claim/0`, { method: 'HEAD' });
+      if (testRes.status === 404) {
+        alert("Claim submission service is not configured. Please contact your administrator.");
+        return;
+      }
+    } catch {
+      alert("Cannot connect to claim submission service. Please check your network connection or contact your administrator.");
+      return;
+    }
+
+    setSubmissionInProgress(true);
+    setSubmissionResults([]);
+    setShowSubmissionModal(true);
+
+    const claimIds = Array.from(selectedClaims);
+    const results: ClaimSubmissionResult[] = [];
+
+    try {
+      // First validate all claims
+      const isValid = await validateClaims(claimIds);
+      
+      if (!isValid && validationErrors.size > 0) {
+        alert("Some claims have validation errors. Please review and fix them before submitting.");
+        setSubmissionInProgress(false);
+        return;
+      }
+
+      // Submit each claim
+      for (const claimId of claimIds) {
+        try {
+          const res = await fetchWithAuth(
+            `${API_URL}/api/dental-exchange/submit-claim`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ claimId }),
+            }
+          );
+
+          if (!res.ok && (res.status === 404 || res.status === 401)) {
+            results.push({
+              claimId,
+              success: false,
+              message: 'Claim submission service not available. Please contact your administrator.',
+            });
+            continue;
+          }
+
+          const response = await res.json();
+
+          results.push({
+            claimId,
+            success: res.ok && response.success,
+            message: response.message || (res.ok ? 'Successfully submitted' : 'Submission failed'),
+            clearingHouseStatus: response.clearingHouseStatus,
+            validationErrors: response.validationErrors,
+          });
+
+          // Update claim in the list
+          if (res.ok && response.success) {
+            setClaims(prevClaims => 
+              prevClaims.map(c => 
+                c.id === claimId 
+                  ? { ...c, status: 'Sent', clearingHouseStatus: response.clearingHouseStatus, clearingHouseStatusMessage: response.message }
+                  : c
+              )
+            );
+          }
+        } catch (err: unknown) {
+          results.push({
+            claimId,
+            success: false,
+            message: err instanceof Error ? err.message : 'Unknown error occurred',
+          });
+        }
+      }
+
+      setSubmissionResults(results);
+      
+      // Clear selection after successful submission
+      const successfulClaims = results.filter(r => r.success).length;
+      if (successfulClaims > 0) {
+        setSelectedClaims(new Set());
+      }
+    } catch (err: unknown) {
+      console.error("Error submitting claims:", err);
+      alert(err instanceof Error ? err.message : "Failed to submit claims. Please contact your administrator.");
+    } finally {
+      setSubmissionInProgress(false);
+    }
+  };
+
+  // ✅ Check claim status from Dental Exchange (only called manually by user)
+  const checkClaimStatus = async (claimId: number) => {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/dental-exchange/claim-status/${claimId}`);
+      
+      if (!res.ok) {
+        if (res.status === 404 || res.status === 401) {
+          alert('Claim status service is not configured. Please contact your administrator.');
+        } else {
+          alert('Failed to fetch claim status');
+        }
+        return;
+      }
+
+      const response = await res.json();
+
+      // Update claim with latest status
+      setClaims(prevClaims =>
+        prevClaims.map(c =>
+          c.id === claimId
+            ? { ...c, clearingHouseStatus: response.status, clearingHouseStatusMessage: response.message }
+            : c
+        )
+      );
+      alert(`Status: ${response.status}\n${response.message || ''}`);
+    } catch (err: unknown) {
+      console.error("Error checking status:", err);
+      alert("Failed to check claim status. Please contact your administrator.");
     }
   };
 
@@ -328,7 +520,7 @@ const handleChangeStatus = async () => {
           
           {showPatientDropdown && patientSearchResults.length > 0 && (
             <div className="absolute z-50 bg-white border border-gray-300 rounded shadow-lg mt-1 w-full max-h-60 overflow-y-auto">
-              {patientSearchResults.map((patient: any) => (
+              {patientSearchResults.map((patient: PatientSearchResult) => (
                 <div
                   key={patient.id}
                   className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b last:border-b-0"
@@ -418,9 +610,10 @@ const handleChangeStatus = async () => {
 
           <button
             className="border px-2 py-1 rounded bg-orange-500 text-white"
-           
+            disabled={!selectedCount}
+            onClick={submitClaimsToDentalExchange}
           >
-            Sent Claims ({selectedCount})
+            Submit Claims ({selectedCount})
           </button>
 
           <button className="border px-2 py-1 rounded bg-gray-500 text-white">
@@ -443,6 +636,7 @@ const handleChangeStatus = async () => {
             <th className="p-2">Carrier</th>
             <th className="p-2">Procedures</th>
             <th className="p-2">Status</th>
+            <th className="p-2">CH Status</th>
             <th className="p-2">Notes</th>
             <th className="p-2">Description</th>
             <th className="p-2">Actions</th>
@@ -453,18 +647,20 @@ const handleChangeStatus = async () => {
         <tbody>
           {loading ? (
             <tr>
-              <td colSpan={11} className="text-center p-4">
+              <td colSpan={13} className="text-center p-4">
                 Loading...
               </td>
             </tr>
           ) : filteredClaims.length === 0 ? (
             <tr>
-              <td colSpan={11} className="text-center p-4">
+              <td colSpan={13} className="text-center p-4">
                 No claims found
               </td>
             </tr>
           ) : (
-            filteredClaims.map((claim: any) => (
+            filteredClaims.map((claim: Claim) => {
+              const hasValidationErrors = validationErrors.has(claim.id);
+              return (
               <tr key={claim.id} className="border-b">
                 <td className="p-2">
                   <input
@@ -496,6 +692,35 @@ const handleChangeStatus = async () => {
                   </button>
                 </td>
                 <td className="p-2">{claim.status}</td>
+                <td className="p-2">
+                  <div className="flex flex-col gap-1">
+                    {claim.clearingHouseStatus ? (
+                      <>
+                        <span className={`text-xs px-2 py-1 rounded ${
+                          claim.clearingHouseStatus === 'ACCEPTED' ? 'bg-green-100 text-green-800' :
+                          claim.clearingHouseStatus === 'REJECTED' ? 'bg-red-100 text-red-800' :
+                          claim.clearingHouseStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {claim.clearingHouseStatus}
+                        </span>
+                        <button
+                          className="text-xs text-blue-500 hover:underline"
+                          onClick={() => checkClaimStatus(claim.id)}
+                        >
+                          Check Status
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-gray-400">-</span>
+                    )}
+                    {hasValidationErrors && (
+                      <span className="text-xs text-red-600" title={validationErrors.get(claim.id)?.join(', ')}>
+                        ⚠ Validation Error
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="p-2">{claim.notes}</td>
                 <td className="p-2">{claim.description || ""}</td>
                 <td className="p-2 flex gap-2">
@@ -544,7 +769,8 @@ const handleChangeStatus = async () => {
                   </button>
                 </td>
               </tr>
-            ))
+            );
+            })
           )}
         </tbody>
       </table>
@@ -983,6 +1209,121 @@ const handleChangeStatus = async () => {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dental Exchange Submission Modal */}
+      {showSubmissionModal && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-3xl max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Claim Submission Results</h2>
+              {!submissionInProgress && (
+                <button
+                  className="text-gray-500 hover:text-gray-700 text-2xl"
+                  onClick={() => {
+                    setShowSubmissionModal(false);
+                    setSubmissionResults([]);
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            {submissionInProgress ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mb-4"></div>
+                <p className="text-lg text-gray-700">Submitting claims...</p>
+                <p className="text-sm text-gray-500 mt-2">Please wait while we process your claims</p>
+              </div>
+            ) : submissionResults.length > 0 ? (
+              <div>
+                <div className="mb-4 p-4 rounded bg-gray-50">
+                  <div className="flex justify-between text-sm">
+                    <span>Total Claims: {submissionResults.length}</span>
+                    <span className="text-green-600">
+                      Successful: {submissionResults.filter(r => r.success).length}
+                    </span>
+                    <span className="text-red-600">
+                      Failed: {submissionResults.filter(r => !r.success).length}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full border text-sm">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="p-3 text-left border">Claim ID</th>
+                        <th className="p-3 text-left border">Status</th>
+                        <th className="p-3 text-left border">Message</th>
+                        <th className="p-3 text-left border">CH Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {submissionResults.map((result) => (
+                        <tr key={result.claimId} className="hover:bg-gray-50">
+                          <td className="p-3 border">{result.claimId}</td>
+                          <td className="p-3 border">
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              result.success 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {result.success ? '✓ Success' : '✗ Failed'}
+                            </span>
+                          </td>
+                          <td className="p-3 border">
+                            {result.message}
+                            {result.validationErrors && result.validationErrors.length > 0 && (
+                              <ul className="mt-1 text-xs text-red-600">
+                                {result.validationErrors.map((err, idx) => (
+                                  <li key={idx}>• {err}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </td>
+                          <td className="p-3 border">
+                            {result.clearingHouseStatus && (
+                              <span className={`px-2 py-1 rounded text-xs ${
+                                result.clearingHouseStatus === 'ACCEPTED' ? 'bg-green-100 text-green-800' :
+                                result.clearingHouseStatus === 'REJECTED' ? 'bg-red-100 text-red-800' :
+                                result.clearingHouseStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {result.clearingHouseStatus}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex justify-end mt-6 gap-2">
+                  <button
+                    className="px-4 py-2 rounded bg-blue-500 hover:bg-blue-600 text-white"
+                    onClick={() => window.location.reload()}
+                  >
+                    Refresh Page
+                  </button>
+                  <button
+                    className="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400"
+                    onClick={() => {
+                      setShowSubmissionModal(false);
+                      setSubmissionResults([]);
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-center text-gray-500 py-4">No results yet</p>
+            )}
           </div>
         </div>
       )}
