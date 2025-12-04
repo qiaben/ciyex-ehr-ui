@@ -124,6 +124,7 @@ const navItems: NavItem[] = [
     icon: <SettingsIcon />,
     name: "Settings",
     subItems: [
+     
       { name: "Providers", path: "/settings/providers" },
       { name: "Referral Providers", path: "/settings/referral-providers" },
       { name: "Referral Practices", path: "/settings/referral-practices" },
@@ -144,6 +145,8 @@ const navItems: NavItem[] = [
           { name: "Encounters Section", path: "/settings/forms/admin" },
         ],
       },
+       { name: "Facilities", path: "/settings/facilities" },
+      { name: "Practice", path: "/settings/practice" },
     ],
   },
 

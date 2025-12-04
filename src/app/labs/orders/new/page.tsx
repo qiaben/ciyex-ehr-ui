@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import AdminLayout from "@/app/(admin)/layout";
 import LabOrderForm from "@/components/laborder/LabOrderForm";
 import { useSearchParams } from "next/navigation";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 
-export default function NewLabOrderPage() {
+function NewLabOrderContent() {
   const search = useSearchParams();
   const editId = search?.get("editId");
   const patientId = search?.get("patientId");
@@ -72,7 +72,6 @@ export default function NewLabOrderPage() {
   }, [editId, patientId]);
 
   return (
-    
     <AdminLayout>
       <div className="p-6">
         <div className="max-w-[1200px] mx-auto">
@@ -87,5 +86,21 @@ export default function NewLabOrderPage() {
         </div>
       </div>
     </AdminLayout>
+  );
+}
+
+export default function NewLabOrderPage() {
+  return (
+    <Suspense fallback={
+      <AdminLayout>
+        <div className="p-6">
+          <div className="max-w-[1200px] mx-auto">
+            <div className="p-6 bg-white border rounded text-sm text-gray-600">Loading...</div>
+          </div>
+        </div>
+      </AdminLayout>
+    }>
+      <NewLabOrderContent />
+    </Suspense>
   );
 }
