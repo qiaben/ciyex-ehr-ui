@@ -25,13 +25,17 @@ interface ProviderRequestData {
     };
     contact: {
         email: string;
-        phoneNumber: string;
+        phoneNumber?: string;
+        mobileNumber?: string;
+    };
+    systemAccess?: {
+        status?: string;
     };
 }
 
 const ProviderRegistrationForm = () => {
     const [formData, setFormData] = useState({
-        fullName: "",
+        firstName: "",
         lastName: "",
         dob: "",
         gender: "",
@@ -64,7 +68,7 @@ const ProviderRegistrationForm = () => {
 
     const handleSubmit = async () => {
         const requiredFields = [
-            formData.fullName,
+            (formData as any).firstName,
             formData.lastName,
             formData.dob,
             formData.gender,
@@ -90,7 +94,7 @@ const ProviderRegistrationForm = () => {
         const requestData: ProviderRequestData = {
             npi: formData.npiNumber,
             identification: {
-                firstName: formData.fullName.split(" ")[0],
+                firstName: (formData as any).firstName || "",
                 lastName: formData.lastName,
                 gender: formData.gender,
                 dateOfBirth: formData.dob,
@@ -105,18 +109,37 @@ const ProviderRegistrationForm = () => {
             contact: {
                 email: formData.email,
                 phoneNumber: formData.phone,
+                mobileNumber: formData.phone, // backend validation requires mobileNumber
+            },
+            systemAccess: {
+                status: "ACTIVE",
             },
         };
+
+        // Quick check: ensure an auth token exists in local/session storage
+        const token = typeof window !== "undefined" ? (localStorage.getItem("token") || localStorage.getItem("authToken") || sessionStorage.getItem("token")) : null;
+        if (!token) {
+            setAlertData({
+                variant: "error",
+                title: "Not Signed In",
+                message: "You are not signed in. Please sign in and try again.",
+            });
+            return;
+        }
 
         try {
             const response = await fetchWithAuth(`${apiUrl}/api/providers`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
                 body: JSON.stringify(requestData),
             });
 
-
-            const result = await response.json();
+            let result: any = null;
+            try {
+                result = await response.json();
+            } catch (err) {
+                console.error("Failed to parse create provider response", err);
+            }
 
             if (response.ok) {
                 setAlertData({
@@ -125,14 +148,24 @@ const ProviderRegistrationForm = () => {
                     message: "Provider created successfully!",
                 });
 
+                // Redirect to provider list so the newly created provider is visible
                 setTimeout(() => {
-                    router.push("/settings");
-                }, 2000);
+                    router.push("/settings/providers");
+                }, 1200);
+            } else if (response.status === 401) {
+                // Unauthorized — surface clear message
+                console.error("Create provider unauthorized", { status: response.status, body: result });
+                setAlertData({
+                    variant: "error",
+                    title: "Unauthorized",
+                    message: "Your session has expired or you are not signed in. Please sign in and try again.",
+                });
             } else {
+                console.error("Create provider failed", { status: response.status, body: result });
                 setAlertData({
                     variant: "error",
                     title: "Error",
-                    message: result.message || "An error occurred.",
+                    message: (result && (result.message || result.error)) || `Save failed (status ${response.status})`,
                 });
             }
         } catch {
