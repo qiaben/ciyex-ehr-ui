@@ -2,7 +2,7 @@
 import React from "react";
 
 interface PersonalInfoFormData {
-    fullName: string;
+    firstName: string;
     lastName: string;
     dob: string;
     gender: string;
@@ -21,19 +21,19 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, handleChange, err
         <div className="bg-white p-6 rounded-lg shadow-md grid grid-cols-1 md:grid-cols-2 gap-6">
             {/*<h2 className="text-xl font-semibold mb-4 col-span-2">Personal Information</h2>*/}
 
-            {/* Full Name Input */}
+            {/* First Name Input */}
             <div>
-                <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">Full Name</label>
+                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name</label>
                 <input
                     type="text"
-                    id="fullName"
-                    name="fullName"
-                    value={formData.fullName}
+                    id="firstName"
+                    name="firstName"
+                    value={formData.firstName}
                     onChange={handleChange}
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter your full name"
+                    placeholder="Enter your first name"
                 />
-                {errors.fullName && <p className="text-red-500 text-xs">{errors.fullName}</p>}
+                {errors.firstName && <p className="text-red-500 text-xs">{errors.firstName}</p>}
             </div>
 
             {/* Last Name Input */}
