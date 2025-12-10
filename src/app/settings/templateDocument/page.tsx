@@ -1369,10 +1369,10 @@ export default function TemplateStudio() {
       let saved: ServerTemplate;
       if (currentId) {
         saved = await apiUpdateTemplate(Number(currentId), body);
-        showToast("Template updated successfully!", "success");
+        showToast("Saved successfully", "success");
       } else {
         saved = await apiCreateTemplate(body);
-        showToast("Template created successfully!", "success");
+        showToast("Saved successfully", "success");
       }
 
       // sync editor and id from server
@@ -1404,8 +1404,16 @@ export default function TemplateStudio() {
       setMyTemplates(mapped);
     } catch (e: unknown) {
       console.error(e);
-      const errMsg = e instanceof Error ? e.message : "Unknown error";
-      showToast(`Failed to save: ${errMsg}`, "error");
+      let errMsg = "Failed to save";
+      if (e instanceof Error) {
+        try {
+          const parsed = JSON.parse(e.message);
+          errMsg = parsed.message || e.message;
+        } catch {
+          errMsg = e.message;
+        }
+      }
+      showToast(errMsg, "error");
     } finally {
       setSaveOpen(false);
     }
@@ -1426,11 +1434,19 @@ export default function TemplateStudio() {
       await apiDeleteTemplate(Number(t.id));
       setMyTemplates(prev => prev.filter(x => x.id !== t.id));
       if (t.id === currentId) { setCurrentId(null); setTitle(""); setTemplateText(""); }
-      showToast("Template deleted successfully!", "success");
+      showToast("Deleted successfully", "success");
     } catch (e: unknown) {
       console.error(e);
-      const errMsg = e instanceof Error ? e.message : "Unknown error";
-      showToast(`Failed to delete: ${errMsg}`, "error");
+      let errMsg = "Failed to delete";
+      if (e instanceof Error) {
+        try {
+          const parsed = JSON.parse(e.message);
+          errMsg = parsed.message || e.message;
+        } catch {
+          errMsg = e.message;
+        }
+      }
+      showToast(errMsg, "error");
     }
   };
 
@@ -1856,8 +1872,8 @@ export default function TemplateStudio() {
         </aside>
       </main>
 
-      {/* Toast Notifications (relocated top-right, lower z-index to avoid covering modals) */}
-      <div className="fixed top-4 right-4 z-40 flex flex-col gap-3 items-end">
+      {/* Toast Notifications */}
+      <div className="fixed top-20 right-4 z-[9999] flex flex-col gap-3 items-end pointer-events-none">
         <AnimatePresence>
           {toasts.map(t => (
             <motion.div
