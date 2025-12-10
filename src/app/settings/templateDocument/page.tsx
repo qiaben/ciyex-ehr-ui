@@ -16,14 +16,13 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const API = `${API_BASE}/api/template-documents`;
 
 // map UI context <-> backend enum
-const toServerContext = (c: "encounter" | "portal") =>
-  (c === "encounter" ? "ENCOUNTER" : "PORTAL") as "ENCOUNTER" | "PORTAL";
-const fromServerContext = (c: "ENCOUNTER" | "PORTAL") =>
-  (c === "ENCOUNTER" ? "encounter" : "portal") as "encounter" | "portal";
+const toServerContext = (c: "encounter" | "portal") => c;
+const fromServerContext = (c: string) =>
+  (c.toLowerCase() === "encounter" ? "encounter" : "portal") as "encounter" | "portal";
 
 type UpsertBody = {
   name: string;
-  context: "ENCOUNTER" | "PORTAL";
+  context: "encounter" | "portal";
   content: string; // full <!doctype html> doc
   options: {
     theme: TemplateTheme;
@@ -36,7 +35,7 @@ type UpsertBody = {
 type ServerTemplate = {
   id: number;
   name: string;
-  context: "ENCOUNTER" | "PORTAL";
+  context: "encounter" | "portal";
   content: string;
   options: Record<string, unknown>;
   createdAt?: string;
@@ -58,8 +57,8 @@ async function apiGetTemplate(id: number): Promise<ServerTemplate> {
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
-async function apiListTemplates(context?: "ENCOUNTER" | "PORTAL"): Promise<ServerTemplate[]> {
-  const url = context ? `${API}?context=${context}` : `${API}`;
+async function apiListTemplates(context?: "encounter" | "portal"): Promise<ServerTemplate[]> {
+  const url = context ? `${API}?context=${context.toUpperCase()}` : `${API}`;
   const res = await fetchWithAuth(url, { method: "GET" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
