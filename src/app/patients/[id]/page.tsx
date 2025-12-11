@@ -31,6 +31,9 @@ import EncounterTableExpandable from "@/components/encounter/EncounterTableExpan
 
 import PatientBilling from "@/components/billing/PatientBilling";
 
+// Normalize API base - if NEXT_PUBLIC_API_URL is unset, fall back to localhost backend
+// (other utils use http://localhost:8080 as a default when not set)
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080").replace(/\/$/, "");
 interface Patient {
     id: string;
     firstName: string;
@@ -162,9 +165,9 @@ function RecentActivityFeed({ patientId, limit = 10 }: RecentActivityProps) {
 
                 // Fetch data from multiple endpoints in parallel (we only process appointments, medications and labs here)
                 const [appointmentsRes, medicationsRes, labsRes] = await Promise.allSettled([
-                    fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patientId}/appointments?limit=5`),
-                    fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patientId}/medications?limit=5`),
-                    fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patientId}/labs?limit=5`),
+                    fetchWithAuth(`${API_BASE}/api/patients/${patientId}/appointments?limit=5`),
+                    fetchWithAuth(`${API_BASE}/api/patients/${patientId}/medications?limit=5`),
+                    fetchWithAuth(`${API_BASE}/api/patients/${patientId}/labs?limit=5`),
                 ]);
 
                 const allActivities: ActivityItem[] = [];
@@ -608,7 +611,7 @@ export default function PatientDashboardPage() {
             try {
                 setLoading(true);
                 const res = await fetchWithAuth(
-                    `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}`
+                    `${API_BASE}/api/patients/${id}`
                 );
                 
                 if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -634,7 +637,7 @@ export default function PatientDashboardPage() {
                 const fetchHistory = async () => {
                     try {
                         const res = await fetchWithAuth(
-                            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}/history`
+                            `${API_BASE}/api/patients/${id}/history`
                         );
                         const data = await res.json();
                         if (res.ok && data.success) {
@@ -648,7 +651,7 @@ export default function PatientDashboardPage() {
                 const fetchBilling = async () => {
                     try {
                         const res = await fetchWithAuth(
-                            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}/billing`
+                            `${API_BASE}/api/patients/${id}/billing`
                         );
                         const data = await res.json();
                         if (res.ok && data.success) {
@@ -662,7 +665,7 @@ export default function PatientDashboardPage() {
                 const fetchAppointments = async () => {
                     try {
                         const res = await fetchWithAuth(
-                            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}/appointments`
+                            `${API_BASE}/api/patients/${id}/appointments`
                         );
                         const data = await res.json();
                         if (res.ok && data.success) setAppointments(data.data);
@@ -674,7 +677,7 @@ export default function PatientDashboardPage() {
                 const fetchMedications = async () => {
                     try {
                         const res = await fetchWithAuth(
-                            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}/medications`
+                            `${API_BASE}/api/patients/${id}/medications`
                         );
                         const data = await res.json();
                         if (res.ok && data.success) setMedications(data.data);
@@ -686,7 +689,7 @@ export default function PatientDashboardPage() {
                 const fetchAllergies = async () => {
                     try {
                         const res = await fetchWithAuth(
-                            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}/allergies`
+                            `${API_BASE}/api/patients/${id}/allergies`
                         );
                         const data = await res.json();
                         if (res.ok && data.success) setAllergies(data.data);
@@ -722,7 +725,7 @@ export default function PatientDashboardPage() {
         if (!demoForm || !patient) return;
         const payload = { ...patient, ...demoForm };
         const res = await fetchWithAuth(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patient.id}`,
+            `${API_BASE}/api/patients/${patient.id}`,
             {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -748,7 +751,7 @@ export default function PatientDashboardPage() {
     async function saveHistory() {
         if (!patient) return;
         const res = await fetchWithAuth(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patient.id}/history`,
+            `${API_BASE}/api/patients/${patient.id}/history`,
             {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -766,7 +769,7 @@ export default function PatientDashboardPage() {
 
         const payload = { policies: insuranceForm };
         const res = await fetchWithAuth(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patient.id}/insurance`,
+            `${API_BASE}/api/patients/${patient.id}/insurance`,
             {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -792,7 +795,7 @@ export default function PatientDashboardPage() {
     async function saveEncounter() {
         if (!patient) throw new Error("No patient loaded");
         const res = await fetchWithAuth(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patient.id}/encounters`,
+            `${API_BASE}/api/patients/${patient.id}/encounters`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -1134,9 +1137,6 @@ export default function PatientDashboardPage() {
 
 
 
-            case "documents":
-                return <DocumentsFlat />;
-
             case "report":
                 return (
                     <ReportFlat
@@ -1283,7 +1283,7 @@ export default function PatientDashboardPage() {
                                 href="/patients"
                                 className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 border border-gray-300 text-xs font-medium text-gray-700 flex items-center"
                             >
-                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className= "w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                                 Patients
@@ -1313,17 +1313,7 @@ export default function PatientDashboardPage() {
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-3 shrink-0">
-                            <button
-                                className="h-8 px-3 rounded bg-blue-600 hover:bg-blue-700 text-xs font-medium text-white shadow-sm inline-flex items-center"
-                                onClick={handleOpenEncounter}
-                            >
-                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                </svg>
-                                New Encounter
-                            </button>
-                        </div>
+
                     </div>
 
                     <div className="mt-1.5">

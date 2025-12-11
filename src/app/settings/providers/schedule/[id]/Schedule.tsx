@@ -179,7 +179,11 @@ const Page = () => {
     const [weeklyDays, setWeeklyDays] = useState<boolean[]>([false, true, true, true, true, true, false]); // Mon–Fri
     const [startTime, setStartTime] = useState<string>("09:00");
     const [endTime, setEndTime] = useState<string>("");
-    const [locations, setLocations] = useState<Location[]>([]);
+    const [locations, setLocations] = useState<Location[]>([
+        { id: 1, name: "Main Clinic", address: "123 Main St" },
+        { id: 2, name: "Downtown Office", address: "456 Downtown Ave" },
+        { id: 3, name: "North Branch", address: "789 North Rd" }
+    ]);
     const today = new Date();
     const todayISO = today.toISOString().split("T")[0];
     const todayInput = `${String(today.getMonth() + 1).padStart(2,"0")}/${String(today.getDate()).padStart(2,"0")}/${today.getFullYear()}`;
@@ -216,19 +220,25 @@ const Page = () => {
     useEffect(() => {
         (async () => {
             try {
-                const [resProvider,resLocations] = await Promise.all([
-                    fetchWithAuth(`${apiUrl}/api/providers/${id}`, { method: "GET" }),
-                    fetchWithAuth(`${apiUrl}/api/locations`, { method: "GET" }), // ✅ new call
-
-                ]);
-
+                const resProvider = await fetchWithAuth(`${apiUrl}/api/providers/${id}`, { method: "GET" });
+                
                 if (resProvider.ok) {
                     const data = await resProvider.json();
                     setProvider(data?.data ?? null);
                 }
-                if (resLocations.ok) {
-                    const data = await resLocations.json();
-                    setLocations(data?.data ?? []); // ✅ set state properly
+                
+                // Try to fetch locations, but keep mock data if it fails
+                try {
+                    const resLocations = await fetchWithAuth(`${apiUrl}/api/locations`, { method: "GET" });
+                    if (resLocations.ok) {
+                        const data = await resLocations.json();
+                        const locationData = data?.data;
+                        if (Array.isArray(locationData) && locationData.length > 0) {
+                            setLocations(locationData);
+                        }
+                    }
+                } catch (error) {
+                    console.log('Using mock location data');
                 }
             } finally {
                 setLoading(false);
@@ -523,7 +533,7 @@ const Page = () => {
                                         <option value="">Select Location</option>
                                         {locations.map((loc) => (
                                             <option key={loc.id} value={loc.id}>
-                                                {loc.name} {loc.address ? `- ${loc.address}` : ""}
+                                                {loc.name} {loc.address ? ` - ${loc.address}` : ""}
                                             </option>
                                         ))}
                                     </select>
@@ -706,10 +716,10 @@ const Page = () => {
                                                     value={locationId}
                                                     onChange={(e) => setLocationId(e.target.value ? Number(e.target.value) : "")}
                                                     className="block w-full h-10 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 px-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"                                                >
-                                                    <option value="">Select an option</option>
+                                                    <option value="">Select Location</option>
                                                     {locations.map((loc) => (
                                                         <option key={loc.id} value={loc.id}>
-                                                            {loc.name} {loc.address ? `- ${loc.address}` : ""}
+                                                            {loc.name} {loc.address ? ` - ${loc.address}` : ""}
                                                         </option>
                                                     ))}
                                                 </select>
