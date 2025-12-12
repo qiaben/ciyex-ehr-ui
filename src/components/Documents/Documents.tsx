@@ -837,9 +837,8 @@ export default function Page({ patientId: propPatientId }: DocumentsProps = {}) 
         form.append("file", f, f.name);
         form.append("patientId", patientId);
 
-        // Prefer the patient-scoped upload endpoint when available so the
-        // backend can associate the uploaded document with the correct patient.
-        const url = `${base}/api/documents/upload/patient/${patientId}`;
+        // Use the generic upload endpoint
+        const url = `${base}/api/documents/upload`;
 
         console.groupCollapsed("%cPOST %s", "color:#0b74de;font-weight:600", url);
         const headersWeSet: RequestInit["headers"] = { 
