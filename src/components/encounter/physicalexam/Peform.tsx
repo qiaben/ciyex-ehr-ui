@@ -237,6 +237,7 @@
 import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse, PhysicalExamDto, PhysicalExamSectionDto } from "@/utils/types";
+import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
 type Props = {
     patientId: number;
@@ -284,9 +285,18 @@ export default function Peform({ patientId, encounterId, editing, onSaved, onCan
     const [err, setErr] = useState<string | null>(null);
 
     useEffect(() => {
-        if (editing?.id) {
+        const encounterData = getEncounterData(patientId, encounterId);
+        if (encounterData.physicalExam && !editing?.id) {
+            const data = encounterData.physicalExam;
+            setSummary(data.summary || "");
+            setSections(data.sections || DEFAULT_KEYS.map((sectionKey) => ({
+                sectionKey,
+                allNormal: true,
+                normalText: "",
+                findings: "",
+            })));
+        } else if (editing?.id) {
             setSummary(editing.summary || "");
-            // normalize incoming + ensure all default keys exist
             const incoming = (editing.sections || []).map<PhysicalExamSectionDto>((s) => ({
                 sectionKey: s.sectionKey,
                 allNormal: !!s.allNormal,
@@ -299,7 +309,6 @@ export default function Peform({ patientId, encounterId, editing, onSaved, onCan
                     mapped.push({ sectionKey: k, allNormal: true, normalText: "", findings: "" });
                 }
             });
-            // put defaults first in a consistent order, then custom keys
             mapped.sort((a, b) => {
                 const ia = DEFAULT_KEYS.indexOf(a.sectionKey);
                 const ib = DEFAULT_KEYS.indexOf(b.sectionKey);
@@ -317,7 +326,13 @@ export default function Peform({ patientId, encounterId, editing, onSaved, onCan
                 }))
             );
         }
-    }, [editing]);
+    }, [editing, patientId, encounterId]);
+
+    useEffect(() => {
+        if (summary || sections.some(s => s.normalText || s.findings)) {
+            setEncounterSection(patientId, encounterId, "physicalExam", { summary, sections } as any);
+        }
+    }, [summary, sections, patientId, encounterId]);
 
     function updateSection(i: number, patch: Partial<PhysicalExamSectionDto>) {
         setSections((prev) => {
@@ -380,6 +395,7 @@ export default function Peform({ patientId, encounterId, editing, onSaved, onCan
             if (!res.ok || !json.success) throw new Error(json.message || "Save failed");
 
             onSaved(json.data!);
+            removeEncounterSection(patientId, encounterId, "physicalExam");
             if (!editing?.id) {
                 setSummary("");
                 setSections(
@@ -453,21 +469,23 @@ export default function Peform({ patientId, encounterId, editing, onSaved, onCan
 
                         <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-sm font-medium mb-1">Normal Text</label>
+                                <label className="block text-sm font-medium mb-1">Normal Text <span className="text-red-600">*</span></label>
                                 <input
                                     className="w-full rounded-lg border px-3 py-2 focus:ring"
                                     value={sec.normalText || ""}
                                     onChange={(e) => updateSection(i, { normalText: e.target.value })}
                                     placeholder='e.g., "Well-nourished, no acute distress"'
+                                    required
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium mb-1">Findings</label>
+                                <label className="block text-sm font-medium mb-1">Findings <span className="text-red-600">*</span></label>
                                 <input
                                     className="w-full rounded-lg border px-3 py-2 focus:ring"
                                     value={sec.findings || ""}
                                     onChange={(e) => updateSection(i, { findings: e.target.value })}
                                     placeholder='e.g., "Mild nasal congestion"'
+                                    required
                                 />
                             </div>
                         </div>
@@ -486,7 +504,7 @@ export default function Peform({ patientId, encounterId, editing, onSaved, onCan
                     {saving ? "Saving..." : editing?.id ? "Update" : "Save"}
                 </button>
                 {onCancel && (
-                    <button type="button" onClick={onCancel} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
+                    <button type="button" onClick={() => { removeEncounterSection(patientId, encounterId, "physicalExam"); onCancel(); }} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
                         Cancel
                     </button>
                 )}

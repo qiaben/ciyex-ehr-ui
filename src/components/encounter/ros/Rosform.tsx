@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse, RosDto } from "@/utils/types";
+import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
 // split "a, b\nc" → ["a","b","c"]
 function splitDetails(s: string): string[] {
@@ -79,7 +80,14 @@ export default function ROSForm({ patientId, encounterId, editing, onSaved, onCa
     const [err, setErr] = useState<string | null>(null);
 
     useEffect(() => {
-        if (editing?.id) {
+        const encounterData = getEncounterData(patientId, encounterId);
+        if (encounterData.reviewOfSystems && !editing?.id) {
+            const data = encounterData.reviewOfSystems;
+            setSystem(data.system || ROS_SYSTEMS[0]);
+            setStatus(data.status || "Negative");
+            setFinding(data.finding || "");
+            setNotes(data.notes || "");
+        } else if (editing?.id) {
             setSystem(editing.system || ROS_SYSTEMS[0]);
             setStatus(editing.status || "Negative");
             setFinding(editing.finding || "");
@@ -90,7 +98,18 @@ export default function ROSForm({ patientId, encounterId, editing, onSaved, onCa
             setFinding("");
             setNotes("");
         }
-    }, [editing]);
+    }, [editing, patientId, encounterId]);
+
+    useEffect(() => {
+        if (system || finding || notes) {
+            setEncounterSection(patientId, encounterId, "reviewOfSystems", {
+                system,
+                status,
+                finding,
+                notes
+            });
+        }
+    }, [system, status, finding, notes, patientId, encounterId]);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -129,6 +148,7 @@ export default function ROSForm({ patientId, encounterId, editing, onSaved, onCa
             }
 
             onSaved(toRosDto(json.data));
+            removeEncounterSection(patientId, encounterId, "reviewOfSystems");
             if (!editing?.id) {
                 setSystem(ROS_SYSTEMS[0]);
                 setStatus("Negative");
@@ -149,11 +169,12 @@ export default function ROSForm({ patientId, encounterId, editing, onSaved, onCa
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                    <label className="block text-sm font-medium mb-1">System</label>
+                    <label className="block text-sm font-medium mb-1">System <span className="text-red-600">*</span></label>
                     <select
                         className="w-full rounded-lg border px-3 py-2 focus:ring"
                         value={system}
                         onChange={(e) => setSystem(e.target.value)}
+                        required
                     >
                         {ROS_SYSTEMS.map((s) => (
                             <option key={s} value={s}>{s}</option>
@@ -175,22 +196,24 @@ export default function ROSForm({ patientId, encounterId, editing, onSaved, onCa
                 </div>
 
                 <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Finding (if Positive)</label>
+                    <label className="block text-sm font-medium mb-1">Finding (if Positive) <span className="text-red-600">*</span></label>
                     <input
                         className="w-full rounded-lg border px-3 py-2 focus:ring"
                         value={finding}
                         onChange={(e) => setFinding(e.target.value)}
                         placeholder="e.g., chest pain, shortness of breath"
+                        required
                     />
                 </div>
 
                 <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Notes</label>
+                    <label className="block text-sm font-medium mb-1">Notes <span className="text-red-600">*</span></label>
                     <textarea
                         className="w-full rounded-lg border px-3 py-2 focus:ring min-h-24"
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Additional comments"
+                        required
                     />
                 </div>
             </div>
@@ -203,7 +226,7 @@ export default function ROSForm({ patientId, encounterId, editing, onSaved, onCa
                     {saving ? "Saving..." : editing?.id ? "Update" : "Save"}
                 </button>
                 {onCancel && (
-                    <button type="button" onClick={onCancel} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
+                    <button type="button" onClick={() => { removeEncounterSection(patientId, encounterId, "reviewOfSystems"); onCancel(); }} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
                         Cancel
                     </button>
                 )}

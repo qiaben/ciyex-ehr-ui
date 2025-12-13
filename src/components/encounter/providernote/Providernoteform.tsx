@@ -328,6 +328,7 @@
 import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse, ProviderNoteDto } from "@/utils/types";
+import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
 type Props = {
     patientId: number;
@@ -375,19 +376,29 @@ export default function Providernoteform({
     const [saving, setSaving] = useState(false);
     const [err, setErr] = useState<string | null>(null);
 
-    // If backend marks note as signed, keep UI read-only
     const isSigned = !!editing?.signed;
 
     useEffect(() => {
-        if (editing) {
+        const encounterData = getEncounterData(patientId, encounterId);
+        if (encounterData.providerNotes && !editing?.id) {
+            const data = encounterData.providerNotes;
+            setNoteTitle(data.noteTitle ?? "");
+            setNoteTypeCode(data.noteTypeCode ?? DEFAULT_TYPE_CODE);
+            setNoteStatus((data.noteStatus as NoteStatus) ?? "draft");
+            setNoteDateTime(data.noteDateTime ?? "");
+            setAuthorPractitionerId(data.authorPractitionerId ?? "");
+            setSubjective(data.subjective ?? "");
+            setObjective(data.objective ?? "");
+            setAssessment(data.assessment ?? "");
+            setPlan(data.plan ?? "");
+            setNarrative(data.narrative ?? "");
+            setExternalId((data as any).externalId ?? "");
+        } else if (editing) {
             setNoteTitle(editing.noteTitle ?? "");
             setNoteTypeCode(editing.noteTypeCode ?? DEFAULT_TYPE_CODE);
             setNoteStatus(((editing.noteStatus as string) || "draft") as NoteStatus);
-
-            // Backend often has seconds/zone; trim for <input type="datetime-local">
             const dt = (editing.noteDateTime ?? "").replace(/:\d\d(\.\d+)?Z?$/, "");
             setNoteDateTime(dt);
-
             setAuthorPractitionerId(
                 editing.authorPractitionerId != null ? String(editing.authorPractitionerId) : ""
             );
@@ -410,7 +421,17 @@ export default function Providernoteform({
             setNarrative("");
             setExternalId("");
         }
-    }, [editing]);
+    }, [editing, patientId, encounterId]);
+
+    useEffect(() => {
+        if (noteTitle || subjective || objective || assessment || plan || narrative) {
+            setEncounterSection(patientId, encounterId, "providerNotes", {
+                noteTitle, noteTypeCode, noteStatus, noteDateTime,
+                authorPractitionerId, subjective, objective,
+                assessment, plan, narrative
+            } as any);
+        }
+    }, [noteTitle, noteTypeCode, noteStatus, noteDateTime, authorPractitionerId, subjective, objective, assessment, plan, narrative, patientId, encounterId]);
 
     function normalizeLocalDateTime(val: string) {
         // Ensure we send seconds too (yyyy-MM-ddTHH:mm -> yyyy-MM-ddTHH:mm:00)
@@ -479,8 +500,8 @@ export default function Providernoteform({
             }
 
             onSaved(json.data!);
+            removeEncounterSection(patientId, encounterId, "providerNotes");
 
-            // Clear only after create
             if (!editing?.id) {
                 setNoteTitle("");
                 setNoteTypeCode(DEFAULT_TYPE_CODE);
@@ -578,25 +599,27 @@ export default function Providernoteform({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-sm font-medium mb-1">Subjective</label>
+                    <label className="block text-sm font-medium mb-1">Subjective <span className="text-red-600">*</span></label>
                     <textarea
                         className="w-full rounded-lg border px-3 py-2 min-h-24"
                         value={subjective}
                         onChange={(e) => setSubjective(e.target.value)}
                         disabled={isSigned}
+                        required={!isSigned}
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium mb-1">Objective</label>
+                    <label className="block text-sm font-medium mb-1">Objective <span className="text-red-600">*</span></label>
                     <textarea
                         className="w-full rounded-lg border px-3 py-2 min-h-24"
                         value={objective}
                         onChange={(e) => setObjective(e.target.value)}
                         disabled={isSigned}
+                        required={!isSigned}
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium mb-1">Assessment</label>
+                    <label className="block text-sm font-medium mb-1">Assessment <span className="text-red-600">*</span></label>
                     <textarea
                         className="w-full rounded-lg border px-3 py-2 min-h-24"
                         value={assessment}
@@ -605,23 +628,25 @@ export default function Providernoteform({
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium mb-1">Plan</label>
+                    <label className="block text-sm font-medium mb-1">Plan <span className="text-red-600">*</span></label>
                     <textarea
                         className="w-full rounded-lg border px-3 py-2 min-h-24"
                         value={plan}
                         onChange={(e) => setPlan(e.target.value)}
                         disabled={isSigned}
+                        required={!isSigned}
                     />
                 </div>
             </div>
 
             <div>
-                <label className="block text-sm font-medium mb-1">Narrative</label>
+                <label className="block text-sm font-medium mb-1">Narrative <span className="text-red-600">*</span></label>
                 <textarea
                     className="w-full rounded-lg border px-3 py-2 min-h-24"
                     value={narrative}
                     onChange={(e) => setNarrative(e.target.value)}
                     disabled={isSigned}
+                    required={!isSigned}
                 />
             </div>
 
@@ -640,7 +665,7 @@ export default function Providernoteform({
                 {onCancel && (
                     <button
                         type="button"
-                        onClick={onCancel}
+                        onClick={() => { removeEncounterSection(patientId, encounterId, "providerNotes"); onCancel(); }}
                         className="rounded-xl border px-4 py-2 hover:bg-gray-50"
                     >
                         {isSigned ? "Close" : "Cancel"}
