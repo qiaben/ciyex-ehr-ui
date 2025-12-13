@@ -370,119 +370,56 @@ export default function Encountersummary({
 
     const summaryRef = useRef<HTMLDivElement | null>(null);
 
-// ⬇️ NEW: the loader we can call anytime
 const loadAll = useCallback(async () => {
-  //let alive = true;
-  const alive = true;
-
   try {
     setLoading(true);
     setTopErr(null);
 
-    // ---- Encounter meta ----
-    const meta =
-      (await tryMany<EncounterMeta>([
-        `/api/encounters/${patientId}/${encounterId}/summary`,
-        `/api/encounters/${patientId}/${encounterId}`,
-      ])) || null;
+    const res = await fetchWithOrg(`/api/encounters/${patientId}/${encounterId}/summary`, {
+      headers: { Accept: "application/json" },
+    });
+    const json = await safeJson<ApiResponse<{
+      meta: EncounterMeta;
+      assignedProviders: AssignedProvider[];
+      chiefComplaints: ChiefComplaint[];
+      hpi: HPIEntry[];
+      pmh: PMHEntry[];
+      patientMH: PatientMHEntry[];
+      familyHistory: FamilyHistory[];
+      socialHistory: SocialHistory;
+      ros: ROSEntry[];
+      physicalExam: PhysicalExam[];
+      procedures: Procedure[];
+      assessment: Assessment[];
+      plan: Plan[];
+      providerNotes: ProviderNote[];
+      providerSignature: ProviderSignature;
+      dateTimeFinalized: DateTimeFinalized;
+    }>>(res);
 
-    // ---- Sections (same list you already had) ----
-    const [
-      ap, cc, hp, pm, pm2, fam, socRaw, rs, px, pr, cd, asmt, pl, pnotes, sig, so, dtf,
-    ] = await Promise.all([
-      tryMany<AssignedProvider[]>([
-        `/api/assigned-providers/${patientId}/${encounterId}`,
-        `/api/assigned/${patientId}/${encounterId}`,
-      ]),
-      tryMany<ChiefComplaint[]>([
-        `/api/chief-complaint/${patientId}/${encounterId}`,
-        `/api/chief-complaints/${patientId}/${encounterId}`,
-        `/api/cc/${patientId}/${encounterId}`,
-      ]),
-      tryMany<HPIEntry[]>([
-        `/api/history-of-present-illness/${patientId}/${encounterId}`,
-        `/api/hpi/${patientId}/${encounterId}`,
-      ]),
-      tryMany<PMHEntry[]>([
-        `/api/pmh/${patientId}/${encounterId}`,
-        `/api/past-medical-history/${patientId}/${encounterId}`,
-      ]),
-      tryMany<PatientMHEntry[]>([
-        `/api/patient-medical-history/${patientId}/${encounterId}`,
-        `/api/patient-mh/${patientId}/${encounterId}`,
-      ]),
-      tryMany<FamilyHistory[]>([
-        `/api/family-history/${patientId}/${encounterId}`,
-        `/api/fh/${patientId}/${encounterId}`,
-      ]),
-      tryMany<SocialHistory | SocialHistoryEntry[]>([
-        `/api/social-history/${patientId}/${encounterId}`,
-        `/api/socialhistory/${patientId}/${encounterId}`,
-        `/api/sh/${patientId}/${encounterId}`,
-      ]),
-      tryMany<ROSEntry[]>([
-        `/api/reviewofsystems/${patientId}/${encounterId}`,
-        `/api/ros/${patientId}/${encounterId}`,
-      ]),
-      tryMany<PhysicalExam[]>([
-        `/api/physical-exam/${patientId}/${encounterId}`,
-        `/api/pe/${patientId}/${encounterId}`,
-      ]),
-      tryMany<Procedure[]>([
-        `/api/procedures/${patientId}/${encounterId}`,
-        `/api/procedure/${patientId}/${encounterId}`,
-      ]),
-      tryMany<Code[]>([`/api/codes/${patientId}/${encounterId}`]),
-      tryMany<Assessment[]>([
-        `/api/assessment/${patientId}/${encounterId}`,
-        `/api/assessments/${patientId}/${encounterId}`,
-      ]),
-      tryMany<Plan[]>([
-        `/api/plan/${patientId}/${encounterId}`,
-        `/api/plans/${patientId}/${encounterId}`,
-      ]),
-      tryMany<ProviderNote[]>([
-        `/api/provider-notes/${patientId}/${encounterId}`,
-        `/api/soap/${patientId}/${encounterId}`,
-      ]),
-      tryMany<ProviderSignature>([
-        `/api/provider-signatures/${patientId}/${encounterId}`,
-        `/api/signatures/${patientId}/${encounterId}`,
-      ]),
-      tryMany<Signoff>([
-        `/api/signoffs/${patientId}/${encounterId}`,
-        `/api/sign-off/${patientId}/${encounterId}`,
-      ]),
-      tryMany<DateTimeFinalized>([
-        `/api/datetime-finalized/${patientId}/${encounterId}`,
-        `/api/finalized/${patientId}/${encounterId}`,
-      ]),
-    ]);
+    if (!res.ok || !json?.success || !json.data) {
+      throw new Error(json?.message || "Failed to load summary");
+    }
 
-    // normalize & set
-    let soc: SocialHistory | null = null;
-    if (Array.isArray(socRaw)) soc = { entries: socRaw };
-    else if (socRaw && typeof socRaw === "object") soc = socRaw as SocialHistory;
-
-    if (!alive) return;
-    setEncMeta(meta);
-    setAssignedProviders(ap || null);
-    setChiefComplaints(cc || null);
-    setHpi(hp || null);
-    setPmh(pm || null);
-    setPatientMH(pm2 || null);
-    setFh(fam || null);
-    setSh(soc || null);
-    setRos(rs || null);
-    setPe(px || null);
-    setProcedures(pr || null);
-    setCodes(cd || null);
-    setAssessment(asmt || null);
-    setPlan(pl || null);
-    setProviderNotes(pnotes || null);
-    setProviderSignature(sig || null);
-    setSignoff(so || null);
-    setDateTimeFinalized(dtf || null);
+    const d = json.data;
+    setEncMeta(d.meta || null);
+    setAssignedProviders(d.assignedProviders || null);
+    setChiefComplaints(d.chiefComplaints || null);
+    setHpi(d.hpi || null);
+    setPmh(d.pmh || null);
+    setPatientMH(d.patientMH || null);
+    setFh(d.familyHistory || null);
+    setSh(d.socialHistory || null);
+    setRos(d.ros || null);
+    setPe(d.physicalExam || null);
+    setProcedures(d.procedures || null);
+    setCodes(null);
+    setAssessment(d.assessment || null);
+    setPlan(d.plan || null);
+    setProviderNotes(d.providerNotes || null);
+    setProviderSignature(d.providerSignature || null);
+    setSignoff(null);
+    setDateTimeFinalized(d.dateTimeFinalized || null);
   } catch (e: unknown) {
     setTopErr(e instanceof Error ? e.message : "Failed to load summary");
   } finally {
@@ -491,63 +428,53 @@ const loadAll = useCallback(async () => {
 }, [patientId, encounterId]);
 
 
-// A. initial load (and when ids change)
+// Load only on initial mount or when IDs change
 useEffect(() => {
   loadAll();
-}, [loadAll]);
-
-// B. auto-refresh: on focus/visibility + gentle polling while visible
-useEffect(() => {
-  const onFocus = () => loadAll();
-  const onVis = () => { if (!document.hidden) loadAll(); };
-  window.addEventListener("focus", onFocus);
-  document.addEventListener("visibilitychange", onVis);
-
-  const POLL_MS = 300000; // 5 minutes; adjust if you like
-  const timer = setInterval(() => {
-    if (!document.hidden) loadAll();
-  }, POLL_MS);
-
-  return () => {
-    window.removeEventListener("focus", onFocus);
-    document.removeEventListener("visibilitychange", onVis);
-    clearInterval(timer);
-  };
 }, [loadAll]);
 
 
 
    
-// Client-side PDF download using html2pdf.js (no API dependency)
-async function downloadPdf() {
-    if (!summaryRef.current) {
-        window.alert("Summary not loaded");
-        return;
-    }
+const downloadPdf = useCallback(async () => {
     try {
-        // Dynamically import html2pdf.js
-       // const html2pdf = (await import("html2pdf.js"))?.default || (window as any).html2pdf;
-       const html2pdf =
-  (await import("html2pdf.js"))?.default ||
-  (window as unknown as { html2pdf?: unknown }).html2pdf; 
-       if (!html2pdf) {
-            window.alert("html2pdf.js not found. Please install it via npm/yarn/pnpm.");
-            return;
+        const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+        const url = `${base}/api/encounters/${patientId}/${encounterId}/summary/print`;
+        
+        const headers = new Headers();
+        headers.set("Accept", "application/pdf");
+        
+        const selectedTenant = typeof window !== "undefined" ? localStorage.getItem("selectedTenant") : null;
+        if (selectedTenant) headers.set("X-Tenant-Name", selectedTenant);
+        
+        const orgId = typeof window !== "undefined" ? localStorage.getItem("orgId") : null;
+        if (orgId) headers.set("orgId", String(orgId));
+        
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        if (token && /\S+\.\S+\.\S+/.test(token)) {
+            headers.set("Authorization", `Bearer ${token}`);
         }
-        html2pdf()
-            .set({
-                margin: 0.5,
-                filename: `encounter-${encounterId}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2 },
-                jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-            })
-            .from(summaryRef.current)
-            .save();
+        
+        const res = await fetch(url, { headers, cache: "no-store" });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || "Failed to generate PDF");
+        }
+        
+        const blob = await res.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = `encounter-${encounterId}-summary.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(blobUrl);
+        document.body.removeChild(a);
     } catch (e) {
+        console.error("PDF download error:", e);
         window.alert("Failed to generate PDF: " + (e instanceof Error ? e.message : "Unknown error"));
     }
-}
+}, [patientId, encounterId]);
 
 
     const hasAnyData = useMemo(() => {
@@ -569,7 +496,7 @@ async function downloadPdf() {
                 <div className="mb-3 flex justify-end">
                     <button
                         onClick={downloadPdf}
-                        className="inline-flex items-center gap-2 rounded-md bg-blue-600 text-white text-sm px-3 py-1.5 hover:bg-blue-700"
+                        className="inline-flex items-center gap-2 rounded-md bg-blue-700 text-white text-sm px-3 py-1.5 hover:bg-blue-800"
                         title="Download PDF"
                     >
                        Print
@@ -580,15 +507,15 @@ async function downloadPdf() {
             <div ref={summaryRef} className="grid gap-4">
                 {/* Header meta */}
                 {encMeta && (
-                    <div className="rounded-2xl border bg-white shadow-sm p-4">
-                        <div className="mb-2 font-semibold text-gray-800">Encounter Summary</div>
-                        <div className="grid sm:grid-cols-2 gap-2 text-sm text-gray-700">
-                            {encMeta.visitCategory && <div className="row"><b>Visit Category:</b> {String(encMeta.visitCategory)}</div>}
-                            {encMeta.type && <div className="row"><b>Type:</b> {String(encMeta.type)}</div>}
-                            {encMeta.facility && <div className="row"><b>Facility:</b> {String(encMeta.facility)}</div>}
-                            {encMeta.dateOfService && <div className="row"><b>Date of service:</b> {String(encMeta.dateOfService)}</div>}
+                    <div className="rounded-lg border bg-gradient-to-br from-blue-50 to-white shadow-md p-6">
+                        <div className="mb-4 text-xl font-bold text-blue-900 border-b-2 border-blue-200 pb-2">Encounter Summary</div>
+                        <div className="grid sm:grid-cols-2 gap-4 text-sm">
+                            {encMeta.visitCategory && <div className="flex"><span className="font-semibold text-gray-700 min-w-[140px]">Visit Category:</span> <span className="text-gray-900">{String(encMeta.visitCategory)}</span></div>}
+                            {encMeta.type && <div className="flex"><span className="font-semibold text-gray-700 min-w-[140px]">Type:</span> <span className="text-gray-900">{String(encMeta.type)}</span></div>}
+                            {encMeta.facility && <div className="flex"><span className="font-semibold text-gray-700 min-w-[140px]">Facility:</span> <span className="text-gray-900">{String(encMeta.facility)}</span></div>}
+                            {encMeta.dateOfService && <div className="flex"><span className="font-semibold text-gray-700 min-w-[140px]">Date of Service:</span> <span className="text-gray-900">{String(encMeta.dateOfService)}</span></div>}
                             {encMeta.reasonForVisit && (
-                                <div className="row sm:col-span-2"><b>Reason for Visit:</b> {String(encMeta.reasonForVisit)}</div>
+                                <div className="sm:col-span-2 flex"><span className="font-semibold text-gray-700 min-w-[140px]">Reason for Visit:</span> <span className="text-gray-900">{String(encMeta.reasonForVisit)}</span></div>
                             )}
                         </div>
                     </div>

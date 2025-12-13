@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse, PatientMedicalHistoryDto } from "@/utils/types";
+import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
 type Props = {
     patientId: number;
@@ -23,8 +24,19 @@ export default function PMhform({ patientId, encounterId, editing, onSaved, onCa
     const [err, setErr] = useState<string | null>(null);
 
     useEffect(() => {
-        setDescription(editing?.description || "");
-    }, [editing]);
+        const encounterData = getEncounterData(patientId, encounterId);
+        if (encounterData.patientMedicalHistory && !editing?.id) {
+            setDescription(encounterData.patientMedicalHistory.description || "");
+        } else {
+            setDescription(editing?.description || "");
+        }
+    }, [editing, patientId, encounterId]);
+
+    useEffect(() => {
+        if (description) {
+            setEncounterSection(patientId, encounterId, "patientMedicalHistory", { description });
+        }
+    }, [description, patientId, encounterId]);
 
     async function submit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
         e.preventDefault();
@@ -48,6 +60,7 @@ export default function PMhform({ patientId, encounterId, editing, onSaved, onCa
             const json = (await res.json()) as ApiResponse<PatientMedicalHistoryDto>;
             if (!res.ok || !json.success) throw new Error(json.message || "Save failed");
             onSaved(json.data!);
+            removeEncounterSection(patientId, encounterId, "patientMedicalHistory");
             setDescription("");
         } catch (e: unknown) {
             setErr(e instanceof Error ? e.message : "Error");
@@ -78,7 +91,7 @@ export default function PMhform({ patientId, encounterId, editing, onSaved, onCa
                 {onCancel && (
                     <button
                         type="button"
-                        onClick={onCancel}
+                        onClick={() => { removeEncounterSection(patientId, encounterId, "patientMedicalHistory"); onCancel(); }}
                         className="rounded-xl border px-4 py-2 hover:bg-gray-50"
                     >
                         Cancel

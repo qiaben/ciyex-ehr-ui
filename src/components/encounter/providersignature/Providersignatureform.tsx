@@ -195,6 +195,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse, ProviderSignatureDto } from "@/utils/types";
+import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
 type Props = {
     patientId: number;
@@ -249,10 +250,28 @@ export default function Providersignatureform({
         value?.status?.toLowerCase() === "locked";
 
     useEffect(() => {
-        setSignedBy(value?.signedBy || "");
-        setSignerRole(value?.signerRole || ROLES[0]);
-        setComments(value?.comments || "");
-    }, [value]);
+        const encounterData = getEncounterData(patientId, encounterId);
+        if (encounterData.providerSignature && !value?.id) {
+            const data = encounterData.providerSignature;
+            setSignedBy(data.signedBy || "");
+            setSignerRole(data.signerRole || ROLES[0]);
+            setComments(data.comments || "");
+        } else {
+            setSignedBy(value?.signedBy || "");
+            setSignerRole(value?.signerRole || ROLES[0]);
+            setComments(value?.comments || "");
+        }
+    }, [value, patientId, encounterId]);
+
+    useEffect(() => {
+        if (signedBy || comments) {
+            setEncounterSection(patientId, encounterId, "providerSignature", {
+                signedBy,
+                signerRole,
+                comments
+            });
+        }
+    }, [signedBy, signerRole, comments, patientId, encounterId]);
 
     async function submit() {
         if (isLocked) return;
@@ -297,6 +316,7 @@ export default function Providersignatureform({
             if (!res.ok || !json?.success) throw new Error(json?.message || "Save failed");
 
             onSaved(json.data!);
+            removeEncounterSection(patientId, encounterId, "providerSignature");
             onAfterSubmit?.();
 
             if (!value?.id) {
@@ -314,22 +334,24 @@ export default function Providersignatureform({
         <div className="rounded-2xl border p-4 shadow-sm bg-white space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                    <label className="block text-sm font-medium mb-1">Signed By</label>
+                    <label className="block text-sm font-medium mb-1">Signed By <span className="text-red-600">*</span></label>
                     <input
                         className="w-full rounded-lg border px-3 py-2"
                         placeholder="dr.rajaclinic.test"
                         value={signedBy}
                         disabled={isLocked}
                         onChange={(e) => setSignedBy(e.target.value)}
+                        required={!isLocked}
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium mb-1">Role</label>
+                    <label className="block text-sm font-medium mb-1">Role <span className="text-red-600">*</span></label>
                     <select
                         className="w-full rounded-lg border px-3 py-2"
                         value={signerRole}
                         disabled={isLocked}
                         onChange={(e) => setSignerRole(e.target.value)}
+                        required={!isLocked}
                     >
                         {ROLES.map((r) => (
                             <option key={r} value={r}>
@@ -339,7 +361,7 @@ export default function Providersignatureform({
                     </select>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium mb-1">Signature Image</label>
+                    <label className="block text-sm font-medium mb-1">Signature Image <span className="text-red-600">*</span></label>
                     <input
                         ref={fileRef}
                         type="file"
@@ -351,13 +373,14 @@ export default function Providersignatureform({
             </div>
 
             <div>
-                <label className="block text-sm font-medium mb-1">Comments</label>
+                <label className="block text-sm font-medium mb-1">Comments <span className="text-red-600">*</span></label>
                 <textarea
                     className="w-full rounded-lg border px-3 py-2 min-h-20"
                     value={comments}
                     disabled={isLocked}
                     onChange={(e) => setComments(e.target.value)}
                     placeholder='e.g., "Signed SOAP note"'
+                    required={!isLocked}
                 />
             </div>
 
