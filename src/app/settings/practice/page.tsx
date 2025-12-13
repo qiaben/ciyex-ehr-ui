@@ -131,6 +131,7 @@ export default function RegionalFormattingSettingsPage() {
         name: "",
         enablePatientPractice: false,
     });
+    const [practiceId, setPracticeId] = useState<string | null>(null);
 
     const [settings, setSettings] = useState<RegionalSettings>({
         unitsForVisitForms: "US",
@@ -181,79 +182,48 @@ export default function RegionalFormattingSettingsPage() {
     useEffect(() => {
         const fetchPracticeSettings = async () => {
             try {
-                // Get auth headers from localStorage
                 const token = localStorage.getItem("token") || localStorage.getItem("authToken");
                 const orgId = localStorage.getItem("orgId");
-                const facilityId = localStorage.getItem("facilityId");
-                const role = localStorage.getItem("role");
 
                 const headers: Record<string, string> = {
                     "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`,
                 };
-
-                if (token) headers["Authorization"] = `Bearer ${token}`;
                 if (orgId) headers["orgId"] = orgId;
-                if (facilityId) headers["X-Facility-Id"] = facilityId;
-                if (role) headers["X-Role"] = role;
 
-                const res = await fetch("/settings/practice/settings", {
+                const fetchPracticeId = orgId || "1";
+
+                const res = await fetch(`http://localhost:8080/api/practices/${fetchPracticeId}`, {
+                    method: "GET",
                     headers,
                 });
                 if (res.ok) {
                     const response = await res.json();
-                    // Backend returns practice settings directly in data field
                     if (response.success && response.data) {
-                        setPracticeSettings(response.data);
+                        setPracticeId(response.data.id);
+                        setPracticeSettings({
+                            name: response.data.name || "",
+                            enablePatientPractice: response.data.practiceSettings?.enablePatientPractice || false,
+                        });
+                        if (response.data.regionalSettings) {
+                            setSettings(response.data.regionalSettings);
+                        }
                     }
+                } else if (res.status === 404) {
+                    setPracticeId(null);
                 } else {
                     console.error("Failed to fetch practice settings");
                 }
             } catch (error) {
                 console.error("Error fetching practice settings:", error);
                 showNotification("Failed to load practice settings", "error");
-            }
-        };
-
-        const fetchRegionalSettings = async () => {
-            try {
-                // Get auth headers from localStorage
-                const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-                const orgId = localStorage.getItem("orgId");
-                const facilityId = localStorage.getItem("facilityId");
-                const role = localStorage.getItem("role");
-
-                const headers: Record<string, string> = {
-                    "Content-Type": "application/json",
-                };
-
-                if (token) headers["Authorization"] = `Bearer ${token}`;
-                if (orgId) headers["orgId"] = orgId;
-                if (facilityId) headers["X-Facility-Id"] = facilityId;
-                if (role) headers["X-Role"] = role;
-
-                const res = await fetch("/settings/regional/settings", {
-                    headers,
-                });
-                if (res.ok) {
-                    const response = await res.json();
-                    // Backend returns regional settings directly in data field
-                    if (response.success && response.data) {
-                        setSettings(response.data);
-                    }
-                } else {
-                    console.error("Failed to fetch regional settings");
-                }
-            } catch (error) {
-                console.error("Error fetching regional settings:", error);
-                showNotification("Failed to load regional settings", "error");
             } finally {
                 setIsLoading(false);
             }
         };
 
         fetchPracticeSettings();
-        fetchRegionalSettings();
-    }, [showNotification]);
+    }, [showNotification, setPracticeId]);
 
     const handlePracticeInputChange = useCallback(
         (key: keyof PracticeSettings, value: boolean | string) =>
@@ -271,31 +241,32 @@ export default function RegionalFormattingSettingsPage() {
         try {
             const token = localStorage.getItem("token") || localStorage.getItem("authToken");
             const orgId = localStorage.getItem("orgId");
-            const facilityId = localStorage.getItem("facilityId");
-            const role = localStorage.getItem("role");
-
-            if (!token) {
-                showNotification("Authentication required. Please log in again.", "error");
-                return;
-            }
 
             const headers: Record<string, string> = {
                 "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`,
             };
-
-            if (token) headers["Authorization"] = `Bearer ${token}`;
             if (orgId) headers["orgId"] = orgId;
-            if (facilityId) headers["X-Facility-Id"] = facilityId;
-            if (role) headers["X-Role"] = role;
 
-            const res = await fetch("/settings/practice/settings", {
-                method: "POST",
+            const currentPracticeId = practiceId || orgId || "1";
+            const url = practiceId ? `http://localhost:8080/api/practices/${currentPracticeId}` : `http://localhost:8080/api/practices`;
+            const method = practiceId ? "PUT" : "POST";
+
+            const res = await fetch(url, {
+                method,
                 headers,
-                credentials: "include",
-                body: JSON.stringify(practiceSettings),
+                body: JSON.stringify({
+                    name: practiceSettings.name,
+                    practiceSettings: { enablePatientPractice: practiceSettings.enablePatientPractice },
+                    regionalSettings: settings
+                }),
             });
 
             if (res.ok) {
+                const response = await res.json();
+                if (!practiceId && response.success && response.data) {
+                    setPracticeId(response.data.id);
+                }
                 showNotification("Practice settings saved successfully!", "success");
             } else {
                 showNotification("Failed to save practice settings.", "error");
@@ -309,26 +280,33 @@ export default function RegionalFormattingSettingsPage() {
         try {
             const token = localStorage.getItem("token") || localStorage.getItem("authToken");
             const orgId = localStorage.getItem("orgId");
-            const facilityId = localStorage.getItem("facilityId");
-            const role = localStorage.getItem("role");
 
             const headers: Record<string, string> = {
                 "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`,
             };
-
-            if (token) headers["Authorization"] = `Bearer ${token}`;
             if (orgId) headers["orgId"] = orgId;
-            if (facilityId) headers["X-Facility-Id"] = facilityId;
-            if (role) headers["X-Role"] = role;
 
-            const res = await fetch("/settings/regional/settings", {
-                method: "POST",
+            const currentPracticeId = practiceId || orgId || "1";
+            const url = practiceId ? `http://localhost:8080/api/practices/${currentPracticeId}` : `http://localhost:8080/api/practices`;
+            const method = practiceId ? "PUT" : "POST";
+
+            const res = await fetch(url, {
+                method,
                 headers,
-                body: JSON.stringify(settings),
+                body: JSON.stringify({
+                    name: practiceSettings.name,
+                    practiceSettings: { enablePatientPractice: practiceSettings.enablePatientPractice },
+                    regionalSettings: settings
+                }),
             });
 
             if (res.ok) {
-                showNotification("Regional & Locale settings saved successfully!", "success");
+                const response = await res.json();
+                if (!practiceId && response.success && response.data) {
+                    setPracticeId(response.data.id);
+                }
+                showNotification("Regional settings saved successfully!", "success");
             } else {
                 showNotification("Failed to save regional settings.", "error");
             }
