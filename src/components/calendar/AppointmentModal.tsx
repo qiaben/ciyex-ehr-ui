@@ -172,13 +172,25 @@ const hasOccurrenceCoveringSlot = (sched: Schedule, startYmdTHM: string, endYmdT
 };
 
 const getLocationIdFromSchedule = (sched: Schedule): string | null => {
+    // Check recurrence locationId first
     const rid = sched?.recurrence?.locationId;
-    if (rid) return String(rid);
+    if (rid) {
+        console.log('Found locationId in recurrence:', rid);
+        return String(rid);
+    }
+    
+    // Check actorReferences for Location/ID format
     const refs = Array.isArray(sched?.actorReferences) ? sched.actorReferences : [];
     const locRef = refs.find((r) => String(r).startsWith("Location/"));
-    if (!locRef) return null;
-    const parts = String(locRef).split("/");
-    return parts[1] || null;
+    if (locRef) {
+        const parts = String(locRef).split("/");
+        const locationId = parts[1];
+        console.log('Found locationId in actorReferences:', locationId);
+        return locationId || null;
+    }
+    
+    console.log('No location found in schedule:', sched);
+    return null;
 };
 
 /* =========================
@@ -300,12 +312,16 @@ const AppointmentModal: React.FC = () => {
             try {
                 const res = await fetchWithAuth(`${apiUrl}/api/locations`);
                 const json = await res.json();
-                const list: Location[] = Array.isArray(json?.data) ? json.data : [];
-                const opts = list.map((l) => ({
-                    value: String(l.id),
-                    label: `${l.name}${l.address ? ` - ${l.address}` : ""}`,
-                }));
-                setAllLocations(opts);
+                if (json?.success && json?.data) {
+                    // Handle paginated response
+                    const locationData = json.data.content || json.data;
+                    const list: Location[] = Array.isArray(locationData) ? locationData : [];
+                    const opts = list.map((l) => ({
+                        value: String(l.id),
+                        label: `${l.name}${l.address ? ` - ${l.address}` : ""}`,
+                    }));
+                    setAllLocations(opts);
+                }
             } catch (err) {
                 console.error("Failed to fetch locations", err);
             }
@@ -348,7 +364,12 @@ const AppointmentModal: React.FC = () => {
             try {
                 const res = await fetchWithAuth(`${apiUrl}/api/schedules?status=active`);
                 const json = await res.json();
-                const schedules: Schedule[] = Array.isArray(json?.data) ? json.data : [];
+                let schedules: Schedule[] = [];
+                if (json?.success && json?.data) {
+                    schedules = Array.isArray(json.data) ? json.data : (Array.isArray(json.data.content) ? json.data.content : []);
+                } else if (Array.isArray(json?.data)) {
+                    schedules = json.data;
+                }
 
                 const providerIds = new Set<number>();
                 for (const s of schedules) {
@@ -384,19 +405,33 @@ const AppointmentModal: React.FC = () => {
             try {
                 const res = await fetchWithAuth(`${apiUrl}/api/schedules?status=active&providerId=${providerId}`);
                 const json = await res.json();
-                const schedules: Schedule[] = Array.isArray(json?.data) ? json.data : [];
+                let schedules: Schedule[] = [];
+                if (json?.success && json?.data) {
+                    schedules = Array.isArray(json.data) ? json.data : (Array.isArray(json.data.content) ? json.data.content : []);
+                } else if (Array.isArray(json?.data)) {
+                    schedules = json.data;
+                }
 
                 // strictly this provider's schedules
                 const providerSchedules = schedules.filter((s) => Number(s.providerId) === Number(providerId));
 
                 const locIds = new Set<string>();
                 providerSchedules.forEach((s) => {
-                    const coversSlot = combinedStart && combinedEnd ? hasOccurrenceCoveringSlot(s, combinedStart, combinedEnd) : true;
-                    if (coversSlot) {
-                        const lid = getLocationIdFromSchedule(s);
-                        if (lid) locIds.add(String(lid));
+                    // Check recurrence locationId
+                    if (s.recurrence?.locationId) {
+                        locIds.add(String(s.recurrence.locationId));
+                    }
+                    // Check actorReferences
+                    if (s.actorReferences) {
+                        s.actorReferences.forEach(ref => {
+                            if (String(ref).startsWith('Location/')) {
+                                const id = String(ref).split('/')[1];
+                                if (id) locIds.add(id);
+                            }
+                        });
                     }
                 });
+                console.log('Found location IDs:', Array.from(locIds));
 
                 // id → label
                 const byId: Record<string, Option<string>> = {};
@@ -520,7 +555,12 @@ const AppointmentModal: React.FC = () => {
                 `${apiUrl}/api/schedules?status=active&providerId=${providerId}`
             );
             const json = await res.json();
-            const schedules: Schedule[] = Array.isArray(json?.data) ? json.data : [];
+            let schedules: Schedule[] = [];
+            if (json?.success && json?.data) {
+                schedules = Array.isArray(json.data) ? json.data : (Array.isArray(json.data.content) ? json.data.content : []);
+            } else if (Array.isArray(json?.data)) {
+                schedules = json.data;
+            }
             const covers = schedules.some((s) =>
                 hasOccurrenceCoveringSlot(s, combinedStart, combinedEnd)
             );

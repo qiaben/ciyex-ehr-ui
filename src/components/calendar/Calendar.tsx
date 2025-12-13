@@ -459,12 +459,16 @@ const Calendar: React.FC = () => {
             try {
                 const res = await fetchWithAuth(`${apiUrl}/api/locations`);
                 const json = await res.json();
-                const list: Location[] = Array.isArray(json?.data) ? json.data : [];
-                const opts = list.map((l) => ({
-                    value: String(l.id),
-                    label: `${l.name}${l.address ? ` - ${l.address}` : ''}`,
-                }));
-                setLocations([{ value: 'all', label: 'All Locations' }, ...opts]);
+                if (json?.success && json?.data) {
+                    // Handle paginated response
+                    const locationData = json.data.content || json.data;
+                    const list: Location[] = Array.isArray(locationData) ? locationData : [];
+                    const opts = list.map((l) => ({
+                        value: String(l.id),
+                        label: `${l.name}${l.address ? ` - ${l.address}` : ''}`,
+                    }));
+                    setLocations([{ value: 'all', label: 'All Locations' }, ...opts]);
+                }
             } catch (e) {
                 console.error('Failed to fetch locations', e);
             }
@@ -614,7 +618,12 @@ const Calendar: React.FC = () => {
             try {
                 const res = await fetchWithAuth(`${apiUrl}/api/schedules?status=active`);
                 const json = await res.json();
-                const schedules: Schedule[] = Array.isArray(json?.data) ? json.data : [];
+                let schedules: Schedule[] = [];
+                if (json?.success && json?.data) {
+                    schedules = Array.isArray(json.data) ? json.data : (Array.isArray(json.data.content) ? json.data.content : []);
+                } else if (Array.isArray(json?.data)) {
+                    schedules = json.data;
+                }
                 const effectiveLocation =
                     appointmentLocationId || (location !== "all" ? location : "all");
 
@@ -671,7 +680,12 @@ const Calendar: React.FC = () => {
                     `${apiUrl}/api/schedules?status=active&providerId=${appointmentProviderId}`
                 );
                 const json = await res.json();
-                const schedules: Schedule[] = Array.isArray(json?.data) ? json.data : [];
+                let schedules: Schedule[] = [];
+                if (json?.success && json?.data) {
+                    schedules = Array.isArray(json.data) ? json.data : (Array.isArray(json.data.content) ? json.data.content : []);
+                } else if (Array.isArray(json?.data)) {
+                    schedules = json.data;
+                }
 
                 // STRICT provider filter on the client
                 const providerSchedules = schedules.filter(
@@ -924,7 +938,12 @@ const Calendar: React.FC = () => {
                 `${apiUrl}/api/schedules?status=active&providerId=${appointmentProviderId}`
             );
             const json = await res.json();
-            const schedules: Schedule[] = Array.isArray(json?.data) ? json.data : [];
+            let schedules: Schedule[] = [];
+            if (json?.success && json?.data) {
+                schedules = Array.isArray(json.data) ? json.data : (Array.isArray(json.data.content) ? json.data.content : []);
+            } else if (Array.isArray(json?.data)) {
+                schedules = json.data;
+            }
 
             const covers = schedules.some(s =>
                 hasOccurrenceCoveringSlot(s, combinedStart, combinedEnd)
