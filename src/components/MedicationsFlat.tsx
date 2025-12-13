@@ -174,13 +174,6 @@ export default function MedicationsFlat({ patientId, encounterId }: Props) {
                 <h4 className="text-lg font-semibold text-gray-800">{title}</h4>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => router.push(`${pathname}?tab=issues&section=Medication#issues`)}
-                        className="h-8 px-3 rounded border text-xs hover:bg-gray-50"
-                        title="Open this list in the Issues tab"
-                    >
-                        View in Issues
-                    </button>
-                    <button
                         onClick={openCreate}
                         className="h-8 px-3 rounded bg-blue-600 hover:bg-blue-700 text-xs font-medium text-white shadow-sm"
                     >

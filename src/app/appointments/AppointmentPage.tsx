@@ -847,8 +847,12 @@ export default function AppointmentPage() {
         const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/locations`);
         if (!res.ok) throw new Error("Failed to fetch locations");
         const data = await res.json();
-        const list: Location[] = data.data.map((l: { id: number; name: string }) => ({ id: l.id, name: l.name }));
-        setLocations(list);
+        if (data?.success && data?.data) {
+          // Handle paginated response
+          const locationData = data.data.content || data.data;
+          const list: Location[] = Array.isArray(locationData) ? locationData.map((l: { id: number; name: string }) => ({ id: l.id, name: l.name })) : [];
+          setLocations(list);
+        }
       } catch { setLocations([]); }
       finally { setLoadingLocations(false); }
     };

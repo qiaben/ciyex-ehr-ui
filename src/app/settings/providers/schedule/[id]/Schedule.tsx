@@ -179,11 +179,7 @@ const Page = () => {
     const [weeklyDays, setWeeklyDays] = useState<boolean[]>([false, true, true, true, true, true, false]); // Mon–Fri
     const [startTime, setStartTime] = useState<string>("09:00");
     const [endTime, setEndTime] = useState<string>("");
-    const [locations, setLocations] = useState<Location[]>([
-        { id: 1, name: "Main Clinic", address: "123 Main St" },
-        { id: 2, name: "Downtown Office", address: "456 Downtown Ave" },
-        { id: 3, name: "North Branch", address: "789 North Rd" }
-    ]);
+    const [locations, setLocations] = useState<Location[]>([]);
     const today = new Date();
     const todayISO = today.toISOString().split("T")[0];
     const todayInput = `${String(today.getMonth() + 1).padStart(2,"0")}/${String(today.getDate()).padStart(2,"0")}/${today.getFullYear()}`;
@@ -227,18 +223,30 @@ const Page = () => {
                     setProvider(data?.data ?? null);
                 }
                 
-                // Try to fetch locations, but keep mock data if it fails
+                // Fetch locations from API
                 try {
                     const resLocations = await fetchWithAuth(`${apiUrl}/api/locations`, { method: "GET" });
                     if (resLocations.ok) {
                         const data = await resLocations.json();
-                        const locationData = data?.data;
-                        if (Array.isArray(locationData) && locationData.length > 0) {
-                            setLocations(locationData);
+                        if (data?.success && data?.data) {
+                            // Handle paginated response
+                            const locationData = data.data.content || data.data;
+                            if (Array.isArray(locationData)) {
+                                setLocations(locationData.map((loc: any) => ({
+                                    id: loc.id,
+                                    name: loc.name,
+                                    address: loc.address
+                                })));
+                            }
                         }
                     }
                 } catch (error) {
-                    console.log('Using mock location data');
+                    console.error('Failed to fetch locations:', error);
+                    setAlertData({
+                        variant: "warning",
+                        title: "Warning",
+                        message: "Failed to load locations. Please refresh the page."
+                    });
                 }
             } finally {
                 setLoading(false);
