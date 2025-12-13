@@ -3,6 +3,8 @@
 import React, { useState, useCallback, useEffect } from "react";
 import AdminLayout from "@/app/(admin)/layout";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+
 /* ------------ Types ------------ */
 interface PracticeSettings {
     name: string;
@@ -193,7 +195,7 @@ export default function RegionalFormattingSettingsPage() {
 
                 const fetchPracticeId = orgId || "1";
 
-                const res = await fetch(`http://localhost:8080/api/practices/${fetchPracticeId}`, {
+                const res = await fetch(`${API_BASE}/api/practices/${fetchPracticeId}`, {
                     method: "GET",
                     headers,
                 });
@@ -249,7 +251,7 @@ export default function RegionalFormattingSettingsPage() {
             if (orgId) headers["orgId"] = orgId;
 
             const currentPracticeId = practiceId || orgId || "1";
-            const url = practiceId ? `http://localhost:8080/api/practices/${currentPracticeId}` : `http://localhost:8080/api/practices`;
+            const url = practiceId ? `${API_BASE}/api/practices/${currentPracticeId}` : `${API_BASE}/api/practices`;
             const method = practiceId ? "PUT" : "POST";
 
             const res = await fetch(url, {
@@ -288,7 +290,7 @@ export default function RegionalFormattingSettingsPage() {
             if (orgId) headers["orgId"] = orgId;
 
             const currentPracticeId = practiceId || orgId || "1";
-            const url = practiceId ? `http://localhost:8080/api/practices/${currentPracticeId}` : `http://localhost:8080/api/practices`;
+            const url = practiceId ? `${API_BASE}/api/practices/${currentPracticeId}` : `${API_BASE}/api/practices`;
             const method = practiceId ? "PUT" : "POST";
 
             const res = await fetch(url, {
@@ -366,16 +368,6 @@ export default function RegionalFormattingSettingsPage() {
                         </button>
                     </FormRow>
                 </ConfigCard>
-
-                {/* Practice Save Button */}
-                <div className="flex justify-end">
-                    <button
-                        onClick={handleSavePractice}
-                        className="px-6 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700"
-                    >
-                        Save Configuration
-                    </button>
-                </div>
 
                 {/* --- Regional & Locale Card (merged) --- */}
                 <ConfigCard title="Regional & Locale Options">
