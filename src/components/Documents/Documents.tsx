@@ -655,10 +655,10 @@ interface DocumentsProps {
 
 export default function Page({ patientId: propPatientId }: DocumentsProps = {}) {
   // ⚙️ CONFIGURATION - Can be overridden via prop or will use default
-  // Get patientId from prop, or use localStorage, or default to "1"
+  // Get patientId from prop, or use localStorage.
   const patientId = propPatientId !== undefined 
     ? String(propPatientId)
-    : (typeof window !== "undefined" ? localStorage.getItem("patientId") || "1" : "1");
+    : (typeof window !== "undefined" ? localStorage.getItem("patientId") : undefined);
 
   // Alerts
   const { banners, push: pushBanner, remove: removeBanner } = useBanners();
@@ -740,8 +740,21 @@ export default function Page({ patientId: propPatientId }: DocumentsProps = {}) 
         pushBanner("error", parsed.message || "Failed to retrieve documents.", "List error");
         return;
       }
+
+      // Filter server response to current patientId as a safeguard in case
+      // the backend returns documents for multiple patients.
+      const allDocs = parsed.data || [];
+      const filteredDocs = allDocs.filter((d) => String(d.patientId) === String(patientId));
+      if (allDocs.length > 0 && filteredDocs.length !== allDocs.length) {
+        console.warn("Documents API returned items for other patients; filtering to current patientId", {
+          requestedPatientId: patientId,
+          serverReturnedCount: allDocs.length,
+          kept: filteredDocs.length,
+        });
+      }
+
       const now = Date.now();
-      const rows: UploadedItem[] = (parsed.data || []).map((d, i) => ({
+      const rows: UploadedItem[] = filteredDocs.map((d, i) => ({
         id: String(d.id || i),
         category: d.category || "",
         ts: now - i * 1000,
@@ -824,6 +837,7 @@ export default function Page({ patientId: propPatientId }: DocumentsProps = {}) 
         form.append("file", f, f.name);
         form.append("patientId", patientId);
 
+        // Use the generic upload endpoint
         const url = `${base}/api/documents/upload`;
 
         console.groupCollapsed("%cPOST %s", "color:#0b74de;font-weight:600", url);

@@ -246,6 +246,7 @@ import { useEffect, useState ,useRef} from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import type { ApiResponse, ProcedureDto } from "@/utils/types";
+import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
 type Props = {
     patientId: number;
@@ -255,7 +256,19 @@ type Props = {
     onCancel?: () => void;
 };
 
+const CODE_TYPES = ["CPT4", "HCPCS", "ICD10", "ICD9", "CVX", "CUSTOM"] as const;
+
+type CodeOption = {
+    id: number;
+    code: string;
+    description?: string;
+    relateTo?: string;
+    feeStandard?: number;
+    modifier?: string;
+};
+
 export default function Procedureform({ patientId, encounterId, editing, onSaved, onCancel }: Props) {
+    const [codeType, setCodeType] = useState<string>("CPT4");
     const [cpt4, setCpt4] = useState("");
     const [description, setDescription] = useState("");
     const [units, setUnits] = useState<number | "">("");
@@ -264,43 +277,131 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
     const [hospitalBillingStart, setHospitalBillingStart] = useState("");
     const [hospitalBillingEnd, setHospitalBillingEnd] = useState("");
     const [modifier1, setModifier1] = useState<string>("");
-    const [modifier2, setModifier2] = useState<string>("");
-    const [modifier3, setModifier3] = useState<string>("");
-    const [modifier4, setModifier4] = useState<string>("");
     const [note, setNote] = useState("");
     const [providername, setProvidername] = useState("");
 
-
+    const [codeOptions, setCodeOptions] = useState<CodeOption[]>([]);
+    const [loadingCodes, setLoadingCodes] = useState(false);
+    
+    type ProviderOption = { id: number; name: string; };
+    const [providerOptions, setProviderOptions] = useState<ProviderOption[]>([]);
+    const [loadingProviders, setLoadingProviders] = useState(false);
+    
     const [saving, setSaving] = useState(false);
     const [err, setErr] = useState<string | null>(null);
 
-    // Price Level (Patients → Codes)
     type PatientCodeList = { id: number; title: string; active?: boolean; isDefault?: boolean };
     const [priceLevels, setPriceLevels] = useState<PatientCodeList[]>([]);
     const [priceLevelTitle, setPriceLevelTitle] = useState<number | "">("");
 
-    type CodeHit = { code: string; description: string; price: number | null; modifier: string | null };
-    const [hits, setHits] = useState<CodeHit[]>([]);
-    const [showHits, setShowHits] = useState(false);
-    const searchTimer = useRef<number | null>(null);
-
-    async function searchCodes(q: string) {
-        if (!q || q.length < 2) { setHits([]); return; }
+    async function fetchCodes(type: string) {
+        setLoadingCodes(true);
         try {
-            const res = await fetchWithOrg(`/api/codes?q=${encodeURIComponent(q)}&type=CPT4`, {
-                headers: { Accept: "application/json" }
+            const orgId = localStorage.getItem("orgId") || "";
+            const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
+            const url = `${apiUrl}/api/codess?codeType=${type}`;
+            
+            const headers: Record<string, string> = {
+                Accept: "application/json",
+                "Content-Type": "application/json"
+            };
+            if (orgId) headers["orgId"] = orgId;
+            
+            const res = await fetchWithAuth(url, {
+                method: "GET",
+                headers,
+                mode: "cors" as const
             });
+            
             const json = await res.json();
-            if (res.ok) setHits(Array.isArray(json) ? json : (json?.data ?? []));
-        } catch {
-            // ignore
+            console.log('Codes API response:', json);
+            console.log('Response status:', res.ok);
+            console.log('Has data:', !!json.data);
+            console.log('Data length:', json.data?.length);
+            
+            if (res.ok && json.success && json.data) {
+                const mapped: CodeOption[] = json.data.map((item: any) => ({
+                    id: item.id,
+                    code: item.code,
+                    description: item.description || item.shortDescription,
+                    relateTo: item.relateTo,
+                    feeStandard: item.feeStandard,
+                    modifier: item.modifier
+                }));
+                console.log('Mapped codes:', mapped);
+                console.log('Setting', mapped.length, 'code options');
+                setCodeOptions(mapped);
+            } else {
+                console.error('Failed to load codes:', json);
+                setCodeOptions([]);
+            }
+        } catch (e) {
+            console.error("Failed to fetch codes:", e);
+            setCodeOptions([]);
+        } finally {
+            setLoadingCodes(false);
         }
     }
+
+    async function fetchProviders() {
+        setLoadingProviders(true);
+        try {
+            const orgIds = JSON.parse(localStorage.getItem("orgIds") || "[]");
+            const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
+            const res = await fetchWithAuth(
+                `${apiUrl}/api/providers?orgIds=${orgIds.join(",")}`,
+                {
+                    method: "GET",
+                    headers: { Accept: "application/json" }
+                }
+            );
+            const json = await res.json();
+            if (res.ok && json.success) {
+                const list: unknown[] = json?.data || [];
+                const mapped: ProviderOption[] = list.map((item: any) => {
+                    const firstName = item.identification?.firstName || "";
+                    const lastName = item.identification?.lastName || "";
+                    const prefix = item.identification?.prefix || "";
+                    const fullName = `${prefix} ${firstName} ${lastName}`.trim();
+                    
+                    return {
+                        id: item.id,
+                        name: fullName || "Provider",
+                    };
+                }).filter((p) => p.id > 0);
+                
+                setProviderOptions(mapped);
+            }
+        } catch (e) {
+            console.error("Failed to fetch providers:", e);
+        } finally {
+            setLoadingProviders(false);
+        }
+    }
+
+    useEffect(() => {
+        if (codeType) fetchCodes(codeType);
+        fetchProviders();
+    }, [codeType]);
 
 
 
     useEffect(() => {
-        if (editing?.id) {
+        const encounterData = getEncounterData(patientId, encounterId);
+        if (encounterData.procedure && !editing?.id) {
+            const data = encounterData.procedure;
+            setCpt4(data.cpt4 || "");
+            setDescription(data.description || "");
+            setUnits(typeof data.units === "number" ? data.units : "");
+            setRate(data.rate || "");
+            setRelatedIcds(data.relatedIcds || "");
+            setHospitalBillingStart((data as any).hospitalBillingStart || "");
+            setHospitalBillingEnd((data as any).hospitalBillingEnd || "");
+            setModifier1(data.modifier1 ?? "");
+            setNote(data.note ?? "");
+            setPriceLevelTitle(typeof data.priceLevelTitle === "number" ? data.priceLevelTitle : "");
+            setProvidername(data.providername ?? "");
+        } else if (editing?.id) {
             setCpt4(editing.cpt4 || "");
             setDescription(editing.description || "");
             setUnits(typeof editing.units === "number" ? editing.units : "");
@@ -309,14 +410,9 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
             setHospitalBillingStart(editing.hospitalBillingStart || "");
             setHospitalBillingEnd(editing.hospitalBillingEnd || "");
             setModifier1(editing.modifier1 ?? "");
-            setModifier2(editing.modifier2 ?? "");
-            setModifier3(editing.modifier3 ?? "");
-            setModifier4(editing.modifier4 ?? "");
             setNote(editing.note ?? "");
-            setPriceLevelTitle((editing as any).priceLevelTitle ?? "");
+            setPriceLevelTitle(typeof (editing as any).priceLevelTitle === "number" ? (editing as any).priceLevelTitle : "");
             setProvidername((editing as any).providername ?? "");
-
-
         } else {
             setCpt4("");
             setDescription("");
@@ -326,16 +422,21 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
             setHospitalBillingStart("");
             setHospitalBillingEnd("");
             setModifier1("");
-            setModifier2("");
-            setModifier3("");
-            setModifier4("");
             setNote("");
             setPriceLevelTitle("");
             setProvidername("");
-
-
         }
-    }, [editing]);
+    }, [editing, patientId, encounterId]);
+
+    useEffect(() => {
+        if (cpt4 || description) {
+            setEncounterSection(patientId, encounterId, "procedure", {
+                cpt4, description, units, rate, relatedIcds,
+                modifier1,
+                note, priceLevelTitle, providername
+            } as any);
+        }
+    }, [cpt4, description, units, rate, relatedIcds, modifier1, note, priceLevelTitle, providername, patientId, encounterId]);
 
 
     // Load active Patient Code lists for Price Level dropdown
@@ -423,9 +524,6 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
                 ...(hospitalBillingStart ? { hospitalBillingStart } : {}),
                 ...(hospitalBillingEnd ? { hospitalBillingEnd } : {}),
                 ...(modifier1 ? { modifier1: modifier1.trim() } : { modifier1: null }),
-                ...(modifier2 ? { modifier2: modifier2.trim() } : { modifier2: null }),
-                ...(modifier3 ? { modifier3: modifier3.trim() } : { modifier3: null }),
-                ...(modifier4 ? { modifier4: modifier4.trim() } : { modifier4: null }),
                 ...(note ? { note: note.trim() } : { note: null }),
                 ...(providername ? { providername: providername.trim() } : {}),
                 ...(editing?.id ? { id: editing.id } : {}),
@@ -450,7 +548,7 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
                         rate: rate ? Number(rate) : (json.data.rate ? Number(json.data.rate) : 0),
                         dos: hospitalBillingStart || json.data.hospitalBillingStart || "",
                         provider: providername.trim(),
-                        modifiers: [modifier1, modifier2, modifier3, modifier4].filter(Boolean).join(","),
+                        modifiers: modifier1 || "",
                         patientId,
                         encounterId,
                     };
@@ -467,6 +565,7 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
             }
 
             onSaved(json.data!);
+            removeEncounterSection(patientId, encounterId, "procedure");
 
             if (!editing?.id) {
                 setCpt4("");
@@ -477,9 +576,6 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
                 setHospitalBillingStart("");
                 setHospitalBillingEnd("");
                 setModifier1("");
-                setModifier2("");
-                setModifier3("");
-                setModifier4("");
                 setNote("");
                 setPriceLevelTitle("");
                 setProvidername("");
@@ -497,33 +593,45 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                    <label className="block text-sm font-medium mb-1">CPT-4</label>
-                    {/*<input*/}
-                    {/*    className="w-full rounded-lg border px-3 py-2 focus:ring"*/}
-                    {/*    value={cpt4}*/}
-                    {/*    onChange={(e) => setCpt4(e.target.value)}*/}
-                    {/*    placeholder="e.g., 99214"*/}
-                    {/*    required*/}
-                    {/*/>*/}
-                    <input
+                    <label className="block text-sm font-medium mb-1">Code Type</label>
+                    <select
+                        className="w-full rounded-lg border px-3 py-2 focus:ring"
+                        value={codeType}
+                        onChange={(e) => setCodeType(e.target.value)}
+                    >
+                        {CODE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium mb-1">CPT-4 Code <span className="text-red-600">*</span></label>
+                    <select
                         className="w-full rounded-lg border px-3 py-2 focus:ring"
                         value={cpt4}
                         onChange={(e) => {
-                            const v = e.target.value;
-                            setCpt4(v);
-                            setShowHits(true);
-                            if (searchTimer.current) window.clearTimeout(searchTimer.current);
-                            // debounce 250ms
-                            searchTimer.current = window.setTimeout(() => searchCodes(v), 250) as unknown as number;
+                            const selected = codeOptions.find(c => c.code === e.target.value);
+                            if (selected) {
+                                setCpt4(selected.code);
+                                setDescription(selected.description || "");
+                                setRelatedIcds(selected.relateTo || "");
+                                setRate(selected.feeStandard?.toString() || "");
+                                setModifier1(selected.modifier || "");
+                            }
                         }}
-                        placeholder="e.g., 99214"
                         required
-                    />
-
+                    >
+                        <option value="">Select Code</option>
+                        {codeOptions.map(c => (
+                            <option key={c.id} value={c.code}>
+                                {c.code} - {c.description}
+                            </option>
+                        ))}
+                    </select>
+                    {loadingCodes && <p className="text-xs text-gray-500 mt-1">Loading codes...</p>}
                 </div>
 
                 <div className="md:col-span-1">
-                    <label className="block text-sm font-medium mb-1">Units</label>
+                    <label className="block text-sm font-medium mb-1">Units <span className="text-red-600">*</span></label>
                     <input
                         type="number"
                         min={0}
@@ -532,11 +640,12 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
                         value={units}
                         onChange={(e) => setUnits(e.target.value === "" ? "" : Number(e.target.value))}
                         placeholder="1"
+                        required
                     />
                 </div>
 
                 <div className="md:col-span-1">
-                    <label className="block text-sm font-medium mb-1">Rate</label>
+                    <label className="block text-sm font-medium mb-1">Rate <span className="text-red-600">*</span></label>
                     <input
                         type="number"
                         step="0.01"
@@ -544,6 +653,7 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
                         value={rate}
                         onChange={(e) => setRate(e.target.value)}
                         placeholder="239.00"
+                        required
                     />
                 </div>
 
@@ -577,12 +687,19 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
 
                 <div className="md:col-span-1">
                     <label className="block text-sm font-medium mb-1">Provider Name</label>
-                    <input
+                    <select
                         className="w-full rounded-lg border px-3 py-2 focus:ring"
                         value={providername}
                         onChange={(e) => setProvidername(e.target.value)}
-                        placeholder="e.g., Dr. Smith"
-                    />
+                    >
+                        <option value="">Select Provider</option>
+                        {providerOptions.map((p) => (
+                            <option key={p.id} value={p.name}>
+                                {p.name}
+                            </option>
+                        ))}
+                    </select>
+                    {loadingProviders && <p className="text-xs text-gray-500 mt-1">Loading providers...</p>}
                 </div>
 
 
@@ -617,42 +734,12 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium mb-1">Modifier 1</label>
+                    <label className="block text-sm font-medium mb-1">Modifier</label>
                     <input
                         className="w-full rounded-lg border px-3 py-2 focus:ring"
                         value={modifier1}
                         onChange={(e) => setModifier1(e.target.value)}
                         placeholder="25"
-                    />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium mb-1">Modifier 2</label>
-                    <input
-                        className="w-full rounded-lg border px-3 py-2 focus:ring"
-                        value={modifier2}
-                        onChange={(e) => setModifier2(e.target.value)}
-                        placeholder="34"
-                    />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium mb-1">Modifier 3</label>
-                    <input
-                        className="w-full rounded-lg border px-3 py-2 focus:ring"
-                        value={modifier3}
-                        onChange={(e) => setModifier3(e.target.value)}
-                        placeholder="Optional"
-                    />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium mb-1">Modifier 4</label>
-                    <input
-                        className="w-full rounded-lg border px-3 py-2 focus:ring"
-                        value={modifier4}
-                        onChange={(e) => setModifier4(e.target.value)}
-                        placeholder="Optional"
                     />
                 </div>
 
@@ -678,7 +765,7 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
                     {saving ? "Saving..." : editing?.id ? "Update" : "Save"}
                 </button>
                 {onCancel && (
-                    <button type="button" onClick={onCancel} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
+                    <button type="button" onClick={() => { removeEncounterSection(patientId, encounterId, "procedure"); onCancel(); }} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
                         Cancel
                     </button>
                 )}

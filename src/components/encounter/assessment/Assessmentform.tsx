@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse, AssessmentDto } from "@/utils/types";
+import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
 type Props = {
     patientId: number;
@@ -27,7 +28,16 @@ export default function Assessmentform({ patientId, encounterId, editing, onSave
     const [err, setErr] = useState<string | null>(null);
 
     useEffect(() => {
-        if (editing?.id) {
+        const encounterData = getEncounterData(patientId, encounterId);
+        if (encounterData.assessment && !editing?.id) {
+            const data = encounterData.assessment;
+            setDiagnosisCode(data.diagnosisCode || "");
+            setDiagnosisName(data.diagnosisName || "");
+            setStatus(data.status || "Active");
+            setPriority(data.priority || "Primary");
+            setAssessmentText(data.assessmentText || "");
+            setNotes(data.notes || "");
+        } else if (editing?.id) {
             setDiagnosisCode(editing.diagnosisCode || "");
             setDiagnosisName(editing.diagnosisName || "");
             setStatus(editing.status || "Active");
@@ -42,7 +52,20 @@ export default function Assessmentform({ patientId, encounterId, editing, onSave
             setAssessmentText("");
             setNotes("");
         }
-    }, [editing]);
+    }, [editing, patientId, encounterId]);
+
+    useEffect(() => {
+        if (diagnosisCode || diagnosisName || assessmentText || notes) {
+            setEncounterSection(patientId, encounterId, "assessment", {
+                diagnosisCode,
+                diagnosisName,
+                status,
+                priority,
+                assessmentText,
+                notes
+            });
+        }
+    }, [diagnosisCode, diagnosisName, status, priority, assessmentText, notes, patientId, encounterId]);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -73,6 +96,7 @@ export default function Assessmentform({ patientId, encounterId, editing, onSave
             if (!res.ok || !json.success) throw new Error(json.message || "Save failed");
 
             onSaved(json.data!);
+            removeEncounterSection(patientId, encounterId, "assessment");
 
             if (!editing?.id) {
                 setDiagnosisCode(""); setDiagnosisName(""); setStatus("Active"); setPriority("Primary");
@@ -91,21 +115,23 @@ export default function Assessmentform({ patientId, encounterId, editing, onSave
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                    <label className="block text-sm font-medium mb-1">Diagnosis Code (ICD-10)</label>
+                    <label className="block text-sm font-medium mb-1">Diagnosis Code (ICD-10) <span className="text-red-600">*</span></label>
                     <input
                         className="w-full rounded-lg border px-3 py-2 focus:ring"
                         value={diagnosisCode}
                         onChange={(e) => setDiagnosisCode(e.target.value)}
                         placeholder="e.g., M54.5"
+                        required
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium mb-1">Diagnosis Name</label>
+                    <label className="block text-sm font-medium mb-1">Diagnosis Name <span className="text-red-600">*</span></label>
                     <input
                         className="w-full rounded-lg border px-3 py-2 focus:ring"
                         value={diagnosisName}
                         onChange={(e) => setDiagnosisName(e.target.value)}
                         placeholder="e.g., Low back pain"
+                        required
                     />
                 </div>
 
@@ -138,22 +164,24 @@ export default function Assessmentform({ patientId, encounterId, editing, onSave
                 </div>
 
                 <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Assessment / Impression</label>
+                    <label className="block text-sm font-medium mb-1">Assessment / Impression <span className="text-red-600">*</span></label>
                     <textarea
                         className="w-full rounded-lg border px-3 py-2 focus:ring min-h-24"
                         value={assessmentText}
                         onChange={(e) => setAssessmentText(e.target.value)}
                         placeholder="Clinical impression, differentials, brief rationale"
+                        required
                     />
                 </div>
 
                 <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Notes</label>
+                    <label className="block text-sm font-medium mb-1">Notes <span className="text-red-600">*</span></label>
                     <textarea
                         className="w-full rounded-lg border px-3 py-2 focus:ring min-h-20"
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Any additional notes"
+                        required
                     />
                 </div>
             </div>
@@ -165,7 +193,7 @@ export default function Assessmentform({ patientId, encounterId, editing, onSave
                     {saving ? "Saving..." : editing?.id ? "Update" : "Save"}
                 </button>
                 {onCancel && (
-                    <button type="button" onClick={onCancel} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
+                    <button type="button" onClick={() => { removeEncounterSection(patientId, encounterId, "assessment"); onCancel(); }} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
                         Cancel
                     </button>
                 )}

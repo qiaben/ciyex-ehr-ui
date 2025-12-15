@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse } from "@/utils/types";
 import type { DateTimeFinalizedDto } from "./DatetimefinalizedCard";
+import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
 type Props = {
     patientId: number;
@@ -50,18 +51,32 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
     const [err, setErr] = useState<string | null>(null);
 
     useEffect(() => {
-        if (editing?.id) {
+        const encounterData = getEncounterData(patientId, encounterId);
+        if (encounterData.dateTimeFinalized && !editing?.id) {
+            const data = encounterData.dateTimeFinalized;
+            setTargetType(data.targetType || "NOTE");
+            setTargetId(data.targetId || "");
+            setTargetVersion(data.targetVersion || "v1");
+            setFinalizedAt(data.finalizedAt || "");
+            setFinalizedBy(data.finalizedBy || "");
+            setFinalizerRole(data.finalizerRole || "MD");
+            setMethod(data.method || "MANUAL");
+            setStatus(data.status || "finalized");
+            setReason(data.reason || "");
+            setComments(data.comments || "");
+            setContentHash((data as any).contentHash || "");
+            setProviderSignatureId((data as any).providerSignatureId || "");
+            setSignoffId((data as any).signoffId || "");
+        } else if (editing?.id) {
             setTargetType(editing.targetType || "NOTE");
             setTargetId(editing.targetId?.toString() ?? "");
             setTargetVersion(editing.targetVersion || "v1");
-
             setFinalizedAt(editing.finalizedAt || "");
             setFinalizedBy(editing.finalizedBy || "");
             setFinalizerRole(editing.finalizerRole || "MD");
             setMethod(editing.method || "MANUAL");
             setStatus(editing.status || "finalized");
             setReason(editing.reason || "");
-
             setComments(editing.comments || "");
             setContentHash(editing.contentHash || "");
             setProviderSignatureId(editing.providerSignatureId?.toString() ?? "");
@@ -70,20 +85,35 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
             setTargetType("NOTE");
             setTargetId("");
             setTargetVersion("v1");
-
             setFinalizedAt("");
             setFinalizedBy("");
             setFinalizerRole("MD");
             setMethod("MANUAL");
             setStatus("finalized");
             setReason("");
-
             setComments("");
             setContentHash("");
             setProviderSignatureId("");
             setSignoffId("");
         }
-    }, [editing]);
+    }, [editing, patientId, encounterId]);
+
+    useEffect(() => {
+        if (targetType || finalizedAt || finalizedBy || reason) {
+            setEncounterSection(patientId, encounterId, "dateTimeFinalized", {
+                targetType,
+                targetId,
+                targetVersion,
+                finalizedAt,
+                finalizedBy,
+                finalizerRole,
+                method,
+                status,
+                reason,
+                comments
+            } as any);
+        }
+    }, [targetType, targetId, targetVersion, finalizedAt, finalizedBy, finalizerRole, method, status, reason, comments, patientId, encounterId]);
 
     function setNow() {
         setFinalizedAt(new Date().toISOString());
@@ -126,9 +156,9 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
             if (!json || json.success !== true || !json.data) { setErr(json?.message || "Save failed"); return; }
 
             onSaved(json.data);
+            removeEncounterSection(patientId, encounterId, "dateTimeFinalized");
 
             if (!editing?.id) {
-                // Reset to defaults after create
                 setTargetType("NOTE");
                 setTargetId("");
                 setTargetVersion("v1");
@@ -156,14 +186,14 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                    <label className="block text-sm font-medium mb-1">Target Type</label>
-                    <select className="w-full rounded-lg border px-3 py-2" value={targetType} onChange={(e) => setTargetType(e.target.value)}>
+                    <label className="block text-sm font-medium mb-1">Target Type <span className="text-red-600">*</span></label>
+                    <select className="w-full rounded-lg border px-3 py-2" value={targetType} onChange={(e) => setTargetType(e.target.value)} required>
                         {TARGET_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium mb-1">Target ID</label>
-                    <input className="w-full rounded-lg border px-3 py-2" value={targetId} onChange={(e) => setTargetId(e.target.value)} placeholder="e.g., 5001" />
+                    <label className="block text-sm font-medium mb-1">Target ID <span className="text-red-600">*</span></label>
+                    <input className="w-full rounded-lg border px-3 py-2" value={targetId} onChange={(e) => setTargetId(e.target.value)} placeholder="e.g., 5001" required />
                 </div>
                 <div>
                     <label className="block text-sm font-medium mb-1">Target Version</label>
@@ -172,13 +202,14 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
 
                 <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                        <label className="block text-sm font-medium mb-1">Finalized Date/Time</label>
+                        <label className="block text-sm font-medium mb-1">Finalized Date/Time <span className="text-red-600">*</span></label>
                         <div className="flex gap-2">
                             <input
                                 className="flex-1 rounded-lg border px-3 py-2"
                                 value={finalizedAt}
                                 onChange={(e) => setFinalizedAt(e.target.value)}
                                 placeholder="YYYY-MM-DDTHH:mm:ssZ"
+                                required
                             />
                             <button type="button" onClick={setNow} className="rounded-lg border px-3 py-1.5 hover:bg-gray-50">
                                 Set to Now
@@ -186,14 +217,14 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium mb-1">Finalized By</label>
-                        <input className="w-full rounded-lg border px-3 py-2" value={finalizedBy} onChange={(e) => setFinalizedBy(e.target.value)} placeholder="dr.smith@clinic" />
+                        <label className="block text-sm font-medium mb-1">Finalized By <span className="text-red-600">*</span></label>
+                        <input className="w-full rounded-lg border px-3 py-2" value={finalizedBy} onChange={(e) => setFinalizedBy(e.target.value)} placeholder="dr.smith@clinic" required />
                     </div>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium mb-1">Role</label>
-                    <select className="w-full rounded-lg border px-3 py-2" value={finalizerRole} onChange={(e) => setFinalizerRole(e.target.value)}>
+                    <label className="block text-sm font-medium mb-1">Role <span className="text-red-600">*</span></label>
+                    <select className="w-full rounded-lg border px-3 py-2" value={finalizerRole} onChange={(e) => setFinalizerRole(e.target.value)} required>
                         {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                 </div>
@@ -210,8 +241,8 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
                     </select>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium mb-1">Reason</label>
-                    <input className="w-full rounded-lg border px-3 py-2" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g., signed off" />
+                    <label className="block text-sm font-medium mb-1">Reason <span className="text-red-600">*</span></label>
+                    <input className="w-full rounded-lg border px-3 py-2" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g., signed off" required />
                 </div>
 
                 <div className="md:col-span-2">
@@ -241,7 +272,7 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
                     {saving ? "Saving..." : editing?.id ? "Update" : "Save"}
                 </button>
                 {onCancel && (
-                    <button type="button" onClick={onCancel} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
+                    <button type="button" onClick={() => { removeEncounterSection(patientId, encounterId, "dateTimeFinalized"); onCancel(); }} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
                         Cancel
                     </button>
                 )}

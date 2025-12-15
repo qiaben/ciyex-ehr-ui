@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse, PastMedicalHistoryDto } from "@/utils/types";
+import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
 type Props = {
     patientId: number;
@@ -40,8 +41,19 @@ export default function Pmhform({
     const [err, setErr] = useState<string | null>(null);
 
     useEffect(() => {
-        setDescription(editing?.description ?? "");
-    }, [editing]);
+        const encounterData = getEncounterData(patientId, encounterId);
+        if (encounterData.pastMedicalHistory && !editing?.id) {
+            setDescription(encounterData.pastMedicalHistory.description || "");
+        } else {
+            setDescription(editing?.description ?? "");
+        }
+    }, [editing, patientId, encounterId]);
+
+    useEffect(() => {
+        if (description) {
+            setEncounterSection(patientId, encounterId, "pastMedicalHistory", { description });
+        }
+    }, [description, patientId, encounterId]);
 
     async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
         e.preventDefault();
@@ -83,6 +95,7 @@ export default function Pmhform({
             }
 
             onSaved(json.data!);
+            removeEncounterSection(patientId, encounterId, "pastMedicalHistory");
 
             if (!editing?.id) {
                 setDescription("");
@@ -107,7 +120,7 @@ export default function Pmhform({
             <div className="grid grid-cols-1 gap-3">
                 <div>
                     <label className="block text-sm font-medium mb-1" htmlFor="pmh-description">
-                        Description
+                        Description <span className="text-red-600">*</span>
                     </label>
                     <textarea
                         id="pmh-description"
@@ -133,7 +146,7 @@ export default function Pmhform({
                 {onCancel && (
                     <button
                         type="button"
-                        onClick={onCancel}
+                        onClick={() => { removeEncounterSection(patientId, encounterId, "pastMedicalHistory"); onCancel(); }}
                         className="rounded-xl border px-4 py-2 hover:bg-gray-50"
                     >
                         Cancel

@@ -1,4 +1,7 @@
 
+
+
+
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -1298,8 +1301,8 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     // Notes state
     const [currentNotes, setCurrentNotes] = useState<Note[]>([]);
     const [editingNote, setEditingNote] = useState<Note | null>(null);
-    const [notesText, setNotesText] = useState<string>("");
-    const [showNotesFor, setShowNotesFor] = useState<{ invoiceId: number; anchor: HTMLElement | null } | null>(null); // Updated to use invoiceId directly
+    const [showNotesFor, setShowNotesFor] = useState<{ invoiceId: number; anchor: HTMLElement | null } | null>(null);
+    const notesInputRef = React.useRef<HTMLTextAreaElement>(null); // Updated to use invoiceId directly
     // Dropdown data
     const [providers, setProviders] = useState<Provider[]>([]);
     const [patients, setPatients] = useState<Patient[]>([]);
@@ -1563,7 +1566,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             body: JSON.stringify(body),
         });
         const data = await res.json();
-            if (!showTransferCreditModal) return null; 
+        if (!data?.success) throw new Error(data?.message || "Failed to update invoice");
         await loadAll();
     }
 
@@ -1588,8 +1591,8 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         });
         const data = await res.json();
         if (data?.success) {
-            await fetchNotes(invoiceId); // Refresh list
-            setNotesText(""); // Clear textarea
+            await fetchNotes(invoiceId);
+            if (notesInputRef.current) notesInputRef.current.value = "";
         } else {
             throw new Error(data?.message || "Failed to create note");
         }
@@ -1603,9 +1606,9 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         });
         const data = await res.json();
         if (data?.success) {
-            await fetchNotes(invoiceId); // Refresh list
+            await fetchNotes(invoiceId);
             setEditingNote(null);
-            setNotesText(""); // Clear textarea
+            if (notesInputRef.current) notesInputRef.current.value = "";
         } else {
             throw new Error(data?.message || "Failed to update note");
         }
@@ -1626,31 +1629,40 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     const handleOpenNotes = async (invoiceId: number, e?: React.MouseEvent) => {
         setShowNotesFor({ invoiceId, anchor: e?.currentTarget as HTMLElement || null });
         setEditingNote(null);
-        setNotesText("");
         await fetchNotes(invoiceId);
+        setTimeout(() => {
+            if (notesInputRef.current) {
+                notesInputRef.current.value = "";
+                notesInputRef.current.focus();
+            }
+        }, 100);
     };
 
     const handleCloseNotes = () => {
         setShowNotesFor(null);
         setCurrentNotes([]);
         setEditingNote(null);
-        setNotesText("");
+        if (notesInputRef.current) notesInputRef.current.value = "";
     };
 
     const handleSaveNote = async () => {
-        if (!showNotesFor) return;
+        if (!showNotesFor || !notesInputRef.current) return;
+        const text = notesInputRef.current.value.trim();
+        if (!text) return;
+        
         if (editingNote) {
-            await updateNote(showNotesFor.invoiceId, editingNote.id, notesText.trim());
+            await updateNote(showNotesFor.invoiceId, editingNote.id, text);
         } else {
-            if (notesText.trim()) {
-                await createNote(showNotesFor.invoiceId, notesText.trim());
-            }
+            await createNote(showNotesFor.invoiceId, text);
         }
     };
 
     const handleEditNote = (note: Note) => {
         setEditingNote(note);
-        setNotesText(note.text);
+        if (notesInputRef.current) {
+            notesInputRef.current.value = note.text;
+            notesInputRef.current.focus();
+        }
     };
 
     const handleDeleteNote = async (noteId: number) => {
@@ -1767,10 +1779,9 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         }
     }
 
-    async function fetchCreditAdjustmentDetails(invoiceId: number) {
-        if (expandedCreditAdjustmentId === invoiceId) {
+    async function fetchCreditAdjustmentDetails(invoiceId: number, toggleExpand = true) {
+        if (toggleExpand && expandedCreditAdjustmentId === invoiceId) {
             setExpandedCreditAdjustmentId(null);
-            setCreditAdjustmentDetail(null);
             return;
         }
         
@@ -1780,22 +1791,18 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             const data = await res.json();
             if (data?.success && data.data) {
                 setCreditAdjustmentDetail(data.data);
-                setExpandedCreditAdjustmentId(invoiceId);
-            } else {
-                throw new Error(data?.message || "Failed to fetch credit adjustment details");
+                if (toggleExpand) setExpandedCreditAdjustmentId(invoiceId);
             }
         } catch (error) {
-            alert((error as Error).message);
-            setCreditAdjustmentDetail(null);
+            console.error("Failed to fetch credit adjustment:", error);
         } finally {
             setLoadingCreditAdjustment(false);
         }
     }
 
-    async function fetchTransferOfCreditDetails(invoiceId: number) {
-        if (expandedTransferOfCreditId === invoiceId) {
+    async function fetchTransferOfCreditDetails(invoiceId: number, toggleExpand = true) {
+        if (toggleExpand && expandedTransferOfCreditId === invoiceId) {
             setExpandedTransferOfCreditId(null);
-            setTransferOfCreditDetail(null);
             return;
         }
         
@@ -1805,13 +1812,10 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             const data = await res.json();
             if (data?.success && data.data) {
                 setTransferOfCreditDetail(data.data);
-                setExpandedTransferOfCreditId(invoiceId);
-            } else {
-                throw new Error(data?.message || "Failed to fetch transfer of credit details");
+                if (toggleExpand) setExpandedTransferOfCreditId(invoiceId);
             }
         } catch (error) {
-            alert((error as Error).message);
-            setTransferOfCreditDetail(null);
+            console.error("Failed to fetch transfer of credit:", error);
         } finally {
             setLoadingTransferOfCredit(false);
         }
@@ -1819,15 +1823,13 @@ export default function PatientBilling({ patientId, patientName }: Props) {
 
     // Notes Popover/Modal - Enhanced to use portal, anchor to row, and smooth input
   
-    // Notes Modal - Rendered as fixed overlay, no anchor, smooth controlled textarea
-    const NotesModal = ({ open, invoiceId, onClose, notes, editingNote, notesText, onNotesChange, onSave, onEdit, onDelete }: {
+    // Notes Modal - Uncontrolled textarea for smooth typing
+    const NotesModal = ({ open, invoiceId, onClose, notes, editingNote, onSave, onEdit, onDelete }: {
         open: boolean;
         invoiceId: number;
         onClose: () => void;
         notes: Note[];
         editingNote: Note | null;
-        notesText: string;
-        onNotesChange: (v: string) => void;
         onSave: () => void;
         onEdit: (note: Note) => void;
         onDelete: (noteId: number) => void;
@@ -1862,16 +1864,15 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                         ))}
                     </div>
                     <textarea
+                        ref={notesInputRef}
                         className="input"
                         style={{ width: "100%", minHeight: 60, marginBottom: 8, resize: "vertical" }}
                         placeholder={editingNote ? "Edit note..." : "Enter new note..."}
-                        value={notesText}
-                        onChange={e => onNotesChange(e.target.value)}
-                        autoFocus
+                        defaultValue=""
                     />
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                         <button className="btn-light" onClick={onClose}>Cancel</button>
-                        <button className="btn-primary" onClick={onSave} disabled={!notesText.trim()}>{editingNote ? "Update" : "Save"}</button>
+                        <button className="btn-primary" onClick={onSave}>{editingNote ? "Update" : "Save"}</button>
                     </div>
                 </div>
             </div>
@@ -3214,7 +3215,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                 </div>
                                             )}
                                             {/* Credit Adjustment Row */}
-                                            <div className="flex items-start gap-3 border-b px-3 py-2 text-sm bg-white">
+                                            <div className="flex items-start gap-3 border-b px-3 py-2 text-sm bg-white" onMouseEnter={() => !creditAdjustmentDetail && fetchCreditAdjustmentDetails(inv.id, false)}>
                                                 <button
                                                     className="mr-2 p-1 rounded-full hover:bg-gray-100"
                                                     title="View/Add Notes"
@@ -3228,14 +3229,16 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                 <div className="min-w-[100px] text-gray-500">{creditAdjustmentDetail?.date || ''}</div>
                                                 <div className="flex-1 cursor-pointer" onClick={() => fetchCreditAdjustmentDetails(inv.id)}>
                                                     <div className="flex items-center justify-between">
-                                                        <span className="text-gray-700">Credit Adjustment #{creditAdjustmentDetail?.id || ''}: <span className="text-blue-600">Write Off</span>{currency(creditAdjustmentDetail?.insWriteoff || 0)}</span>
+                                                        <span className="text-gray-700">Credit Adjustment #{creditAdjustmentDetail?.id || ''}: <span className="text-blue-600">Write Off</span>{currency(creditAdjustmentDetail?.writeOffAmount || creditAdjustmentDetail?.insWriteoff || 0)}</span>
                                                         <div className="flex items-center gap-4">
-                                                            <span className="font-semibold">{currency(creditAdjustmentDetail?.amount || 0)}</span>
+                                                            <span className="font-semibold">{currency(creditAdjustmentDetail?.endConcernAmount || creditAdjustmentDetail?.amount || 0)}</span>
                                                             <span className="text-gray-500">ARO</span>
                                                             <button className="p-1">
-                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-green-600">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                                </svg>
+                                                                {expandedCreditAdjustmentId === inv.id ? (
+                                                                    <span className="text-blue-600">▼</span>
+                                                                ) : (
+                                                                    <span className="text-gray-400">▶</span>
+                                                                )}
                                                             </button>
                                                         </div>
                                                     </div>
@@ -3276,7 +3279,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                 </div>
                                             )}
                                             {/* Transfer of Credit Row */}
-                                            <div className="flex items-start gap-3 border-b px-3 py-2 text-sm bg-white">
+                                            <div className="flex items-start gap-3 border-b px-3 py-2 text-sm bg-white" onMouseEnter={() => !transferOfCreditDetail && fetchTransferOfCreditDetails(inv.id, false)}>
                                                 <button
                                                     className="mr-2 p-1 rounded-full hover:bg-gray-100"
                                                     title="View/Add Notes"
@@ -3290,10 +3293,17 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                 <div className="min-w-[100px] text-gray-500">{transferOfCreditDetail?.date || ''}</div>
                                                 <div className="flex-1 cursor-pointer" onClick={() => fetchTransferOfCreditDetails(inv.id)}>
                                                     <div className="flex items-center justify-between">
-                                                        <span className="text-gray-700">Transfer of credits #{transferOfCreditDetail?.id || ''}</span>
+                                                        <span className="text-gray-700">Transfer of credits #{transferOfCreditDetail?.transferCreditId || transferOfCreditDetail?.id || ''}</span>
                                                         <div className="flex items-center gap-4">
-                                                            <span className="font-semibold">{currency(transferOfCreditDetail?.amount || 0)}</span>
+                                                            <span className="font-semibold">{currency(transferOfCreditDetail?.endConcernAmount || transferOfCreditDetail?.amount || 0)}</span>
                                                             <span className="text-gray-500">ARO</span>
+                                                            <button className="p-1">
+                                                                {expandedTransferOfCreditId === inv.id ? (
+                                                                    <span className="text-blue-600">▼</span>
+                                                                ) : (
+                                                                    <span className="text-gray-400">▶</span>
+                                                                )}
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -3646,8 +3656,6 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                 onClose={handleCloseNotes}
                 notes={currentNotes}
                 editingNote={editingNote}
-                notesText={notesText}
-                onNotesChange={setNotesText}
                 onSave={handleSaveNote}
                 onEdit={handleEditNote}
                 onDelete={handleDeleteNote}

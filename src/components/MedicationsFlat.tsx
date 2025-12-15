@@ -35,7 +35,8 @@ export default function MedicationsFlat({ patientId, encounterId }: Props) {
     const emptyForm: MedicationRequest = useMemo(
         () => ({
             patientId,
-            encounterId: encounterId ?? null,
+            // backend requires an encounterId; fall back to patientId when none provided
+            encounterId: encounterId ?? patientId,
             medicationName: "",
             dosage: "",
             instructions: "",
@@ -103,14 +104,34 @@ export default function MedicationsFlat({ patientId, encounterId }: Props) {
                     ? `${api}/api/medication-requests`
                     : `${api}/api/medication-requests/${editingId}`;
 
+            // ensure payload includes patientId and encounterId (backend expects encounterId)
+            const payload = {
+                ...form,
+                patientId: form.patientId ?? patientId,
+                encounterId: form.encounterId ?? encounterId ?? patientId,
+            };
+
             const res = await fetchWithAuth(url, {
                 method: editingId == null ? "POST" : "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(form),
+                body: JSON.stringify(payload),
             });
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error(text || "Request failed");
+
+            // Backend uses ApiResponse wrapper and returns 200 even on logical failures.
+            // Parse JSON and check success flag to surface errors to the user.
+            let json: any = null;
+            try {
+                json = await res.json();
+            } catch (parseErr) {
+                // If response is not JSON, treat non-OK status as error
+                if (!res.ok) {
+                    const text = await res.text();
+                    throw new Error(text || "Request failed");
+                }
+            }
+
+            if (json && json.success === false) {
+                throw new Error(json.message || "Save failed");
             }
             await load();
             setShowForm(false);
@@ -126,7 +147,18 @@ export default function MedicationsFlat({ patientId, encounterId }: Props) {
         if (!confirm("Delete this medication?")) return;
         try {
             const res = await fetchWithAuth(`${api}/api/medication-requests/${id}`, { method: "DELETE" });
+            let json: any = null;
+            try {
+                json = await res.json();
+            } catch {
+                // ignore parse error
+            }
+            if (json && json.success === false) {
+                throw new Error(json.message || "Delete failed");
+            }
+
             if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+
             setItems((prev) => prev.filter((m) => m.id !== id));
         } catch (e: unknown) {
             const message = e instanceof Error ? e.message : String(e);
@@ -141,13 +173,6 @@ export default function MedicationsFlat({ patientId, encounterId }: Props) {
             <div className="flex items-center justify-between mb-4">
                 <h4 className="text-lg font-semibold text-gray-800">{title}</h4>
                 <div className="flex gap-2">
-                    <button
-                        onClick={() => router.push(`${pathname}?tab=issues&section=Medication#issues`)}
-                        className="h-8 px-3 rounded border text-xs hover:bg-gray-50"
-                        title="Open this list in the Issues tab"
-                    >
-                        View in Issues
-                    </button>
                     <button
                         onClick={openCreate}
                         className="h-8 px-3 rounded bg-blue-600 hover:bg-blue-700 text-xs font-medium text-white shadow-sm"
