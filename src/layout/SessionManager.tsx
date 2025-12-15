@@ -126,13 +126,13 @@ export default function SessionManager() {
         timeoutId.current = window.setTimeout(onIdle, idleMs);
       } catch {}
     };
-    window.addEventListener('tokenExpiryUpdated', onTokenExpiryUpdated as EventListener);
+    window.addEventListener('tokenExpiryUpdated', onTokenExpiryUpdated as (event: Event) => void);
 
     return () => {
       activityEvents.forEach((ev) => window.removeEventListener(ev, resetTimer));
       window.removeEventListener("visibilitychange", resetTimer);
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener('tokenExpiryUpdated', onTokenExpiryUpdated as EventListener);
+      window.removeEventListener('tokenExpiryUpdated', onTokenExpiryUpdated as (event: Event) => void);
       if (timeoutId.current) window.clearTimeout(timeoutId.current);
     };
   }, []);
