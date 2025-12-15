@@ -327,6 +327,7 @@
 import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse, FamilyHistoryDto, FamilyHistoryEntryDto } from "@/utils/types";
+import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
 type Props = {
     patientId: number;
@@ -356,7 +357,14 @@ export default function FHform({ patientId, encounterId, fhId, entries, editing,
     const [err, setErr] = useState<string | null>(null);
 
     useEffect(() => {
-        if (editing?.id) {
+        const encounterData = getEncounterData(patientId, encounterId);
+        if (encounterData.familyHistory && !editing?.id) {
+            const data = encounterData.familyHistory;
+            setRelation(data.relation || "FATHER");
+            setDiagnosisCode(data.diagnosisCode || "");
+            setDiagnosisText(data.diagnosisText || "");
+            setNotes(data.notes || "");
+        } else if (editing?.id) {
             setRelation(editing.relation || "FATHER");
             setDiagnosisCode(editing.diagnosisCode || "");
             setDiagnosisText(editing.diagnosisText || "");
@@ -364,7 +372,18 @@ export default function FHform({ patientId, encounterId, fhId, entries, editing,
         } else {
             setRelation("FATHER"); setDiagnosisCode(""); setDiagnosisText(""); setNotes("");
         }
-    }, [editing]);
+    }, [editing, patientId, encounterId]);
+
+    useEffect(() => {
+        if (relation || diagnosisCode || diagnosisText || notes) {
+            setEncounterSection(patientId, encounterId, "familyHistory", {
+                relation,
+                diagnosisCode,
+                diagnosisText,
+                notes
+            });
+        }
+    }, [relation, diagnosisCode, diagnosisText, notes, patientId, encounterId]);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -410,7 +429,8 @@ export default function FHform({ patientId, encounterId, fhId, entries, editing,
                 throw new Error(json?.message || `Save failed (${res.status})`);
             }
 
-            onSaved(); // parent will reload list
+            removeEncounterSection(patientId, encounterId, "familyHistory");
+            onSaved();
         } catch (e: unknown) {
             if (e instanceof Error) {
                 setErr(e.message);
@@ -428,36 +448,40 @@ export default function FHform({ patientId, encounterId, fhId, entries, editing,
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                    <label className="block text-sm font-medium mb-1">Relation</label>
+                    <label className="block text-sm font-medium mb-1">Relation <span className="text-red-600">*</span></label>
                     <select className="w-full rounded-lg border px-3 py-2 focus:ring"
                             value={relation}
-                            onChange={(e) => setRelation(e.target.value as FamilyHistoryEntryDto["relation"])}>
+                            onChange={(e) => setRelation(e.target.value as FamilyHistoryEntryDto["relation"])}
+                            required>
                         {RELATIONS.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium mb-1">Diagnosis Code</label>
+                    <label className="block text-sm font-medium mb-1">Diagnosis Code <span className="text-red-600">*</span></label>
                     <input className="w-full rounded-lg border px-3 py-2 focus:ring"
                            value={diagnosisCode}
                            onChange={(e) => setDiagnosisCode(e.target.value)}
-                           placeholder="e.g., I10" />
+                           placeholder="e.g., I10"
+                           required />
                 </div>
 
                 <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Diagnosis Text</label>
+                    <label className="block text-sm font-medium mb-1">Diagnosis Text <span className="text-red-600">*</span></label>
                     <input className="w-full rounded-lg border px-3 py-2 focus:ring"
                            value={diagnosisText}
                            onChange={(e) => setDiagnosisText(e.target.value)}
-                           placeholder="Hypertension" />
+                           placeholder="Hypertension"
+                           required />
                 </div>
 
                 <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Notes</label>
+                    <label className="block text-sm font-medium mb-1">Notes <span className="text-red-600">*</span></label>
                     <textarea className="w-full rounded-lg border px-3 py-2 focus:ring min-h-20"
                               value={notes}
                               onChange={(e) => setNotes(e.target.value)}
-                              placeholder="Additional context" />
+                              placeholder="Additional context"
+                              required />
                 </div>
             </div>
 
@@ -468,7 +492,7 @@ export default function FHform({ patientId, encounterId, fhId, entries, editing,
                     {saving ? "Saving..." : editing?.id ? "Update" : "Save"}
                 </button>
                 {onCancel && (
-                    <button type="button" onClick={onCancel} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
+                    <button type="button" onClick={() => { removeEncounterSection(patientId, encounterId, "familyHistory"); onCancel(); }} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
                         Cancel
                     </button>
                 )}

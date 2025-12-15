@@ -1,10 +1,9 @@
-
-
 "use client";
 
 import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse, CodeDto } from "@/utils/types";
+import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
 type Props = {
     patientId: number;
@@ -33,7 +32,21 @@ export default function CodeForm({ patientId, encounterId, editing, onSaved, onC
     const [err, setErr] = useState<string | null>(null);
 
     useEffect(() => {
-        if (editing?.id) {
+        const encounterData = getEncounterData(patientId, encounterId);
+        if (encounterData.code && !editing?.id) {
+            const data = encounterData.code;
+            setCodeType((data.codeType as CodeDto["codeType"]) || "ICD10");
+            setCode(data.code || "");
+            setModifier(data.modifier ?? "");
+            setActive(data.active ?? true);
+            setDescription(data.description || "");
+            setShortDescription((data as any).shortDescription || "");
+            setCategory((data as any).category || "");
+            setDiagnosisReporting(data.diagnosisReporting ?? false);
+            setServiceReporting(data.serviceReporting ?? false);
+            setRelateTo((data as any).relateTo || "");
+            setFeeStandard((data as any).feeStandard ?? "");
+        } else if (editing?.id) {
             setCodeType((editing.codeType as CodeDto["codeType"]) || "ICD10");
             setCode(editing.code || "");
             setModifier(editing.modifier ?? "");
@@ -58,7 +71,21 @@ export default function CodeForm({ patientId, encounterId, editing, onSaved, onC
             setRelateTo("");
             setFeeStandard("");
         }
-    }, [editing]);
+    }, [editing, patientId, encounterId]);
+
+    useEffect(() => {
+        if (code || description) {
+            setEncounterSection(patientId, encounterId, "code", {
+                codeType,
+                code,
+                modifier,
+                active,
+                description,
+                diagnosisReporting,
+                serviceReporting
+            } as any);
+        }
+    }, [codeType, code, modifier, active, description, diagnosisReporting, serviceReporting, patientId, encounterId]);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -93,6 +120,7 @@ export default function CodeForm({ patientId, encounterId, editing, onSaved, onC
             if (!res.ok || !json.success) throw new Error(json.message || "Save failed");
 
             onSaved(json.data!);
+            removeEncounterSection(patientId, encounterId, "code");
 
             if (!editing?.id) {
                 setCodeType("ICD10");
@@ -237,7 +265,7 @@ export default function CodeForm({ patientId, encounterId, editing, onSaved, onC
                     {saving ? "Saving..." : editing?.id ? "Update" : "Save"}
                 </button>
                 {onCancel && (
-                    <button type="button" onClick={onCancel} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
+                    <button type="button" onClick={() => { removeEncounterSection(patientId, encounterId, "code"); onCancel(); }} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
                         Cancel
                     </button>
                 )}

@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse, ChiefComplaintDto } from "@/utils/types";
+import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
 type Props = {
     patientId: number;
@@ -28,9 +29,26 @@ export default function Chiefcomplaintform({
     const [err, setErr] = useState<string | null>(null);
 
     useEffect(() => {
-        setComplaint(editing?.complaint ?? "");
-        setDetails(editing?.details ?? "");
-    }, [editing]);
+        const encounterData = getEncounterData(patientId, encounterId);
+        if (encounterData.chiefComplaint && !editing?.id) {
+            setComplaint(encounterData.chiefComplaint.complaint || "");
+            setDetails(encounterData.chiefComplaint.details || "");
+        } else {
+            setComplaint(editing?.complaint ?? "");
+            setDetails(editing?.details ?? "");
+        }
+    }, [editing, patientId, encounterId]);
+
+    useEffect(() => {
+        if (complaint || details) {
+            setEncounterSection(patientId, encounterId, "chiefComplaint", {
+                complaint,
+                details,
+                patientId,
+                encounterId
+            });
+        }
+    }, [complaint, details, patientId, encounterId]);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -59,6 +77,7 @@ export default function Chiefcomplaintform({
             const json = (await res.json()) as ApiResponse<ChiefComplaintDto>;
             if (!res.ok || !json.success) throw new Error(json.message || "Save failed");
             onSaved(json.data!);
+            removeEncounterSection(patientId, encounterId, "chiefComplaint");
             if (!editing?.id) {
                 setComplaint("");
                 setDetails("");
@@ -79,7 +98,7 @@ export default function Chiefcomplaintform({
             </h3>
 
             <div>
-                <label className="block text-sm font-medium mb-1">Complaint</label>
+                <label className="block text-sm font-medium mb-1">Complaint <span className="text-red-600">*</span></label>
                 <input
                     value={complaint}
                     onChange={(e) => setComplaint(e.target.value)}
@@ -90,12 +109,13 @@ export default function Chiefcomplaintform({
             </div>
 
             <div>
-                <label className="block text-sm font-medium mb-1">Details</label>
+                <label className="block text-sm font-medium mb-1">Details <span className="text-red-600">*</span></label>
                 <textarea
                     value={details}
                     onChange={(e) => setDetails(e.target.value)}
                     placeholder="Clinical details or context"
                     className="w-full min-h-28 rounded-lg border px-3 py-2 focus:ring"
+                    required
                 />
             </div>
 
@@ -112,7 +132,7 @@ export default function Chiefcomplaintform({
                 {onCancel && (
                     <button
                         type="button"
-                        onClick={onCancel}
+                        onClick={() => { removeEncounterSection(patientId, encounterId, "chiefComplaint"); onCancel(); }}
                         className="rounded-xl border px-4 py-2 hover:bg-gray-50"
                     >
                         Cancel
