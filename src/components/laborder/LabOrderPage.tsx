@@ -33,7 +33,38 @@ type LabOrder = {
   procedureCode?: string;
 };
 
-/* ---------------- Response Normalizer ---------------- */
+// Normalize patient ID from various possible field names
+function normalizePatientId(order: LabOrder): LabOrder {
+  if (order.patientId && order.patientId > 0) return order; // Already set
+  
+  const anyOrder = order as unknown as Record<string, unknown>;
+  const patientObj = anyOrder['patient'] as Record<string, unknown> | undefined;
+  
+  // Try multiple common field names
+  const candidates = [
+    anyOrder['patientId'],
+    anyOrder['patient_id'],
+    anyOrder['patientID'],
+    patientObj?.['id'],
+    patientObj?.['patientId'],
+  ];
+  
+  for (const candidate of candidates) {
+    if (candidate || candidate === 0) {
+      const num = Number(candidate);
+      if (!Number.isNaN(num) && num > 0) {
+        return { ...order, patientId: num };
+      }
+    }
+  }
+  
+  return order;
+}
+
+// Batch normalize patient IDs in orders array
+function normalizeOrderPatientIds(orders: LabOrder[]): LabOrder[] {
+  return orders.map(normalizePatientId);
+}
 // Backend may return in different shapes (after recent changes):
 // 1. { success:true, data:[...] }
 // 2. [ ... ] (raw array)
@@ -68,8 +99,12 @@ function FieldRow({ label, children }: { label: React.ReactNode; children: React
 
 function statusBadgeClasses(status?: string) {
   const s = (status || "").toLowerCase();
-  if (s === "active")  return "bg-green-100 text-green-800 ring-1 ring-green-200";
-  if (s === "pending") return "bg-red-100 text-red-800 ring-1 ring-red-200";
+  if (s === "draft")    return "bg-yellow-100 text-yellow-800 ring-1 ring-yellow-200";
+  if (s === "active")   return "bg-green-100 text-green-800 ring-1 ring-green-200";
+  if (s === "pending")  return "bg-orange-100 text-orange-800 ring-1 ring-orange-200";
+  if (s === "completed")return "bg-blue-100 text-blue-800 ring-1 ring-blue-200";
+  if (s === "cancelled")return "bg-gray-100 text-gray-800 ring-1 ring-gray-200";
+  if (s === "revoked")  return "bg-red-50 text-red-800 ring-1 ring-red-200";
   return "bg-gray-100 text-gray-800 ring-1 ring-gray-200";
 }
 
@@ -259,7 +294,7 @@ export default function LabOrdersPage() {
       let parsed: unknown = null; try { parsed = text ? JSON.parse(text) : null; } catch {/*ignore*/}
       const arr = normalizeOrders(parsed);
       if (res.ok && arr.length) {
-        setOrders(arr);
+        setOrders(normalizeOrderPatientIds(arr));
         setToast(null);
         return arr.length;
       }
@@ -295,7 +330,7 @@ export default function LabOrdersPage() {
       const arr = normalizeOrders(jsonUnknown);
 
       if (res.ok && arr.length > 0) {
-        setOrders(arr);
+        setOrders(normalizeOrderPatientIds(arr));
         setToast(null);
         return;
       }
@@ -337,7 +372,7 @@ export default function LabOrdersPage() {
             let jsonUnknown: unknown = null; try { jsonUnknown = text ? JSON.parse(text) : null; } catch {}
             const arr = normalizeOrders(jsonUnknown);
             if (relRes.ok) {
-              setOrders(arr);
+              setOrders(normalizeOrderPatientIds(arr));
               if (arr.length === 0 && showToastOnEmpty) setToast({ type: 'info', text: 'No lab orders found.' });
               return; // success (even if empty)
             }
@@ -563,8 +598,7 @@ export default function LabOrdersPage() {
                 <tr key={o.id ?? `${o.orderNumber}-${o.patientId}`} className="border-t hover:bg-gray-50">
                   <td className="px-4 py-3 font-mono text-xs text-gray-900">{o.orderNumber}</td>
                   <td className="px-4 py-3 text-gray-900">
-                    <div>{o.patientFirstName} {o.patientLastName}</div>
-                    <div className="text-xs text-gray-500">{formatMrn(o.mrn)}</div>
+                    <div className="font-medium">{o.patientId || '—'}</div>
                   </td>
                   <td className="px-4 py-3 text-gray-900">
                     <div className="font-medium">{o.orderName}</div>
