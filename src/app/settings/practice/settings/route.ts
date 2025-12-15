@@ -68,7 +68,8 @@ export async function GET(req: NextRequest) {
     // Extract practice settings and add the practice name
     const practiceSettings = {
       ...defaultPractice.practiceSettings,
-      name: defaultPractice.name || ""
+      name: defaultPractice.name || "",
+      tokenExpiryMinutes: defaultPractice.tokenExpiryMinutes || 5
     };
 
     return NextResponse.json(
@@ -127,6 +128,7 @@ export async function POST(req: NextRequest) {
     const updatedPractice = {
       ...defaultPractice,
       name: name || defaultPractice.name,
+      tokenExpiryMinutes: settingsBody.tokenExpiryMinutes ?? defaultPractice.tokenExpiryMinutes,
       practiceSettings: {
         ...defaultPractice.practiceSettings,
         enablePatientPractice: settingsBody.enablePatientPractice ?? defaultPractice.practiceSettings?.enablePatientPractice

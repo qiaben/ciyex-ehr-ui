@@ -1,16 +1,13 @@
 "use client";
-
 import React, { useState, useCallback, useEffect } from "react";
 import AdminLayout from "@/app/(admin)/layout";
-
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-
 /* ------------ Types ------------ */
 interface PracticeSettings {
     name: string;
     enablePatientPractice: boolean;
+    tokenExpiryMinutes?: number;
 }
-
 interface RegionalSettings {
     unitsForVisitForms: "US" | "Metric" | "Both";
     displayFormatUSWeights: "Show pounds as decimal value" | "Show pounds and ounces";
@@ -20,27 +17,23 @@ interface RegionalSettings {
     timeZone: string;
     currencyDesignator: string;
 }
-
 interface ToastNotification {
     id: number;
     message: string;
     type: "success" | "error" | "info";
     visible: boolean;
 }
-
 /* ------------ Reusable UI Components ------------ */
 interface FormRowProps {
     label: string;
     children: React.ReactNode;
 }
-
 const FormRow: React.FC<FormRowProps> = ({ label, children }) => (
     <div className="flex items-center justify-between border-b pb-4 last:border-b-0">
         <span className="text-gray-700 text-sm font-medium pr-4 w-2/3">{label}</span>
         <div className="w-1/3 flex justify-end">{children}</div>
     </div>
 );
-
 const ConfigCard: React.FC<{ title: string; children: React.ReactNode }> = ({
                                                                                 title,
                                                                                 children,
@@ -50,7 +43,6 @@ const ConfigCard: React.FC<{ title: string; children: React.ReactNode }> = ({
         {children}
     </div>
 );
-
 /* ------------ Toast Notification Component ------------ */
 const ToastNotificationComponent: React.FC<{
     notification: ToastNotification;
@@ -68,7 +60,6 @@ const ToastNotificationComponent: React.FC<{
                 return "bg-gray-500 border-gray-600";
         }
     };
-
     return (
         <div
             className={`${getToastStyles()} text-white px-4 py-3 rounded-lg shadow-lg border-l-4 flex items-center justify-between min-w-80 max-w-96 transform transition-all duration-300 ${
@@ -122,19 +113,27 @@ const ToastNotificationComponent: React.FC<{
         </div>
     );
 };
-
 /* ------------ Main Page ------------ */
 export default function RegionalFormattingSettingsPage() {
     const [notifications, setNotifications] = useState<ToastNotification[]>([]);
     const [nextNotificationId, setNextNotificationId] = useState(1);
     const [isLoading, setIsLoading] = useState(true);
-
     const [practiceSettings, setPracticeSettings] = useState<PracticeSettings>({
         name: "",
         enablePatientPractice: false,
+    tokenExpiryMinutes: 5,
     });
+    
+    // persist fetched expiry to localStorage per org
+    const persistExpiryLocally = (orgId: string | null, mins: number | undefined) => {
+        try {
+            const keyOrg = orgId || "default";
+            const m = typeof mins === 'number' && mins > 0 ? mins : 5;
+            localStorage.setItem(`tokenExpiryMinutes_${keyOrg}`, String(m));
+            localStorage.setItem('tokenExpiryMinutes', String(m));
+        } catch {}
+    };
     const [practiceId, setPracticeId] = useState<string | null>(null);
-
     const [settings, setSettings] = useState<RegionalSettings>({
         unitsForVisitForms: "US",
         displayFormatUSWeights: "Show pounds as decimal value",
@@ -144,18 +143,15 @@ export default function RegionalFormattingSettingsPage() {
         timeZone: "",
         currencyDesignator: "",
     });
-
     const hideNotification = useCallback((id: number) => {
         setNotifications((prev: ToastNotification[]) =>
             prev.map((n: ToastNotification) => n.id === id ? { ...n, visible: false } : n)
         );
-
-        // Remove from array after animation
+// Remove from array after animation
         setTimeout(() => {
             setNotifications((prev: ToastNotification[]) => prev.filter((n: ToastNotification) => n.id !== id));
         }, 300);
     }, []);
-
     const showNotification = useCallback((message: string, type: "success" | "error" | "info" = "success") => {
         const newNotification: ToastNotification = {
             id: nextNotificationId,
@@ -163,38 +159,31 @@ export default function RegionalFormattingSettingsPage() {
             type,
             visible: false,
         };
-
         setNotifications((prev: ToastNotification[]) => [...prev, newNotification]);
         setNextNotificationId((prev: number) => prev + 1);
-
-        // Show the notification
+// Show the notification
         setTimeout(() => {
             setNotifications((prev: ToastNotification[]) =>
                 prev.map((n: ToastNotification) => n.id === newNotification.id ? { ...n, visible: true } : n)
             );
         }, 100);
-
-        // Auto-hide after 5 seconds
+// Auto-hide after 5 seconds
         setTimeout(() => {
             hideNotification(newNotification.id);
         }, 5000);
     }, [nextNotificationId, hideNotification]);
-
-    // Fetch practice settings on component mount
+// Fetch practice settings on component mount
     useEffect(() => {
         const fetchPracticeSettings = async () => {
             try {
                 const token = localStorage.getItem("token") || localStorage.getItem("authToken");
                 const orgId = localStorage.getItem("orgId");
-
                 const headers: Record<string, string> = {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${token}`,
                 };
                 if (orgId) headers["orgId"] = orgId;
-
                 const fetchPracticeId = orgId || "1";
-
                 const res = await fetch(`${API_BASE}/api/practices/${fetchPracticeId}`, {
                     method: "GET",
                     headers,
@@ -206,7 +195,9 @@ export default function RegionalFormattingSettingsPage() {
                         setPracticeSettings({
                             name: response.data.name || "",
                             enablePatientPractice: response.data.practiceSettings?.enablePatientPractice || false,
+                            tokenExpiryMinutes: response.data.practiceSettings?.tokenExpiryMinutes ?? response.data.tokenExpiryMinutes ?? 5,
                         });
+                        persistExpiryLocally(response.data.id || orgId, response.data.practiceSettings?.tokenExpiryMinutes ?? response.data.tokenExpiryMinutes);
                         if (response.data.regionalSettings) {
                             setSettings(response.data.regionalSettings);
                         }
@@ -223,52 +214,58 @@ export default function RegionalFormattingSettingsPage() {
                 setIsLoading(false);
             }
         };
-
         fetchPracticeSettings();
     }, [showNotification, setPracticeId]);
-
     const handlePracticeInputChange = useCallback(
-        (key: keyof PracticeSettings, value: boolean | string) =>
+        (key: keyof PracticeSettings, value: boolean | string | number) =>
             setPracticeSettings((prev: PracticeSettings) => ({ ...prev, [key]: value })),
         []
     );
-
     const handleInputChange = useCallback(
         (key: keyof RegionalSettings, value: string) =>
             setSettings((prev: RegionalSettings) => ({ ...prev, [key]: value })),
         []
     );
-
     const handleSavePractice = async () => {
         try {
             const token = localStorage.getItem("token") || localStorage.getItem("authToken");
             const orgId = localStorage.getItem("orgId");
-
             const headers: Record<string, string> = {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${token}`,
             };
             if (orgId) headers["orgId"] = orgId;
-
             const currentPracticeId = practiceId || orgId || "1";
             const url = practiceId ? `${API_BASE}/api/practices/${currentPracticeId}` : `${API_BASE}/api/practices`;
             const method = practiceId ? "PUT" : "POST";
-
             const res = await fetch(url, {
                 method,
                 headers,
                 body: JSON.stringify({
                     name: practiceSettings.name,
-                    practiceSettings: { enablePatientPractice: practiceSettings.enablePatientPractice },
+                    practiceSettings: { enablePatientPractice: practiceSettings.enablePatientPractice, tokenExpiryMinutes: practiceSettings.tokenExpiryMinutes ?? 5 },
                     regionalSettings: settings
                 }),
             });
-
             if (res.ok) {
                 const response = await res.json();
                 if (!practiceId && response.success && response.data) {
                     setPracticeId(response.data.id);
                 }
+                // persist expiry locally for session manager and notify it in this tab
+                try {
+                    const orgKey = response?.data?.id || practiceId || orgId || "default";
+                    const mins = practiceSettings.tokenExpiryMinutes ?? 5;
+                    localStorage.setItem(`tokenExpiryMinutes_${orgKey}`, String(mins));
+                    localStorage.setItem('tokenExpiryMinutes', String(mins));
+                    try {
+                        sessionStorage.setItem('lastActivity', String(Date.now()));
+                    } catch {}
+                    // notify SessionManager in same tab (storage events don't fire in same tab)
+                    try {
+                        window.dispatchEvent(new CustomEvent('tokenExpiryUpdated', { detail: { orgId: orgKey, mins } }));
+                    } catch {}
+                } catch {}
                 showNotification("Practice settings saved successfully!", "success");
             } else {
                 showNotification("Failed to save practice settings.", "error");
@@ -277,37 +274,41 @@ export default function RegionalFormattingSettingsPage() {
             showNotification("Error saving practice settings.", "error");
         }
     };
-
     const handleSaveRegional = async () => {
         try {
             const token = localStorage.getItem("token") || localStorage.getItem("authToken");
             const orgId = localStorage.getItem("orgId");
-
             const headers: Record<string, string> = {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${token}`,
             };
             if (orgId) headers["orgId"] = orgId;
-
             const currentPracticeId = practiceId || orgId || "1";
             const url = practiceId ? `${API_BASE}/api/practices/${currentPracticeId}` : `${API_BASE}/api/practices`;
             const method = practiceId ? "PUT" : "POST";
-
             const res = await fetch(url, {
                 method,
                 headers,
                 body: JSON.stringify({
                     name: practiceSettings.name,
-                    practiceSettings: { enablePatientPractice: practiceSettings.enablePatientPractice },
+                    practiceSettings: { enablePatientPractice: practiceSettings.enablePatientPractice, tokenExpiryMinutes: practiceSettings.tokenExpiryMinutes ?? 5 },
                     regionalSettings: settings
                 }),
             });
-
             if (res.ok) {
                 const response = await res.json();
                 if (!practiceId && response.success && response.data) {
                     setPracticeId(response.data.id);
                 }
+                // persist expiry locally for session manager and notify it in this tab
+                try {
+                    const orgKey = response?.data?.id || practiceId || orgId || "default";
+                    const mins = practiceSettings.tokenExpiryMinutes ?? 5;
+                    localStorage.setItem(`tokenExpiryMinutes_${orgKey}`, String(mins));
+                    localStorage.setItem('tokenExpiryMinutes', String(mins));
+                    try { sessionStorage.setItem('lastActivity', String(Date.now())); } catch {}
+                    try { window.dispatchEvent(new CustomEvent('tokenExpiryUpdated', { detail: { orgId: orgKey, mins } })); } catch {}
+                } catch {}
                 showNotification("Regional settings saved successfully!", "success");
             } else {
                 showNotification("Failed to save regional settings.", "error");
@@ -316,7 +317,6 @@ export default function RegionalFormattingSettingsPage() {
             showNotification("Error saving regional settings.", "error");
         }
     };
-
     if (isLoading) {
         return (
             <AdminLayout>
@@ -328,7 +328,6 @@ export default function RegionalFormattingSettingsPage() {
             </AdminLayout>
         );
     }
-
     return (
         <AdminLayout>
             <div className="p-4 max-w-4xl mx-auto space-y-6">
@@ -336,7 +335,6 @@ export default function RegionalFormattingSettingsPage() {
                 <div className="flex justify-between items-center mb-4">
                     <h1 className="text-xl font-bold"></h1>
                 </div>
-
                 {/* --- Practice Configuration Card --- */}
                 <ConfigCard title="Practice">
                     {/* Practice Name */}
@@ -349,7 +347,6 @@ export default function RegionalFormattingSettingsPage() {
                             className="p-2 border rounded w-full max-w-xs"
                         />
                     </FormRow>
-
                     {/* Enable Patient Practice */}
                     <FormRow label="Enable Patient Practice">
                         <button
@@ -360,15 +357,29 @@ export default function RegionalFormattingSettingsPage() {
                                 practiceSettings.enablePatientPractice ? 'bg-blue-600' : 'bg-gray-200'
                             }`}
                         >
-                            <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                    practiceSettings.enablePatientPractice ? 'translate-x-6' : 'translate-x-1'
-                                }`}
-                            />
+<span
+    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+        practiceSettings.enablePatientPractice ? 'translate-x-6' : 'translate-x-1'
+    }`}
+/>
                         </button>
                     </FormRow>
+                    {/* Session timeout for organization (minutes) */}
+                    <FormRow label="Session timeout (minutes)">
+                        <select
+                            value={practiceSettings.tokenExpiryMinutes}
+                            onChange={(e) => handlePracticeInputChange("tokenExpiryMinutes", Number(e.target.value))}
+                            className="p-2 border rounded w-full max-w-xs"
+                        >
+                            <option value={5}>5</option>
+                            <option value={10}>10</option>
+                            <option value={15}>15</option>
+                            <option value={20}>20</option>
+                            <option value={25}>25</option>
+                            <option value={30}>30</option>
+                        </select>
+                    </FormRow>
                 </ConfigCard>
-
                 {/* --- Regional & Locale Card (merged) --- */}
                 <ConfigCard title="Regional & Locale Options">
                     {/* Units for Visit Forms */}
@@ -388,7 +399,6 @@ export default function RegionalFormattingSettingsPage() {
                             <option value="Both">Show both US and metric (main unit is US)</option>
                         </select>
                     </FormRow>
-
                     {/* Display Format for US Weights */}
                     <FormRow label="Display Format for US Weights">
                         <select
@@ -407,7 +417,6 @@ export default function RegionalFormattingSettingsPage() {
                             <option value="Show pounds and ounces">Show pounds and ounces</option>
                         </select>
                     </FormRow>
-
                     {/* Telephone Country Code */}
                     <FormRow label="Telephone Country Code">
                         <input
@@ -419,7 +428,6 @@ export default function RegionalFormattingSettingsPage() {
                             className="p-2 border rounded w-24 text-center"
                         />
                     </FormRow>
-
                     {/* Date Display Format */}
                     <FormRow label="Date Display Format">
                         <select
@@ -437,7 +445,6 @@ export default function RegionalFormattingSettingsPage() {
                             <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                         </select>
                     </FormRow>
-
                     {/* Time Display Format */}
                     <FormRow label="Time Display Format">
                         <select
@@ -454,7 +461,6 @@ export default function RegionalFormattingSettingsPage() {
                             <option value="12 hr">12 hr</option>
                         </select>
                     </FormRow>
-
                     {/* Time Zone */}
                     <FormRow label="Time Zone">
                         <select
@@ -468,7 +474,6 @@ export default function RegionalFormattingSettingsPage() {
                             <option value="America/New_York">America/New_York</option>
                         </select>
                     </FormRow>
-
                     {/* Currency Designator (moved up here) */}
                     <FormRow label="Currency Designator">
                         <input
@@ -481,7 +486,6 @@ export default function RegionalFormattingSettingsPage() {
                         />
                     </FormRow>
                 </ConfigCard>
-
                 {/* Regional Save Button */}
                 <div className="flex justify-end">
                     <button
@@ -492,7 +496,6 @@ export default function RegionalFormattingSettingsPage() {
                     </button>
                 </div>
             </div>
-
             {/* Toast Notifications Container */}
             <div className="fixed bottom-4 right-4 z-50 space-y-3">
                 {notifications.map((notification) => (
