@@ -243,7 +243,7 @@ const ProviderList = () => {
                 <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-md">
                     <table className="w-full table-fixed">
                         <colgroup>
-                            <col style={{width:"22%"}}/><col style={{width:"10%"}}/><col style={{width:"12%"}}/><col style={{width:"12%"}}/><col style={{width:"18%"}}/><col style={{width:"12%"}}/><col style={{width:"9%"}}/><col style={{width:"160px"}}/>
+                            <col style={{width:"20%"}}/><col style={{width:"10%"}}/><col style={{width:"10%"}}/><col style={{width:"14%"}}/><col style={{width:"20%"}}/><col style={{width:"12%"}}/><col style={{width:"8%"}}/><col style={{width:"160px"}}/>
                         </colgroup>
                         <thead className="bg-gray-100">
                         <tr>
