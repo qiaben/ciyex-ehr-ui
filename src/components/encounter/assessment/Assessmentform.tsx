@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
+import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import type { ApiResponse, AssessmentDto } from "@/utils/types";
 import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
@@ -16,7 +17,16 @@ type Props = {
     onCancel?: () => void;
 };
 
+const CODE_TYPES = ["CPT4", "HCPCS", "ICD10", "ICD9", "CVX", "CUSTOM"] as const;
+
+type CodeOption = {
+    id: number;
+    code: string;
+    description?: string;
+};
+
 export default function Assessmentform({ patientId, encounterId, editing, onSaved, onCancel }: Props) {
+    const [codeType, setCodeType] = useState<string>("ICD10");
     const [diagnosisCode, setDiagnosisCode] = useState("");
     const [diagnosisName, setDiagnosisName] = useState("");
     const [status, setStatus] = useState<AssessmentDto["status"]>("Active");
@@ -24,8 +34,53 @@ export default function Assessmentform({ patientId, encounterId, editing, onSave
     const [assessmentText, setAssessmentText] = useState("");
     const [notes, setNotes] = useState("");
 
+    const [codeOptions, setCodeOptions] = useState<CodeOption[]>([]);
+    const [loadingCodes, setLoadingCodes] = useState(false);
     const [saving, setSaving] = useState(false);
     const [err, setErr] = useState<string | null>(null);
+
+    async function fetchCodes(type: string) {
+        setLoadingCodes(true);
+        try {
+            const orgId = localStorage.getItem("orgId") || "";
+            const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
+            const url = `${apiUrl}/api/global_codes?codeType=${type}`;
+            
+            const headers: Record<string, string> = {
+                Accept: "application/json",
+                "Content-Type": "application/json"
+            };
+            if (orgId) headers["orgId"] = orgId;
+            
+            const res = await fetchWithAuth(url, {
+                method: "GET",
+                headers,
+                mode: "cors" as const
+            });
+            
+            const json = await res.json();
+            
+            if (res.ok && json.data) {
+                const mapped: CodeOption[] = json.data.map((item: any) => ({
+                    id: item.id,
+                    code: item.code,
+                    description: item.description || item.shortDescription
+                }));
+                setCodeOptions(mapped);
+            } else {
+                setCodeOptions([]);
+            }
+        } catch (e) {
+            console.error("Failed to fetch codes:", e);
+            setCodeOptions([]);
+        } finally {
+            setLoadingCodes(false);
+        }
+    }
+
+    useEffect(() => {
+        if (codeType) fetchCodes(codeType);
+    }, [codeType]);
 
     useEffect(() => {
         const encounterData = getEncounterData(patientId, encounterId);
@@ -115,16 +170,41 @@ export default function Assessmentform({ patientId, encounterId, editing, onSave
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                    <label className="block text-sm font-medium mb-1">Diagnosis Code (ICD-10) <span className="text-red-600">*</span></label>
-                    <input
+                    <label className="block text-sm font-medium mb-1">Code Type</label>
+                    <select
+                        className="w-full rounded-lg border px-3 py-2 focus:ring"
+                        value={codeType}
+                        onChange={(e) => setCodeType(e.target.value)}
+                    >
+                        {CODE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium mb-1">Diagnosis Code <span className="text-red-600">*</span></label>
+                    <select
                         className="w-full rounded-lg border px-3 py-2 focus:ring"
                         value={diagnosisCode}
-                        onChange={(e) => setDiagnosisCode(e.target.value)}
-                        placeholder="e.g., M54.5"
+                        onChange={(e) => {
+                            const selected = codeOptions.find(c => c.code === e.target.value);
+                            if (selected) {
+                                setDiagnosisCode(selected.code);
+                                setDiagnosisName(selected.description || "");
+                            }
+                        }}
                         required
-                    />
+                    >
+                        <option value="">Select Code</option>
+                        {codeOptions.map(c => (
+                            <option key={c.id} value={c.code}>
+                                {c.code} - {c.description}
+                            </option>
+                        ))}
+                    </select>
+                    {loadingCodes && <p className="text-xs text-gray-500 mt-1">Loading codes...</p>}
                 </div>
-                <div>
+
+                <div className="md:col-span-2">
                     <label className="block text-sm font-medium mb-1">Diagnosis Name <span className="text-red-600">*</span></label>
                     <input
                         className="w-full rounded-lg border px-3 py-2 focus:ring"
@@ -175,7 +255,7 @@ export default function Assessmentform({ patientId, encounterId, editing, onSave
                 </div>
 
                 <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Notes <span className="text-red-600">*</span></label>
+                    <label className="block text-sm font-medium mb-1">Notes </label>
                     <textarea
                         className="w-full rounded-lg border px-3 py-2 focus:ring min-h-20"
                         value={notes}

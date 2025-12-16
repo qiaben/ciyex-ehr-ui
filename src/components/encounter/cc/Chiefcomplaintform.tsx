@@ -109,7 +109,7 @@ export default function Chiefcomplaintform({
             </div>
 
             <div>
-                <label className="block text-sm font-medium mb-1">Details <span className="text-red-600">*</span></label>
+                <label className="block text-sm font-medium mb-1">Details </label>
                 <textarea
                     value={details}
                     onChange={(e) => setDetails(e.target.value)}
