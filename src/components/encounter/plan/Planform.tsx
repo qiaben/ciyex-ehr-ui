@@ -13,20 +13,14 @@ type Props = {
   onCancel?: () => void;
 };
 
-const DEFAULT_SECTIONS = {
-  templates: ["Plan Template A"],
-  diagnostic: { search: "" },
-};
-
 export default function PlanForm({ patientId, encounterId, editing, onSaved, onCancel }: Props) {
   const [diagnosticPlan, setDiagnosticPlan] = useState("");
   const [plan, setPlan] = useState("");
   const [notes, setNotes] = useState("");
   const [followUpVisit, setFollowUpVisit] = useState("");
   const [returnWorkSchool, setReturnWorkSchool] = useState("");
-  const [sectionsJsonText, setSectionsJsonText] = useState(
-    JSON.stringify(DEFAULT_SECTIONS, null, 2)
-  );
+  const [section1, setSection1] = useState("");
+  const [section2, setSection2] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -40,40 +34,40 @@ export default function PlanForm({ patientId, encounterId, editing, onSaved, onC
       setNotes(data.notes || "");
       setFollowUpVisit(data.followUpVisit || "");
       setReturnWorkSchool(data.returnWorkSchool || "");
-      setSectionsJsonText((data as any).sectionsJsonText || JSON.stringify(DEFAULT_SECTIONS, null, 2));
+      setSection1((data as any).section1 || "");
+      setSection2((data as any).section2 || "");
     } else if (editing?.id) {
       setDiagnosticPlan(editing.diagnosticPlan || "");
       setPlan(editing.plan || "");
       setNotes(editing.notes || "");
       setFollowUpVisit(editing.followUpVisit || "");
       setReturnWorkSchool(editing.returnWorkSchool || "");
-      setSectionsJsonText(
-        editing.sectionsJson
-          ? JSON.stringify(editing.sectionsJson, null, 2)
-          : JSON.stringify(DEFAULT_SECTIONS, null, 2)
-      );
+      setSection1((editing as any).section1 || "");
+      setSection2((editing as any).section2 || "");
     } else {
       setDiagnosticPlan("");
       setPlan("");
       setNotes("");
       setFollowUpVisit("");
       setReturnWorkSchool("");
-      setSectionsJsonText(JSON.stringify(DEFAULT_SECTIONS, null, 2));
+      setSection1("");
+      setSection2("");
     }
   }, [editing, patientId, encounterId]);
 
   useEffect(() => {
-    if (diagnosticPlan || plan || notes || followUpVisit || returnWorkSchool) {
+    if (diagnosticPlan || plan || notes || followUpVisit || returnWorkSchool || section1 || section2) {
       setEncounterSection(patientId, encounterId, "plan", {
         diagnosticPlan,
         plan,
         notes,
         followUpVisit,
         returnWorkSchool,
-        sectionsJsonText
+        section1,
+        section2
       } as any);
     }
-  }, [diagnosticPlan, plan, notes, followUpVisit, returnWorkSchool, sectionsJsonText, patientId, encounterId]);
+  }, [diagnosticPlan, plan, notes, followUpVisit, returnWorkSchool, section1, section2, patientId, encounterId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -81,41 +75,18 @@ export default function PlanForm({ patientId, encounterId, editing, onSaved, onC
     setErr(null);
 
     try {
-      // Validate the “Sections JSON” textarea content.
-      let sectionsJson: Record<string, unknown> | undefined = undefined;
-      const trimmed = sectionsJsonText.trim();
-      if (trimmed) {
-        try {
-          sectionsJson = JSON.parse(trimmed);
-        } catch {
-          throw new Error("Sections JSON is not valid JSON.");
-        }
-      }
-
-      // const body: PlanDto = {
-      //   patientId,
-      //   encounterId,
-      //   ...(diagnosticPlan ? { diagnosticPlan: diagnosticPlan.trim() } : {}),
-      //   ...(plan ? { plan: plan.trim() } : {}),
-      //   ...(notes ? { notes: notes.trim() } : {}),
-      //   ...(followUpVisit ? { followUpVisit: followUpVisit.trim() } : {}),
-      //   ...(returnWorkSchool ? { returnWorkSchool: returnWorkSchool.trim() } : {}),
-      //  ...(sectionsJsonText ? { sectionsJson: sectionsJsonText.trim() } : {}),
-
-      //   ...(editing?.id ? { id: editing.id } : {}),
-      // };
-      const body: PlanDto = {
-  patientId,
-  encounterId,
-  ...(diagnosticPlan ? { diagnosticPlan: diagnosticPlan.trim() } : {}),
-  ...(plan ? { plan: plan.trim() } : {}),
-  ...(notes ? { notes: notes.trim() } : {}),
-  ...(followUpVisit ? { followUpVisit: followUpVisit.trim() } : {}),
-  ...(returnWorkSchool ? { returnWorkSchool: returnWorkSchool.trim() } : {}),
-  ...(sectionsJson ? { sectionsJson } : {}),   // <-- use parsed JSON here
-  ...(editing?.id ? { id: editing.id } : {}),
-};
-
+      const body: any = {
+        patientId,
+        encounterId,
+        ...(diagnosticPlan ? { diagnosticPlan: diagnosticPlan.trim() } : {}),
+        ...(plan ? { plan: plan.trim() } : {}),
+        ...(notes ? { notes: notes.trim() } : {}),
+        ...(followUpVisit ? { followUpVisit: followUpVisit.trim() } : {}),
+        ...(returnWorkSchool ? { returnWorkSchool: returnWorkSchool.trim() } : {}),
+        ...(section1 ? { section1: section1.trim() } : {}),
+        ...(section2 ? { section2: section2.trim() } : {}),
+        ...(editing?.id ? { id: editing.id } : {}),
+      };
 
       const url = editing?.id
         ? `/api/plan/${patientId}/${encounterId}/${editing.id}`
@@ -135,7 +106,8 @@ export default function PlanForm({ patientId, encounterId, editing, onSaved, onC
         setNotes("");
         setFollowUpVisit("");
         setReturnWorkSchool("");
-        setSectionsJsonText(JSON.stringify(DEFAULT_SECTIONS, null, 2));
+        setSection1("");
+        setSection2("");
       }
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Something went wrong");
@@ -202,18 +174,24 @@ export default function PlanForm({ patientId, encounterId, editing, onSaved, onC
           />
         </div>
 
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium mb-1">Sections JSON <span className="text-red-600">*</span></label>
-          <textarea
-            className="w-full rounded-lg border px-3 py-2 focus:ring font-mono min-h-36"
-            value={sectionsJsonText}
-            onChange={(e) => setSectionsJsonText(e.target.value)}
-            placeholder='{"templates":["Plan Template A"],"diagnostic":{"search":"asthma"}}'
-            required
+        <div>
+          <label className="block text-sm font-medium mb-1">Section 1</label>
+          <input
+            className="w-full rounded-lg border px-3 py-2 focus:ring"
+            value={section1}
+            onChange={(e) => setSection1(e.target.value)}
+            placeholder="Plan Template A; "
           />
-          <p className="mt-1 text-xs text-gray-500">
-            Paste a valid JSON object. It will be sent as <code>sectionsJson</code>.
-          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Section 2</label>
+          <input
+            className="w-full rounded-lg border px-3 py-2 focus:ring"
+            value={section2}
+            onChange={(e) => setSection2(e.target.value)}
+            placeholder="search=asthma"
+          />
         </div>
       </div>
 

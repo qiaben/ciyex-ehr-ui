@@ -510,7 +510,7 @@ useEffect(() => {
 
           <div className="hidden md:flex justify-center" />
 
-          <div className="flex justify-start md:justify-end items-center gap-2">
+          <div className="flex justify-start md:justify-end items-center gap-3">
             {saveMessage && (
               <span className={`text-xs px-2 py-1 rounded ${
                 saveMessage.type === "success" 
@@ -522,7 +522,7 @@ useEffect(() => {
             )}
             
             <button
-              className="px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+              className="px-4 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60 text-sm font-medium"
               onClick={handleSaveAll}
               disabled={savingAll || loadingStatus}
             >
@@ -530,7 +530,7 @@ useEffect(() => {
             </button>
 
             <button
-              className="px-3 py-1.5 rounded bg-blue-600 text-white disabled:opacity-60"
+              className="px-4 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 text-sm font-medium"
               disabled={loadingStatus || status === "SIGNED"}
               onClick={() => postStatus("sign", "SIGNED")}
             >
@@ -538,19 +538,22 @@ useEffect(() => {
             </button>
 
             <button
-              className="px-3 py-1.5 rounded bg-blue-600 text-white disabled:opacity-60"
+              className="px-4 py-1.5 rounded bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-60 text-sm font-medium"
               disabled={loadingStatus || status === "UNSIGNED"}
               onClick={() => postStatus("unsign", "UNSIGNED")}
               title="Revert to Un-signed"
             >
               Unsign
             </button>
+            
+            <div className="h-6 w-px bg-gray-300 mx-1"></div>
+            
             <button
-              className="px-3 py-1.5 rounded bg-blue-700 text-white disabled:opacity-60"
+              className="px-5 py-1.5 rounded bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-60 text-sm font-medium shadow-sm"
               onClick={downloadSummaryPdf}
-              title="Download Summary as PDF"
+              title="Download Encounter Summary as PDF"
             >
-              Print
+              📄 Print / Download PDF
             </button>
           </div>
         </div>
