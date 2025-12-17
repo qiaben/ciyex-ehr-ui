@@ -17,8 +17,106 @@ import {
 import Alert from "@/components/ui/alert/Alert";
 import VideoCallButton from "@/components/telehealth/VideoCallButton";
 
+const monthViewStyles = `
+/* Hide FullCalendar scrollbars */
+.fc-view-harness {
+  overflow: hidden !important;
+}
+/* 1. The Frame: The positioning context for the whole day */
+.fc-daygrid-day-frame {
+  position: relative !important;
+  min-height: 120px !important;
+  z-index: 1;
+}
 
+/* 2. Neutralize the default top bar & containers so they don't trap our card */
+.fc-daygrid-day-top {
+  position: static !important;
+  display: block !important;
+  padding: 0 !important;
+}
 
+.fc-daygrid-day-number {
+  position: static !important;
+  width: 100%;
+  height: 100%;
+  padding: 4px !important;
+  text-decoration: none !important;
+  color: #6b7280; /* Default color for empty days */
+}
+
+/* 3. Hide Default Events to be safe */
+.fc-dayGridMonth-view .fc-daygrid-event-harness,
+.fc-dayGridMonth-view .fc-daygrid-event {
+  display: none !important;
+}
+
+/* 4. The Custom Card - Breaks out of the static containers to fill the Frame */
+.fc-month-card {
+  position: absolute !important;
+  top: 4px !important;
+  left: 4px !important;
+  right: 4px !important;
+  bottom: 4px !important;
+  background-color: #d1fae5 !important; /* Solid Light Green */
+  border-radius: 12px !important;
+  z-index: 10 !important;
+  padding: 0 !important;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+/* 5. Inner Content Container */
+.fc-month-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+}
+
+/* 6. Big Date Number */
+.fc-month-day {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #355e4e; /* Dark Green */
+  line-height: 1;
+}
+
+/* 7. Notification Badge */
+.fc-month-count {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: #10b981; /* Bright Green */
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* 8. Hover Effect */
+.fc-month-card:hover {
+  filter: brightness(0.98);
+}
+
+/* 9. Hide FullCalendar scrollbar to prevent double scrollbars */
+.fc-scroller {
+  overflow: hidden !important;
+}
+
+.fc-daygrid-body {
+  overflow: hidden !important;
+}
+`;
 
 /* =========================
  * Types & Interfaces
@@ -328,7 +426,7 @@ const Calendar: React.FC = () => {
     // Removed Title — auto-generate from Visit Type + Patient
     const [visitType, setVisitType] = useState<string>('Consultation');
 
-// This holds the list of visit types fetched from backend
+    // This holds the list of visit types fetched from backend
     const [visitTypeOptions, setVisitTypeOptions] = useState<{ value: string; label: string }[]>([]);
 
     // Patient search & selection
@@ -360,6 +458,9 @@ const Calendar: React.FC = () => {
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const calendarRef = useRef<FullCalendar>(null);
     const { isOpen, openModal, closeModal } = useModal();
+
+    // Loading state for save button
+    const [isSaving, setIsSaving] = useState<boolean>(false);
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL as string;
 
@@ -444,7 +545,7 @@ const Calendar: React.FC = () => {
         })();
     }, [apiUrl]);
 
-/// Auto-select a real provider when in Week/Month view
+    /// Auto-select a real provider when in Week/Month view
     useEffect(() => {
         if (activeView !== "timeGridDay" && provider === "all" && providers.length > 1) {
             setProvider(providers[1].value); // default to first provider
@@ -591,7 +692,7 @@ const Calendar: React.FC = () => {
         }
     }, [apiUrl]);
 
-// Trigger loadAppointments when component is mounted
+    // Trigger loadAppointments when component is mounted
     useEffect(() => {
         loadAppointments();
     }, [loadAppointments]);
@@ -599,7 +700,7 @@ const Calendar: React.FC = () => {
 
 
 
-// Build provider list for chosen date/time (& location)
+    // Build provider list for chosen date/time (& location)
     useEffect(() => {
         if (!isOpen || !combinedStart || !combinedEnd) {
             setProvidersForDate([]);
@@ -893,12 +994,17 @@ const Calendar: React.FC = () => {
     };
 
     const handleAddOrUpdateAppointment = async () => {
+        if (isSaving) return; // Prevent double submission
+
+        setIsSaving(true);
+
         if (!selectedPatientId) {
             setAlertData({
                 variant: "warning",
                 title: "Missing Patient",
                 message: "Please select a patient before saving the appointment.",
             });
+            setIsSaving(false);
             return;
         }
 
@@ -908,6 +1014,7 @@ const Calendar: React.FC = () => {
                 title: "Missing Provider",
                 message: "Please select a provider before saving the appointment.",
             });
+            setIsSaving(false);
             return;
         }
 
@@ -920,6 +1027,7 @@ const Calendar: React.FC = () => {
                 title: "Missing Date/Time",
                 message: "Please choose start and end date/time.",
             });
+            setIsSaving(false);
             return;
         }
 
@@ -929,6 +1037,7 @@ const Calendar: React.FC = () => {
                 title: "Invalid Time Range",
                 message: "End time must be after start time.",
             });
+            setIsSaving(false);
             return;
         }
 
@@ -955,6 +1064,7 @@ const Calendar: React.FC = () => {
                     title: "No Schedule Found",
                     message: "This provider has no schedule for the selected time. Please add the schedule first.",
                 });
+                setIsSaving(false);
                 return;
             }
         } catch (err) {
@@ -964,6 +1074,7 @@ const Calendar: React.FC = () => {
                 title: "Schedule Validation Failed",
                 message: "Could not verify the provider's schedule. Please try again.",
             });
+            setIsSaving(false);
             return;
         }
 
@@ -973,6 +1084,7 @@ const Calendar: React.FC = () => {
                 title: "Missing Location",
                 message: "Please select a location before saving the appointment.",
             });
+            setIsSaving(false);
             return;
         }
 
@@ -1046,6 +1158,8 @@ const Calendar: React.FC = () => {
                 title: "Network Error",
                 message: "Could not save the appointment. Please try again.",
             });
+        } finally {
+            setIsSaving(false);
         }
     };
     const resetModalFields = () => {
@@ -1067,6 +1181,7 @@ const Calendar: React.FC = () => {
         setAppointmentNotes('');
         setShowPatientDropdown(false);
         setSelectedEvent(null);
+        setIsSaving(false); // Reset saving state
     };
 
     // === Event renderer (inside component so we can read location labels) ===
@@ -1087,6 +1202,76 @@ const Calendar: React.FC = () => {
         []
     );
 
+    const dayCellContent = useCallback(
+        (arg: any) => {
+            if (activeView !== 'dayGridMonth') {
+                return arg.dayNumberText;
+            }
+
+            const cellDate = arg.date;
+            const cellDateStr = cellDate.getFullYear() + '-' +
+                String(cellDate.getMonth() + 1).padStart(2, '0') + '-' +
+                String(cellDate.getDate()).padStart(2, '0');
+
+            const count = events.filter((e) => {
+                if (!e.start) return false;
+                const eventStart = new Date(e.start);
+                const eventDateStr = eventStart.getFullYear() + '-' +
+                    String(eventStart.getMonth() + 1).padStart(2, '0') + '-' +
+                    String(eventStart.getDate()).padStart(2, '0');
+                if (eventDateStr !== cellDateStr) return false;
+                if (provider !== 'all' && e.extendedProps.providerId !== provider) return false;
+                if (location !== 'all' && e.extendedProps.locationId !== location) return false;
+                return true;
+            }).length;
+
+            // No count → default number
+            if (count === 0) {
+                return <span className="fc-daygrid-day-number">{arg.dayNumberText}</span>;
+            }
+
+            // Pill UI with click handlers
+            return (
+                <div
+                    className="fc-month-card cursor-pointer"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        const selectInfo = {
+                            start: arg.date,
+                            end: new Date(arg.date.getTime() + 15 * 60 * 1000),
+                            allDay: false
+                        };
+                        handleDateSelect(selectInfo as any);
+                    }}
+                >
+                    <div className="fc-month-card-inner">
+                        <span className="fc-month-day">
+                            {arg.dayNumberText}
+                        </span>
+                        <span
+                            className="fc-month-count cursor-pointer hover:bg-green-600 transition-colors"
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                            }}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                changeView('timeGridDay');
+                                if (calendarRef.current) {
+                                    calendarRef.current.getApi().gotoDate(arg.date);
+                                }
+                            }}
+                        >
+                            {count}
+                        </span>
+                    </div>
+                </div>
+            );
+        },
+        [activeView, events, provider, location, changeView, handleDateSelect, calendarRef]
+    );
+
 
 
 
@@ -1095,6 +1280,7 @@ const Calendar: React.FC = () => {
      * ======================= */
     return (
         <div className="relative rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+            <style>{monthViewStyles}</style>
 
             {/* Alert banner */}
             {alertData && (
@@ -1421,6 +1607,7 @@ const Calendar: React.FC = () => {
                             }
                             eventClick={handleEventClick}
                             eventContent={renderEventContent}
+                            dayCellContent={dayCellContent}
                         />
                     </div>
                 )}
@@ -1655,8 +1842,8 @@ const Calendar: React.FC = () => {
                                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-400">
                                         Provider{' '}
                                         <span className="ml-2 rounded-md bg-red-100 px-2 py-[2px] text-xs font-medium text-red-700">
-                      required
-                    </span>
+                                            required
+                                        </span>
                                     </label>
                                     <select
                                         required
@@ -1687,8 +1874,8 @@ const Calendar: React.FC = () => {
                                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-400">
                                         Location{" "}
                                         <span className="ml-2 rounded-md bg-red-100 px-2 py-[2px] text-xs font-medium text-red-700">
-      required
-    </span>
+                                            required
+                                        </span>
                                     </label>
                                     <select
                                         required
@@ -1757,9 +1944,9 @@ const Calendar: React.FC = () => {
                                     onClick={handleAddOrUpdateAppointment}
                                     type="button"
                                     className="flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60 sm:w-auto"
-                                    disabled={!appointmentProviderId || !startDate || !startTime || !endDate || !endTime}
+                                    disabled={isSaving || !appointmentProviderId || !startDate || !startTime || !endDate || !endTime}
                                 >
-                                    {selectedEvent ? 'Update Appointment' : 'Save Appointment'}
+                                    {isSaving ? 'Saving...' : (selectedEvent ? 'Update Appointment' : 'Save Appointment')}
                                 </button>
                             </div>
                         </div>
