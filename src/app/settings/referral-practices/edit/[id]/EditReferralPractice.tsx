@@ -15,6 +15,8 @@ interface FormData {
     state: string;
     postalCode: string;
     country: string;
+    npiId: string;
+    taxId: string;
 }
 
 const EditReferralPractice = ({ id }: { id: string }) => {
@@ -30,6 +32,8 @@ const EditReferralPractice = ({ id }: { id: string }) => {
         state: "",
         postalCode: "",
         country: "",
+        npiId: "",
+        taxId: "",
     });
 
     const [loading, setLoading] = useState(false);
@@ -43,6 +47,12 @@ const EditReferralPractice = ({ id }: { id: string }) => {
     }, [id]);
 
     const fetchReferralPractice = async () => {
+        if (!id) {
+            setError("Invalid practice ID");
+            setFetchLoading(false);
+            return;
+        }
+        
         try {
             setFetchLoading(true);
             const response = await fetchWithAuth(
@@ -72,6 +82,8 @@ const EditReferralPractice = ({ id }: { id: string }) => {
                         state: practiceData.state || "",
                         postalCode: practiceData.postalCode || "",
                         country: practiceData.country || "",
+                        npiId: practiceData.npiId || "",
+                        taxId: practiceData.taxId || "",
                     });
                 } else {
                     setError("Referral practice not found");
@@ -117,6 +129,8 @@ const EditReferralPractice = ({ id }: { id: string }) => {
                 state: formData.state || null,
                 postalCode: formData.postalCode || null,
                 country: formData.country || null,
+                npiId: formData.npiId || null,
+                taxId: formData.taxId || null,
             };
 
             const response = await fetchWithAuth(
@@ -232,6 +246,34 @@ const EditReferralPractice = ({ id }: { id: string }) => {
                                         value={formData.email}
                                         onChange={handleChange}
                                         placeholder="practice@example.com"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        NPI ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="npiId"
+                                        value={formData.npiId}
+                                        onChange={handleChange}
+                                        placeholder="1234567890"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Tax ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="taxId"
+                                        value={formData.taxId}
+                                        onChange={handleChange}
+                                        placeholder="12-3456789"
                                         className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     />
                                 </div>
