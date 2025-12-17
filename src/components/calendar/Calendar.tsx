@@ -410,16 +410,31 @@ const Calendar: React.FC = () => {
         title: string;
         message: string;
     } | null>(null);
+    
+    const [modalAlertData, setModalAlertData] = useState<{
+        variant: "success" | "error" | "warning" | "info";
+        title: string;
+        message: string;
+    } | null>(null);
 
     // Auto-dismiss alerts after 4 seconds
     useEffect(() => {
         if (alertData) {
             const timer = setTimeout(() => {
                 setAlertData(null);
-            }, 4000); // auto-hide after 4s
+            }, 4000);
             return () => clearTimeout(timer);
         }
     }, [alertData]);
+    
+    useEffect(() => {
+        if (modalAlertData) {
+            const timer = setTimeout(() => {
+                setModalAlertData(null);
+            }, 4000);
+            return () => clearTimeout(timer);
+        }
+    }, [modalAlertData]);
 
 
 
@@ -991,6 +1006,8 @@ const Calendar: React.FC = () => {
         setPatientQuery('');
         setPatientResults([]);
         setShowPatientDropdown(false);
+        // Clear modal alert when patient is selected
+        setModalAlertData(null);
     };
 
     const handleAddOrUpdateAppointment = async () => {
@@ -999,7 +1016,7 @@ const Calendar: React.FC = () => {
         setIsSaving(true);
 
         if (!selectedPatientId) {
-            setAlertData({
+            setModalAlertData({
                 variant: "warning",
                 title: "Missing Patient",
                 message: "Please select a patient before saving the appointment.",
@@ -1009,7 +1026,7 @@ const Calendar: React.FC = () => {
         }
 
         if (!appointmentProviderId) {
-            setAlertData({
+            setModalAlertData({
                 variant: "warning",
                 title: "Missing Provider",
                 message: "Please select a provider before saving the appointment.",
@@ -1022,7 +1039,7 @@ const Calendar: React.FC = () => {
         const combinedEnd = endDate && endTime ? `${endDate}T${endTime}` : '';
 
         if (!combinedStart || !combinedEnd) {
-            setAlertData({
+            setModalAlertData({
                 variant: "warning",
                 title: "Missing Date/Time",
                 message: "Please choose start and end date/time.",
@@ -1032,7 +1049,7 @@ const Calendar: React.FC = () => {
         }
 
         if (new Date(combinedEnd).getTime() <= new Date(combinedStart).getTime()) {
-            setAlertData({
+            setModalAlertData({
                 variant: "error",
                 title: "Invalid Time Range",
                 message: "End time must be after start time.",
@@ -1059,7 +1076,7 @@ const Calendar: React.FC = () => {
             );
 
             if (!covers) {
-                setAlertData({
+                setModalAlertData({
                     variant: "error",
                     title: "No Schedule Found",
                     message: "This provider has no schedule for the selected time. Please add the schedule first.",
@@ -1069,7 +1086,7 @@ const Calendar: React.FC = () => {
             }
         } catch (err) {
             console.error("Failed to validate provider schedule", err);
-            setAlertData({
+            setModalAlertData({
                 variant: "error",
                 title: "Schedule Validation Failed",
                 message: "Could not verify the provider's schedule. Please try again.",
@@ -1079,7 +1096,7 @@ const Calendar: React.FC = () => {
         }
 
         if (!appointmentLocationId) {
-            setAlertData({
+            setModalAlertData({
                 variant: "warning",
                 title: "Missing Location",
                 message: "Please select a location before saving the appointment.",
@@ -1134,6 +1151,10 @@ const Calendar: React.FC = () => {
                 // ✅ Re-fetch all appointments to keep calendar consistent
                 await loadAppointments();
 
+                closeModal();
+                resetModalFields();
+                
+                // Show success message on calendar page
                 setAlertData({
                     variant: "success",
                     title: selectedEvent ? "Updated" : "Created",
@@ -1141,11 +1162,8 @@ const Calendar: React.FC = () => {
                         ? "Appointment updated successfully!"
                         : "Appointment created successfully!",
                 });
-
-                closeModal();
-                resetModalFields();
             } else {
-                setAlertData({
+                setModalAlertData({
                     variant: "error",
                     title: "Error",
                     message: json.message || "Failed to save appointment.",
@@ -1153,7 +1171,7 @@ const Calendar: React.FC = () => {
             }
         } catch (err) {
             console.error("Error saving appointment", err);
-            setAlertData({
+            setModalAlertData({
                 variant: "error",
                 title: "Network Error",
                 message: "Could not save the appointment. Please try again.",
@@ -1280,8 +1298,6 @@ const Calendar: React.FC = () => {
      * ======================= */
     return (
         <div className="relative rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-            <style>{monthViewStyles}</style>
-
             {/* Alert banner */}
             {alertData && (
                 <div className="p-4">
@@ -1292,6 +1308,8 @@ const Calendar: React.FC = () => {
                     />
                 </div>
             )}
+
+
 
 
             {/* Custom header */}
@@ -1651,6 +1669,17 @@ const Calendar: React.FC = () => {
                                 ×
                             </button>
                         </div>
+
+                        {/* Alert banner inside modal */}
+                        {modalAlertData && (
+                            <div className="mx-6 mb-4">
+                                <Alert
+                                    variant={modalAlertData.variant}
+                                    title={modalAlertData.title}
+                                    message={modalAlertData.message}
+                                />
+                            </div>
+                        )}
 
                         {/* Video Call Section - Show for existing appointments with selected patient and provider */}
                         {selectedEvent && selectedPatientId && appointmentProviderId && (

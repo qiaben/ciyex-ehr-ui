@@ -651,7 +651,7 @@ const AppointmentModal: React.FC = () => {
      * ======================= */
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="max-w-2xl" onClose={() => setOpen(false)}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onClose={() => setOpen(false)}>
                 {/* ✅ Banner appears above form */}
                 {alertData && (
                     <div className="mb-4">

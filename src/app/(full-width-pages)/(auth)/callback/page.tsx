@@ -53,6 +53,7 @@ function AuthCallbackContent() {
                     
                     const {
                         token,
+                        refreshToken,
                         email,
                         username,
                         firstName,
@@ -67,6 +68,12 @@ function AuthCallbackContent() {
 
                     // Store authentication data
                     localStorage.setItem("token", token);
+                    if (refreshToken) {
+                        localStorage.setItem("refreshToken", refreshToken);
+                        console.log("✅ Stored refresh token");
+                    } else {
+                        console.warn("⚠️ No refresh token received from backend");
+                    }
                     localStorage.setItem("userEmail", email || username || "");
                     localStorage.setItem("userFullName", fullName);
                     localStorage.setItem("userId", String(userId || ""));

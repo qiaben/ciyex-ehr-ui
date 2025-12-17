@@ -185,6 +185,25 @@ export const hasAccess = (requirement: {
 };
 
 /**
+ * Store authentication tokens
+ */
+export const storeTokens = (accessToken: string, refreshToken?: string): void => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('token', accessToken);
+    if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken);
+    }
+};
+
+/**
+ * Get refresh token
+ */
+export const getRefreshToken = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('refreshToken');
+};
+
+/**
  * Clear all authentication data
  */
 export const clearAuth = (): void => {
@@ -192,6 +211,7 @@ export const clearAuth = (): void => {
     
     // Clear common auth data
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('userEmail');
     localStorage.removeItem('userFullName');
     localStorage.removeItem('authMethod');
@@ -215,6 +235,49 @@ export const clearAuth = (): void => {
 export const isAuthenticated = (): boolean => {
     if (typeof window === 'undefined') return false;
     return !!localStorage.getItem('token');
+};
+
+/**
+ * Refresh access token using refresh token
+ */
+export const refreshAccessToken = async (): Promise<boolean> => {
+    if (typeof window === 'undefined') return false;
+    
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) return false;
+    
+    try {
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+        const refreshUrl = (API_BASE ? `${API_BASE.replace(/\/$/, "")}` : "") + "/api/auth/refresh";
+        
+        const response = await fetch(refreshUrl, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ refreshToken }),
+        });
+        
+        if (!response.ok) {
+            if (response.status === 401 || response.status === 403) {
+                clearAuth();
+            }
+            return false;
+        }
+        
+        const data = await response.json();
+        
+        if (data.success && data.data?.token) {
+            storeTokens(data.data.token, data.data.refreshToken);
+            return true;
+        }
+        
+        return false;
+    } catch (error) {
+        console.error('Token refresh failed:', error);
+        return false;
+    }
 };
 
 /**

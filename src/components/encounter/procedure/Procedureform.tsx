@@ -299,7 +299,7 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
         try {
             const orgId = localStorage.getItem("orgId") || "";
             const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
-            const url = `${apiUrl}/api/codess?codeType=${type}`;
+            const url = `${apiUrl}/api/global_codes?codeType=${type}`;
             
             const headers: Record<string, string> = {
                 Accept: "application/json",
@@ -314,12 +314,8 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
             });
             
             const json = await res.json();
-            console.log('Codes API response:', json);
-            console.log('Response status:', res.ok);
-            console.log('Has data:', !!json.data);
-            console.log('Data length:', json.data?.length);
             
-            if (res.ok && json.success && json.data) {
+            if (res.ok && json.data) {
                 const mapped: CodeOption[] = json.data.map((item: any) => ({
                     id: item.id,
                     code: item.code,
@@ -328,11 +324,8 @@ export default function Procedureform({ patientId, encounterId, editing, onSaved
                     feeStandard: item.feeStandard,
                     modifier: item.modifier
                 }));
-                console.log('Mapped codes:', mapped);
-                console.log('Setting', mapped.length, 'code options');
                 setCodeOptions(mapped);
             } else {
-                console.error('Failed to load codes:', json);
                 setCodeOptions([]);
             }
         } catch (e) {

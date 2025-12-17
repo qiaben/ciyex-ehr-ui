@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
+import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import type { ApiResponse, EncounterDto } from "@/utils/types";
 
 type Props = {
@@ -11,12 +12,33 @@ type Props = {
     onCancel?: () => void;
 };
 
+interface Provider { id: number; name: string; }
+
 export default function EncounterForm({ patientId, editing, onSaved, onCancel }: Props) {
     const [encounterDate, setEncounterDate] = useState("");
     const [reason, setReason] = useState("");
+    const [visitType, setVisitType] = useState("");
+    const [providerId, setProviderId] = useState<number | null>(null);
+    const [providers, setProviders] = useState<Provider[]>([]);
     const [status, setStatus] = useState<"OPEN" | "CLOSED">("OPEN");
     const [submitting, setSubmitting] = useState(false);
     const [err, setErr] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchProviders = async () => {
+            try {
+                const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/providers`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const list: Provider[] = data.data.map((p: {id:number;identification:{firstName:string;lastName:string}})=>({
+                    id:p.id,
+                    name:`${p.identification.firstName} ${p.identification.lastName}`,
+                }));
+                setProviders(list);
+            } catch {}
+        };
+        fetchProviders();
+    }, []);
 
     useEffect(() => {
         if (editing && editing.id) {
@@ -28,9 +50,34 @@ export default function EncounterForm({ patientId, editing, onSaved, onCancel }:
         } else {
             setEncounterDate(new Date().toISOString().slice(0, 10));
             setReason("");
+            setVisitType("");
+            setProviderId(null);
             setStatus("OPEN");
+            
+            // Fetch latest appointment for this patient
+            const fetchLatestAppointment = async () => {
+                try {
+                    const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/appointments?page=0&size=100`);
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    const appointments = data?.data?.content ?? [];
+                    
+                    // Filter by patientId and get the latest
+                    const patientAppts = appointments.filter((a: any) => a.patientId === patientId);
+                    if (patientAppts.length > 0) {
+                        const latest = patientAppts.sort((a: any, b: any) => 
+                            new Date(b.appointmentStartDate).getTime() - new Date(a.appointmentStartDate).getTime()
+                        )[0];
+                        
+                        setVisitType(latest.visitType || "");
+                        setProviderId(latest.providerId || null);
+                        setReason(latest.priority || "");
+                    }
+                } catch {}
+            };
+            fetchLatestAppointment();
         }
-    }, [editing]);
+    }, [editing, patientId]);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -76,6 +123,28 @@ export default function EncounterForm({ patientId, editing, onSaved, onCancel }:
                     />
                 </div>
                 <div>
+                    <label className="block text-sm font-medium mb-1">Provider<span className="text-red-600">*</span></label>
+                    <select
+                        value={providerId ?? ""}
+                        onChange={(e) => setProviderId(e.target.value ? Number(e.target.value) : null)}
+                        className="w-full rounded-lg border px-3 py-2 focus:ring"
+                        required
+                    >
+                        <option value="">Select Provider</option>
+                        {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium mb-1">Type<span className="text-red-600">*</span></label>
+                    <input
+                        value={visitType}
+                        onChange={(e) => setVisitType(e.target.value)}
+                        placeholder="Visit type"
+                        className="w-full rounded-lg border px-3 py-2 focus:ring"
+                        required
+                    />
+                </div>
+                <div>
                     <label className="block text-sm font-medium mb-1">Status</label>
                     <select
                         value={status}
@@ -87,12 +156,14 @@ export default function EncounterForm({ patientId, editing, onSaved, onCancel }:
                     </select>
                 </div>
                 <div className="md:col-span-3">
-                    <label className="block text-sm font-medium mb-1">Reason</label>
-                    <input
+                    <label className="block text-sm font-medium mb-1">Reason for Visit<span className="text-red-600">*</span></label>
+                    <textarea
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
-                        placeholder="Visit reason"
+                        placeholder="Reason for visit"
                         className="w-full rounded-lg border px-3 py-2 focus:ring"
+                        rows={3}
+                        required
                     />
                 </div>
             </div>
