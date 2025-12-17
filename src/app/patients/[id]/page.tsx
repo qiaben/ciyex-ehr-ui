@@ -10,7 +10,7 @@ import AdminLayout from "@/app/(admin)/layout";
 
 import Link from "next/link";
 import DemographicsFlat from "@/components/DemographicsFlat";
-import HistoryFlat from "@/components/HistoryFlat";
+import HistoryFlat, { HistoryForm } from "@/components/HistoryFlat";
 import PatientRelationshipsTab from "@/components/PatientRelationshipsTab";
 import PaymentFlat from "@/components/PaymentFlat";
 import {
@@ -365,8 +365,11 @@ export default function PatientDashboardPage() {
     const search = useSearchParams();
     const id = params?.id as string;
 
-    const [historyForm, setHistoryForm] = useState({
-        general: { riskFactors: "", examsTests: "" },
+    const [historyForm, setHistoryForm] = useState<HistoryForm>({
+        general: { 
+            riskFactors: {} as Record<string, boolean | string>, 
+            examsTests: {} as Record<string, { status: "" | "N/A" | "Normal" | "Abnormal"; notes: string }>
+        },
         family: {
             father: "",
             mother: "",
@@ -391,17 +394,17 @@ export default function PatientDashboardPage() {
             mentalIllness: "",
         },
         lifestyle: {
-            tobacco: "",
-            coffee: "",
-            alcohol: "",
-            drugs: "",
-            counseling: "",
-            exercise: "",
-            hazardous: "",
+            tobacco: { value: "", status: "" },
+            coffee: { value: "", status: "" },
+            alcohol: { value: "", status: "" },
+            drugs: { value: "", status: "" },
+            counseling: { value: "", status: "" },
+            exercise: { value: "", status: "" },
+            hazardous: { value: "", status: "" },
             sleep: "",
             seatbelt: "",
         },
-        other: { nameValue: "", additionalHistory: "" },
+        other: { nameValue1: "", nameValue2: "", additionalHistory: "" },
     });
 
     const [activeHistoryTab, setActiveHistoryTab] = useState<keyof typeof historyForm>("general");
@@ -468,6 +471,7 @@ export default function PatientDashboardPage() {
     };
 
     const [reportFilters, setReportFilters] = useState<string[]>([]);
+    const [notification, setNotification] = useState<{message: string; type: 'success' | 'error'} | null>(null);
     const toggleFilter = (filter: string) => {
         setReportFilters((prev) =>
             prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]
@@ -640,8 +644,12 @@ export default function PatientDashboardPage() {
                             `${API_BASE}/api/patients/${id}/history`
                         );
                         const data = await res.json();
-                        if (res.ok && data.success) {
-                            setHistoryForm(data.data);
+                        if (res.ok && data.success && data.data) {
+                            // Merge fetched data with default structure to ensure compatibility
+                            setHistoryForm(prev => ({
+                                ...prev,
+                                ...data.data
+                            }));
                         }
                     } catch (e) {
                         console.error("Failed to fetch history:", e);
@@ -750,18 +758,27 @@ export default function PatientDashboardPage() {
 
     async function saveHistory() {
         if (!patient) return;
-        const res = await fetchWithAuth(
-            `${API_BASE}/api/patients/${patient.id}/history`,
-            {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(historyForm),
-            }
-        );
-        const data = await res.json();
-        if (!res.ok || !data.success) throw new Error(data.message || "Failed to save history");
-        setEditHistory(false);
-        setHistoryForm(data.data);
+        try {
+            const res = await fetchWithAuth(
+                `${API_BASE}/api/patients/${patient.id}/history`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(historyForm),
+                }
+            );
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.message || "Failed to save history");
+            setEditHistory(false);
+            if (data.data) setHistoryForm(data.data);
+            setNotification({message: "History saved successfully!", type: "success"});
+            setTimeout(() => setNotification(null), 3000);
+        } catch (error) {
+            console.error("Failed to save history:", error);
+            setNotification({message: "Failed to save history", type: "error"});
+            setTimeout(() => setNotification(null), 3000);
+            throw error;
+        }
     }
 
     async function saveInsurance() {
@@ -1371,6 +1388,29 @@ export default function PatientDashboardPage() {
                     </div>
                 </div>
             </div>
+            
+            {/* Toast Notification */}
+            {notification && (
+                <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 ${
+                    notification.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+                }`}>
+                    {notification.type === 'success' ? (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                    ) : (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                    )}
+                    {notification.message}
+                    <button onClick={() => setNotification(null)} className="ml-2">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            )}
         </AdminLayout>
     );
 }
