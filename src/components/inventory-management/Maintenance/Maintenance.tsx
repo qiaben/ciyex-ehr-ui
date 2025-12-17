@@ -70,6 +70,7 @@ export default function Maintenance() {
     const [totalPages, setTotalPages] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
     const [alertData, setAlertData] = useState<{
         variant: "success" | "error" | "warning" | "info";
@@ -109,9 +110,37 @@ export default function Maintenance() {
         })();
     }, [currentPage, pageSize]);
 
+    // Validate mandatory fields
+    function validateForm(): boolean {
+        const newErrors: Record<string, string> = {};
+        
+        if (!form.equipment?.trim()) newErrors.equipment = "Equipment is required";
+        if (!form.location?.trim()) newErrors.location = "Location is required";
+        if (!form.dueDate?.trim()) newErrors.dueDate = "Due date is required";
+        if (!form.assignee?.trim()) newErrors.assignee = "Assignee is required";
+        
+        setErrors(newErrors);
+        
+        if (Object.keys(newErrors).length > 0) {
+            setAlertData({
+                variant: "error",
+                title: "Validation Error",
+                message: "Mandatory values should be filled",
+            });
+            return false;
+        }
+        
+        return true;
+    }
+
     // ✅ Create task
     async function createTask(e: React.FormEvent) {
         e.preventDefault();
+        
+        if (!validateForm()) {
+            return;
+        }
+        
         try {
             const payload = { ...form, status: "Open" };
             const res = await fetchWithAuth(
@@ -137,10 +166,11 @@ export default function Maintenance() {
                     priority: "Medium",
                     notes: "",
                 });
+                setErrors({});
                 setAlertData({
                     variant: "success",
-                    title: "Task Created",
-                    message: `${data.data.equipment} created successfully.`,
+                    title: "Success",
+                    message: "Maintenance task saved successfully",
                 });
             } else {
                 throw new Error(data.message || "Failed to create task");
@@ -326,12 +356,20 @@ export default function Maintenance() {
                         <form onSubmit={createTask} className="flex flex-col max-h-[70vh]">
                             <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 gap-6 sm:grid-cols-2 text-sm">
                                 <div>
-                                    <Label>Equipment</Label>
+                                    <Label>
+                                        Equipment <span className="text-red-500">*</span>
+                                    </Label>
                                     <Input
                                         value={form.equipment}
-                                        onChange={(e) => setForm({ ...form, equipment: e.target.value })}
-                                        required
+                                        onChange={(e) => {
+                                            setForm({ ...form, equipment: e.target.value });
+                                            if (errors.equipment) setErrors({ ...errors, equipment: "" });
+                                        }}
+                                        className={errors.equipment ? "border-red-500" : ""}
                                     />
+                                    {errors.equipment && (
+                                        <p className="text-red-500 text-xs mt-1">{errors.equipment}</p>
+                                    )}
                                 </div>
                                 <div>
                                     <Label>Category</Label>
@@ -365,19 +403,37 @@ export default function Maintenance() {
                                     </select>
                                 </div>
                                 <div>
-                                    <Label>Location</Label>
+                                    <Label>
+                                        Location <span className="text-red-500">*</span>
+                                    </Label>
                                     <Input
                                         value={form.location}
-                                        onChange={(e) => setForm({ ...form, location: e.target.value })}
+                                        onChange={(e) => {
+                                            setForm({ ...form, location: e.target.value });
+                                            if (errors.location) setErrors({ ...errors, location: "" });
+                                        }}
+                                        className={errors.location ? "border-red-500" : ""}
                                     />
+                                    {errors.location && (
+                                        <p className="text-red-500 text-xs mt-1">{errors.location}</p>
+                                    )}
                                 </div>
                                 <div>
-                                    <Label>Due Date</Label>
+                                    <Label>
+                                        Due Date <span className="text-red-500">*</span>
+                                    </Label>
                                     <Input
                                         type="date"
                                         value={form.dueDate}
-                                        onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
+                                        onChange={(e) => {
+                                            setForm({ ...form, dueDate: e.target.value });
+                                            if (errors.dueDate) setErrors({ ...errors, dueDate: "" });
+                                        }}
+                                        className={errors.dueDate ? "border-red-500" : ""}
                                     />
+                                    {errors.dueDate && (
+                                        <p className="text-red-500 text-xs mt-1">{errors.dueDate}</p>
+                                    )}
                                 </div>
                                 <div>
                                     <Label>Last Service Date</Label>
@@ -390,11 +446,20 @@ export default function Maintenance() {
                                     />
                                 </div>
                                 <div>
-                                    <Label>Assignee</Label>
+                                    <Label>
+                                        Assignee <span className="text-red-500">*</span>
+                                    </Label>
                                     <Input
                                         value={form.assignee}
-                                        onChange={(e) => setForm({ ...form, assignee: e.target.value })}
+                                        onChange={(e) => {
+                                            setForm({ ...form, assignee: e.target.value });
+                                            if (errors.assignee) setErrors({ ...errors, assignee: "" });
+                                        }}
+                                        className={errors.assignee ? "border-red-500" : ""}
                                     />
+                                    {errors.assignee && (
+                                        <p className="text-red-500 text-xs mt-1">{errors.assignee}</p>
+                                    )}
                                 </div>
                                 <div>
                                     <Label>Vendor</Label>
