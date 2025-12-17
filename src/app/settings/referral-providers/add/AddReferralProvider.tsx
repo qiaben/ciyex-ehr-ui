@@ -9,6 +9,11 @@ import Button from "@/components/ui/button/Button";
 interface Practice {
     id: number;
     name: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
 }
 
 interface FormData {
@@ -22,6 +27,8 @@ interface FormData {
     postalCode: string;
     country: string;
     practiceId: string;
+    npiId: string;
+    taxId: string;
 }
 
 const AddReferralProvider = () => {
@@ -39,6 +46,8 @@ const AddReferralProvider = () => {
         postalCode: "",
         country: "",
         practiceId: "",
+        npiId: "",
+        taxId: "",
     });
 
     const [practices, setPractices] = useState<Practice[]>([]);
@@ -82,6 +91,23 @@ const AddReferralProvider = () => {
         e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
     ) => {
         const { name, value } = e.target;
+        
+        if (name === "practiceId" && value) {
+            const selectedPractice = practices.find(p => p.id.toString() === value);
+            if (selectedPractice) {
+                setFormData((prev) => ({
+                    ...prev,
+                    [name]: value,
+                    address: selectedPractice.address || "",
+                    city: selectedPractice.city || "",
+                    state: selectedPractice.state || "",
+                    postalCode: selectedPractice.postalCode || "",
+                    country: selectedPractice.country || "",
+                }));
+                return;
+            }
+        }
+        
         setFormData((prev) => ({ ...prev, [name]: value }));
     };
 
@@ -109,6 +135,8 @@ const AddReferralProvider = () => {
                 state: formData.state || null,
                 postalCode: formData.postalCode || null,
                 country: formData.country || null,
+                npiId: formData.npiId || null,
+                taxId: formData.taxId || null,
                 practice: {
                     id: parseInt(formData.practiceId)
                 }
@@ -248,6 +276,34 @@ const AddReferralProvider = () => {
                                         value={formData.email}
                                         onChange={handleChange}
                                         placeholder="provider@example.com"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        NPI ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="npiId"
+                                        value={formData.npiId}
+                                        onChange={handleChange}
+                                        placeholder="1234567890"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Tax ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="taxId"
+                                        value={formData.taxId}
+                                        onChange={handleChange}
+                                        placeholder="12-3456789"
                                         className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     />
                                 </div>

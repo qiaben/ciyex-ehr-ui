@@ -9,6 +9,11 @@ import Button from "@/components/ui/button/Button";
 interface Practice {
     id: number;
     name: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
 }
 
 interface FormData {
@@ -22,6 +27,8 @@ interface FormData {
     state: string;
     postalCode: string;
     country: string;
+    npiId: string;
+    taxId: string;
 }
 
 const EditReferralProvider = ({ id }: { id: string }) => {
@@ -39,6 +46,8 @@ const EditReferralProvider = ({ id }: { id: string }) => {
         state: "",
         postalCode: "",
         country: "",
+        npiId: "",
+        taxId: "",
     });
 
     const [practices, setPractices] = useState<Practice[]>([]);
@@ -81,29 +90,29 @@ const EditReferralProvider = ({ id }: { id: string }) => {
     };
 
     const fetchReferralProvider = async () => {
+        if (!id) {
+            setError("Invalid provider ID");
+            setFetchLoading(false);
+            return;
+        }
+        
         try {
             setFetchLoading(true);
             const response = await fetchWithAuth(
-                `${apiUrl}/api/referral-providers/${id}/with-practice`
+                `${apiUrl}/api/referral-providers/${id}`
             );
 
             if (response.ok) {
-                const data = await response.json();
-                console.log("📦 Fetch Provider Response:", data);
+                const responseData = await response.json();
+                console.log("📦 Fetch Provider Response:", responseData);
                 
-                // Handle different response structures
-                let providerData = null;
+                // Handle wrapped response structure
+                const providerData = responseData.data || responseData;
                 
-                if (data?.data) {
-                    providerData = data.data;
-                } else if (data?.id) {
-                    providerData = data;
-                }
-                
-                if (providerData) {
+                if (providerData && providerData.id) {
                     setFormData({
                         name: providerData.name || "",
-                        practiceId: providerData.practice?.id?.toString() || "",
+                        practiceId: providerData.practiceId?.toString() || providerData.practice?.id?.toString() || "",
                         specialty: providerData.specialty || "",
                         phoneNumber: providerData.phoneNumber || "",
                         email: providerData.email || "",
@@ -112,12 +121,15 @@ const EditReferralProvider = ({ id }: { id: string }) => {
                         state: providerData.state || "",
                         postalCode: providerData.postalCode || "",
                         country: providerData.country || "",
+                        npiId: providerData.npiId || "",
+                        taxId: providerData.taxId || "",
                     });
                 } else {
                     setError("Referral provider not found");
                 }
             } else {
-                setError("Failed to fetch referral provider");
+                const errorData = await response.json().catch(() => ({}));
+                setError(errorData.message || "Failed to fetch referral provider");
             }
         } catch (err) {
             console.error("Error fetching referral provider:", err);
@@ -131,6 +143,23 @@ const EditReferralProvider = ({ id }: { id: string }) => {
         e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
     ) => {
         const { name, value } = e.target;
+        
+        if (name === "practiceId" && value) {
+            const selectedPractice = practices.find(p => p.id.toString() === value);
+            if (selectedPractice) {
+                setFormData((prev) => ({
+                    ...prev,
+                    [name]: value,
+                    address: selectedPractice.address || "",
+                    city: selectedPractice.city || "",
+                    state: selectedPractice.state || "",
+                    postalCode: selectedPractice.postalCode || "",
+                    country: selectedPractice.country || "",
+                }));
+                return;
+            }
+        }
+        
         setFormData((prev) => ({ ...prev, [name]: value }));
     };
 
@@ -151,6 +180,8 @@ const EditReferralProvider = ({ id }: { id: string }) => {
                 state: formData.state || null,
                 postalCode: formData.postalCode || null,
                 country: formData.country || null,
+                npiId: formData.npiId || null,
+                taxId: formData.taxId || null,
                 practice: {
                     id: parseInt(formData.practiceId)
                 }
@@ -303,6 +334,34 @@ const EditReferralProvider = ({ id }: { id: string }) => {
                                         value={formData.email}
                                         onChange={handleChange}
                                         placeholder="provider@example.com"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        NPI ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="npiId"
+                                        value={formData.npiId}
+                                        onChange={handleChange}
+                                        placeholder="1234567890"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Tax ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="taxId"
+                                        value={formData.taxId}
+                                        onChange={handleChange}
+                                        placeholder="12-3456789"
                                         className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     />
                                 </div>

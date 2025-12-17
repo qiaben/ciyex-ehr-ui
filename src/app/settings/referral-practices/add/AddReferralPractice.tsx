@@ -15,6 +15,8 @@ interface FormData {
     state: string;
     postalCode: string;
     country: string;
+    npiId: string;
+    taxId: string;
 }
 
 const AddReferralPractice = () => {
@@ -30,6 +32,8 @@ const AddReferralPractice = () => {
         state: "",
         postalCode: "",
         country: "",
+        npiId: "",
+        taxId: "",
     });
 
     const [loading, setLoading] = useState(false);
@@ -66,6 +70,8 @@ const AddReferralPractice = () => {
                 state: formData.state || null,
                 postalCode: formData.postalCode || null,
                 country: formData.country || null,
+                npiId: formData.npiId || null,
+                taxId: formData.taxId || null,
             };
 
             const response = await fetchWithAuth(`${apiUrl}/api/referral-practices`, {
@@ -168,6 +174,34 @@ const AddReferralPractice = () => {
                                         value={formData.email}
                                         onChange={handleChange}
                                         placeholder="practice@example.com"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        NPI ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="npiId"
+                                        value={formData.npiId}
+                                        onChange={handleChange}
+                                        placeholder="1234567890"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Tax ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="taxId"
+                                        value={formData.taxId}
+                                        onChange={handleChange}
+                                        placeholder="12-3456789"
                                         className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     />
                                 </div>
