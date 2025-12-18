@@ -72,18 +72,15 @@ const fmt = (d?: string) => (d ? new Date(d).toLocaleDateString() : "");
       { id: "pastpmh", label: "Past Medical Hx" },
       { id: "fh", label: "Family History" },
       { id: "sh", label: "Social History" },
-        { id: "vitals", label: "vitals" },
+      { id: "vitals", label: "vitals" },
       { id: "pe", label: "Physical Exam" },
       { id: "ros", label: "Review of Systems" },
       { id: "procedures", label: "Procedures" },
-      // { id: "codes", label: "Codes" },
       { id: "assessment", label: "Assessment" },
       { id: "plan", label: "Plan" },
       { id: "notes", label: "Provider Notes" },
       { id: "signature", label: "Provider Signature" },
       { id: "datetime", label: "Date/Time Finalized" },
-      // { id: "signoff", label: "Sign-off / Finalize" },
-    
       { id: "summary", label: "Summary" },
     ],
     []
@@ -140,10 +137,13 @@ const fmt = (d?: string) => (d ? new Date(d).toLocaleDateString() : "");
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        const visible = entries.find((e) => e.isIntersecting);
-        if (visible?.target.id) setActiveSection(visible.target.id);
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setActiveSection(entry.target.id);
+          }
+        });
       },
-      { rootMargin: "-30% 0px -60% 0px", threshold: 0.2 }
+      { rootMargin: "-20% 0px -40% 0px", threshold: [0, 0.25, 0.5, 0.75, 1] }
     );
 
     toc.forEach((t) => {
@@ -579,7 +579,7 @@ useEffect(() => {
       </div>
 
       {/* Single-column content (sidebar removed) */}
-      <div className="w-full max-w-screen-2xl mx-auto p-4">
+      <div className="w-full max-w-screen-2xl mx-auto p-4 pb-[50vh]">
         <main className="min-w-0 space-y-6">
           {[
             "assigned-providers",

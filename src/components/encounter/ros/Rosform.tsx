@@ -1,6 +1,3 @@
-
-
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,49 +5,6 @@ import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse, RosDto } from "@/utils/types";
 import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
-// split "a, b\nc" → ["a","b","c"]
-function splitDetails(s: string): string[] {
-    return s
-        .split(/[,;\n]+/)
-        .map((x) => x.trim())
-        .filter(Boolean);
-}
-
-// Convert backend → UI
-// function toRosDto(b: any): RosDto {
-//     return {
-//         id: b.id,
-//         patientId: b.patientId,
-//         encounterId: b.encounterId,
-//         system: b.systemName,
-//         status: b.isNegative ? "Negative" : "Positive",
-//         finding: Array.isArray(b.systemDetails) ? b.systemDetails.join(", ") : "",
-//         notes: b.notes ?? "",
-//         audit: {
-//             createdDate: b.createdDate,
-//             lastModifiedDate: b.lastModifiedDate,
-//         },
-//     };
-// }
-function toRosDto(b: unknown): RosDto {
-    const rec = b as Record<string, unknown>;
-    return {
-        id: rec.id as number,
-        patientId: rec.patientId as number,
-        encounterId: rec.encounterId as number,
-        system: rec.systemName as string,
-        status: rec.isNegative ? "Negative" : "Positive",
-        finding: Array.isArray(rec.systemDetails) ? (rec.systemDetails as string[]).join(", ") : "",
-        notes: (rec.notes as string) ?? "",
-        audit: {
-            createdDate: rec.createdDate as string | undefined,
-            lastModifiedDate: rec.lastModifiedDate as string | undefined,
-        },
-    };
-}
-
-
-// Safe JSON
 async function safeJson<T>(res: Response): Promise<T | null> {
     const t = await res.text().catch(() => "");
     if (!t) return null;
@@ -65,51 +19,79 @@ type Props = {
     onCancel?: () => void;
 };
 
-const ROS_SYSTEMS = [
-    "Constitutional","Eyes","ENT","Cardiovascular","Respiratory","Gastrointestinal",
-    "Genitourinary","Musculoskeletal","Skin","Neurological","Psychiatric",
-    "Endocrine","Hematologic/Lymphatic","Allergic/Immunologic",
+const SYSTEMS = [
+    { key: "constitutional", label: "Constitutional", fields: ["fever", "chills", "nightSweats", "lossOfAppetite", "weightLoss", "weightGain", "fatigue", "weakness", "tiredness", "troubleSleeping"] },
+    { key: "eyes", label: "Eyes", fields: ["visionLoss", "doubleVision", "blurredVision", "eyeIrritation", "eyePain", "eyeDischarge", "lightSensitivity", "eyeRedness"] },
+    { key: "ent", label: "ENT", fields: ["earache", "earDischarge", "ringingInEars", "decreasedHearing", "frequentColds", "nasalCongestion", "nosebleeds", "bleedingGums", "difficultySwallowing", "hoarseness", "soreThroat", "dryLips", "redSwollenTongue", "toothAche", "sinusitis", "dryMouth"] },
+    { key: "neck", label: "Neck", fields: ["thyroidEnlargement", "neckPain"] },
+    { key: "cardiovascular", label: "Cardiovascular", fields: ["difficultyBreathingAtNight", "chestPain", "irregularHeartbeats", "shortnessOfBreathOnExertion", "palpitations", "difficultyBreathingWhenLyingDown", "rapidHeartbeat", "slowHeartbeat", "lossOfConsciousness", "chestDiscomfort", "chestTightness", "legSwelling", "legCramps", "tortuousLegVeins"] },
+    { key: "respiratory", label: "Respiratory", fields: ["shortnessOfBreath", "wheezing", "cough", "chestDiscomfort", "snoring", "excessiveSputum", "coughingUpBlood", "painfulBreathing"] },
+    { key: "gastrointestinal", label: "Gastrointestinal", fields: ["changeInAppetite", "indigestion", "heartburn", "nausea", "vomiting", "excessiveGas", "abdominalPain", "abdominalBloating", "hemorrhoids", "diarrhea", "changeInBowelHabits", "constipation", "blackOrTarryStools", "bloodyStools", "abdominalSwelling", "enlargedLiver", "jaundice", "ascites", "vomitingBlood", "distendedAbdomen", "clayColoredStool"] },
+    { key: "genitourinaryMale", label: "Genitourinary (Male)", fields: ["frequentUrination", "bloodInUrine", "foulUrinaryDischarge", "kidneyPain", "urinaryUrgency", "troubleStartingUrine", "inabilityToEmptyBladder", "burningOnUrination", "genitalRashesOrSores", "testicularPainOrMasses", "urinaryRetention", "leakingUrine", "excessiveNightUrination", "urinaryHesitancy", "kidneyStones", "hernia", "penileDischarge", "shortWeakErections", "painfulErection", "decreasedSexualDesire", "prematureEjaculation"] },
+    { key: "genitourinaryFemale", label: "Genitourinary (Female)", fields: ["inabilityToControlBladder", "unusualUrinaryColor", "missedPeriods", "excessivelyHeavyPeriods", "lumpsOrSores", "pelvicPain", "urinaryRetention", "vaginalDischarge", "vaginalItching", "vaginalRash", "urinaryFrequency", "urinaryHesitancy", "excessiveNightUrination", "urinaryUrgency", "painfulMenstruation", "irregularMenses", "kidneyStones"] },
+    { key: "musculoskeletal", label: "Musculoskeletal", fields: ["jointPain", "jointStiffness", "backPain", "muscleCramps", "muscleWeakness", "muscleAches", "lossOfStrength", "neckPain", "swellingHandsFeet", "legCramps", "shoulderPain", "elbowPain", "handPain", "hipPain", "thighPain", "calfPain", "legPain", "wristPain", "fingerPain", "heelPain", "toePain", "anklePain", "kneePain"] },
+    { key: "skin", label: "Skin", fields: ["suspiciousLesions", "excessivePerspiration", "poorWoundHealing", "dryness", "itching", "rash", "flushing", "cyanosis", "clammySkin", "hairLoss", "lumps", "changesInHairOrNails", "skinColorChanges", "jaundice"] },
+    { key: "neurologic", label: "Neurologic", fields: ["headaches", "poorBalance", "difficultySpeaking", "difficultyConcentrating", "coordinationProblems", "weakness", "briefParalysis", "numbness", "tingling", "visualDisturbances", "seizures", "tremors", "roomSpinning", "memoryLoss", "excessiveDaytimeSleepiness", "dizziness", "facialPain", "lightheadedness", "faintingSpells", "lethargy", "insomnia", "somnolence", "disorientation"] },
+    { key: "psychiatric", label: "Psychiatric", fields: ["anxiety", "nervousness", "depression", "hallucinations", "frighteningVisionsOrSounds", "suicidalIdeation", "homicidalIdeation", "impendingSenseOfDoom", "disturbingThoughts", "memoryLoss"] },
+    { key: "endocrine", label: "Endocrine", fields: ["heatColdIntolerance", "weightChange", "excessiveThirstOrHunger", "excessiveSweating", "frequentUrination"] },
+    { key: "hematologicLymphatic", label: "Hematologic/Lymphatic", fields: ["skinDiscoloration", "easyBleeding", "enlargedLymphNodes", "easyBruising", "anemia", "bloodClots", "swollenGlandsOrThyroid"] },
+    { key: "allergicImmunologic", label: "Allergic/Immunologic", fields: ["seasonalAllergies", "hivesOrRash", "persistentInfections", "hivExposure", "immuneDeficiencies"] },
 ];
 
+function camelToTitle(s: string): string {
+    return s.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase());
+}
+
 export default function ROSForm({ patientId, encounterId, editing, onSaved, onCancel }: Props) {
-    const [system, setSystem] = useState(ROS_SYSTEMS[0]);
-    const [status, setStatus] = useState<"Positive" | "Negative" | "NotAsked">("Negative");
-    const [finding, setFinding] = useState("");
-    const [notes, setNotes] = useState("");
+    const [formData, setFormData] = useState<RosDto>({} as RosDto);
     const [saving, setSaving] = useState(false);
     const [err, setErr] = useState<string | null>(null);
 
     useEffect(() => {
         const encounterData = getEncounterData(patientId, encounterId);
         if (encounterData.reviewOfSystems && !editing?.id) {
-            const data = encounterData.reviewOfSystems;
-            setSystem(data.system || ROS_SYSTEMS[0]);
-            setStatus(data.status || "Negative");
-            setFinding(data.finding || "");
-            setNotes(data.notes || "");
+            setFormData(encounterData.reviewOfSystems as RosDto);
         } else if (editing?.id) {
-            setSystem(editing.system || ROS_SYSTEMS[0]);
-            setStatus(editing.status || "Negative");
-            setFinding(editing.finding || "");
-            setNotes(editing.notes || "");
+            setFormData(editing);
         } else {
-            setSystem(ROS_SYSTEMS[0]);
-            setStatus("Negative");
-            setFinding("");
-            setNotes("");
+            setFormData({ patientId, encounterId } as RosDto);
         }
     }, [editing, patientId, encounterId]);
 
     useEffect(() => {
-        if (system || finding || notes) {
-            setEncounterSection(patientId, encounterId, "reviewOfSystems", {
-                system,
-                status,
-                finding,
-                notes
-            });
+        if (Object.keys(formData).length > 2) {
+            setEncounterSection(patientId, encounterId, "reviewOfSystems", formData);
         }
-    }, [system, status, finding, notes, patientId, encounterId]);
+    }, [formData, patientId, encounterId]);
+
+    const toggleField = (systemKey: string, field: string) => {
+        setFormData((prev) => {
+            const system = (prev as Record<string, unknown>)[systemKey] as Record<string, unknown> || {};
+            return {
+                ...prev,
+                [systemKey]: { ...system, [field]: !system[field] },
+            };
+        });
+    };
+
+    const setNote = (systemKey: string, note: string) => {
+        setFormData((prev) => {
+            const system = (prev as Record<string, unknown>)[systemKey] as Record<string, unknown> || {};
+            return {
+                ...prev,
+                [systemKey]: { ...system, note },
+            };
+        });
+    };
+
+    const setAllNegative = (systemKey: string) => {
+        setFormData((prev) => {
+            const system = SYSTEMS.find((s) => s.key === systemKey);
+            if (!system) return prev;
+            const negativeSystem = system.fields.reduce((acc, f) => ({ ...acc, [f]: false }), { note: "" });
+            return { ...prev, [systemKey]: negativeSystem };
+        });
+    };
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -117,48 +99,30 @@ export default function ROSForm({ patientId, encounterId, editing, onSaved, onCa
         setErr(null);
 
         try {
-            // Map UI → backend payload
-            const payload = {
-                systemName: system,
-                isNegative: status !== "Positive", // Positive => false; Negative/NotAsked => true
-                ...(notes.trim() ? { notes: notes.trim() } : {}),
-                systemDetails:
-                    status === "Positive" && finding.trim()
-                        ? splitDetails(finding)
-                        : [],
-            };
-
             const url = editing?.id
                 ? `/api/reviewofsystems/${patientId}/${encounterId}/${editing.id}`
                 : `/api/reviewofsystems/${patientId}/${encounterId}`;
-
             const method = editing?.id ? "PUT" : "POST";
 
             const res = await fetchWithOrg(url, {
                 method,
                 headers: { "Content-Type": "application/json", Accept: "application/json" },
-                body: JSON.stringify(payload),
+                body: JSON.stringify(formData),
             });
 
-          //  const json = await safeJson<ApiResponse<any>>(res);
-            const json = await safeJson<ApiResponse<unknown>>(res);
-
+            const json = await safeJson<ApiResponse<RosDto>>(res);
             if (!res.ok || !json || json.success !== true) {
                 throw new Error(json?.message || `Save failed (${res.status})`);
             }
 
-            onSaved(toRosDto(json.data));
+            onSaved(json.data!);
             removeEncounterSection(patientId, encounterId, "reviewOfSystems");
             if (!editing?.id) {
-                setSystem(ROS_SYSTEMS[0]);
-                setStatus("Negative");
-                setFinding("");
-                setNotes("");
+                setFormData({ patientId, encounterId } as RosDto);
             }
         } catch (e: unknown) {
             setErr(e instanceof Error ? e.message : "Something went wrong");
-        }
-        finally {
+        } finally {
             setSaving(false);
         }
     }
@@ -167,66 +131,64 @@ export default function ROSForm({ patientId, encounterId, editing, onSaved, onCa
         <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border p-4 shadow-sm bg-white">
             <h3 className="text-lg font-semibold">{editing?.id ? "Edit ROS Entry" : "Add ROS Entry"}</h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                    <label className="block text-sm font-medium mb-1">System <span className="text-red-600">*</span></label>
-                    <select
-                        className="w-full rounded-lg border px-3 py-2 focus:ring"
-                        value={system}
-                        onChange={(e) => setSystem(e.target.value)}
-                        required
-                    >
-                        {ROS_SYSTEMS.map((s) => (
-                            <option key={s} value={s}>{s}</option>
-                        ))}
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium mb-1">Status</label>
-                    <select
-                        className="w-full rounded-lg border px-3 py-2 focus:ring"
-                        value={status}
-                        onChange={(e) => setStatus(e.target.value as "Positive" | "Negative" | "NotAsked")}
-                    >
-                        <option value="Positive">Positive</option>
-                        <option value="Negative">Negative</option>
-                        <option value="NotAsked">NotAsked</option>
-                    </select>
-                </div>
-
-                <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Finding (if Positive) <span className="text-red-600">*</span></label>
-                    <input
-                        className="w-full rounded-lg border px-3 py-2 focus:ring"
-                        value={finding}
-                        onChange={(e) => setFinding(e.target.value)}
-                        placeholder="e.g., chest pain, shortness of breath"
-                        required
-                    />
-                </div>
-
-                <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Notes <span className="text-red-600">*</span></label>
-                    <textarea
-                        className="w-full rounded-lg border px-3 py-2 focus:ring min-h-24"
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Additional comments"
-                        required
-                    />
-                </div>
+            <div className="space-y-6">
+                {SYSTEMS.map((system) => {
+                    const systemData = (formData as Record<string, unknown>)[system.key] as Record<string, unknown> || {};
+                    return (
+                        <div key={system.key} className="border rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-2">
+                                <h4 className="font-medium">{system.label}</h4>
+                                <button
+                                    type="button"
+                                    onClick={() => setAllNegative(system.key)}
+                                    className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                >
+                                    All Negative
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-2">
+                                {system.fields.map((field) => (
+                                    <label key={field} className="flex items-center gap-2 text-sm">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!systemData[field]}
+                                            onChange={() => toggleField(system.key, field)}
+                                        />
+                                        {camelToTitle(field)}
+                                    </label>
+                                ))}
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Note (optional)"
+                                value={(systemData.note as string) || ""}
+                                onChange={(e) => setNote(system.key, e.target.value)}
+                                className="w-full rounded border px-2 py-1 text-sm"
+                            />
+                        </div>
+                    );
+                })}
             </div>
 
             {err && <p className="text-sm text-red-600">{err}</p>}
 
             <div className="flex items-center gap-2">
-                <button type="submit" disabled={saving}
-                        className="rounded-xl bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 disabled:opacity-60">
+                <button
+                    type="submit"
+                    disabled={saving}
+                    className="rounded-xl bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 disabled:opacity-60"
+                >
                     {saving ? "Saving..." : editing?.id ? "Update" : "Save"}
                 </button>
                 {onCancel && (
-                    <button type="button" onClick={() => { removeEncounterSection(patientId, encounterId, "reviewOfSystems"); onCancel(); }} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            removeEncounterSection(patientId, encounterId, "reviewOfSystems");
+                            onCancel();
+                        }}
+                        className="rounded-xl border px-4 py-2 hover:bg-gray-50"
+                    >
                         Cancel
                     </button>
                 )}

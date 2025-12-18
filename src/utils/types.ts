@@ -81,22 +81,305 @@ export type HpiDto = {
 
 export type RosDto = {
     id?: number;
+    externalId?: string;
+    fhirId?: string;
     patientId: number;
     encounterId: number;
 
-    // Core fields
-    system: string;            // e.g., "Constitutional", "Cardiovascular", "Respiratory", etc.
-    status: "Positive" | "Negative" | "NotAsked";
-    finding?: string;          // e.g., the specific symptom (fever, cough)
-    notes?: string;            // free-text comments
-    esigned?: boolean;
+    constitutional?: RosConstitutional;
+    eyes?: RosEyes;
+    ent?: RosEnt;
+    neck?: RosNeck;
+    cardiovascular?: RosCardiovascular;
+    respiratory?: RosRespiratory;
+    gastrointestinal?: RosGastrointestinal;
+    genitourinaryMale?: RosGenitourinaryMale;
+    genitourinaryFemale?: RosGenitourinaryFemale;
+    musculoskeletal?: RosMusculoskeletal;
+    skin?: RosSkin;
+    neurologic?: RosNeurologic;
+    psychiatric?: RosPsychiatric;
+    endocrine?: RosEndocrine;
+    hematologicLymphatic?: RosHematologicLymphatic;
+    allergicImmunologic?: RosAllergicImmunologic;
+
+    eSigned?: boolean;
     signedAt?: string;
     signedBy?: string;
+    printedAt?: string;
 
     audit?: {
         createdDate?: string;
         lastModifiedDate?: string;
     };
+};
+
+export type RosConstitutional = {
+    fever?: boolean;
+    chills?: boolean;
+    nightSweats?: boolean;
+    lossOfAppetite?: boolean;
+    weightLoss?: boolean;
+    weightGain?: boolean;
+    fatigue?: boolean;
+    weakness?: boolean;
+    tiredness?: boolean;
+    troubleSleeping?: boolean;
+    note?: string;
+};
+
+export type RosEyes = {
+    visionLoss?: boolean;
+    doubleVision?: boolean;
+    blurredVision?: boolean;
+    eyeIrritation?: boolean;
+    eyePain?: boolean;
+    eyeDischarge?: boolean;
+    lightSensitivity?: boolean;
+    eyeRedness?: boolean;
+    note?: string;
+};
+
+export type RosEnt = {
+    earache?: boolean;
+    earDischarge?: boolean;
+    ringingInEars?: boolean;
+    decreasedHearing?: boolean;
+    frequentColds?: boolean;
+    nasalCongestion?: boolean;
+    nosebleeds?: boolean;
+    bleedingGums?: boolean;
+    difficultySwallowing?: boolean;
+    hoarseness?: boolean;
+    soreThroat?: boolean;
+    dryLips?: boolean;
+    redSwollenTongue?: boolean;
+    toothAche?: boolean;
+    sinusitis?: boolean;
+    dryMouth?: boolean;
+    note?: string;
+};
+
+export type RosNeck = {
+    thyroidEnlargement?: boolean;
+    neckPain?: boolean;
+    note?: string;
+};
+
+export type RosCardiovascular = {
+    difficultyBreathingAtNight?: boolean;
+    chestPain?: boolean;
+    irregularHeartbeats?: boolean;
+    shortnessOfBreathOnExertion?: boolean;
+    palpitations?: boolean;
+    difficultyBreathingWhenLyingDown?: boolean;
+    rapidHeartbeat?: boolean;
+    slowHeartbeat?: boolean;
+    lossOfConsciousness?: boolean;
+    chestDiscomfort?: boolean;
+    chestTightness?: boolean;
+    legSwelling?: boolean;
+    legCramps?: boolean;
+    tortuousLegVeins?: boolean;
+    note?: string;
+};
+
+export type RosRespiratory = {
+    shortnessOfBreath?: boolean;
+    wheezing?: boolean;
+    cough?: boolean;
+    chestDiscomfort?: boolean;
+    snoring?: boolean;
+    excessiveSputum?: boolean;
+    coughingUpBlood?: boolean;
+    painfulBreathing?: boolean;
+    note?: string;
+};
+
+export type RosGastrointestinal = {
+    changeInAppetite?: boolean;
+    indigestion?: boolean;
+    heartburn?: boolean;
+    nausea?: boolean;
+    vomiting?: boolean;
+    excessiveGas?: boolean;
+    abdominalPain?: boolean;
+    abdominalBloating?: boolean;
+    hemorrhoids?: boolean;
+    diarrhea?: boolean;
+    changeInBowelHabits?: boolean;
+    constipation?: boolean;
+    blackOrTarryStools?: boolean;
+    bloodyStools?: boolean;
+    abdominalSwelling?: boolean;
+    enlargedLiver?: boolean;
+    jaundice?: boolean;
+    ascites?: boolean;
+    vomitingBlood?: boolean;
+    distendedAbdomen?: boolean;
+    clayColoredStool?: boolean;
+    note?: string;
+};
+
+export type RosGenitourinaryMale = {
+    frequentUrination?: boolean;
+    bloodInUrine?: boolean;
+    foulUrinaryDischarge?: boolean;
+    kidneyPain?: boolean;
+    urinaryUrgency?: boolean;
+    troubleStartingUrine?: boolean;
+    inabilityToEmptyBladder?: boolean;
+    burningOnUrination?: boolean;
+    genitalRashesOrSores?: boolean;
+    testicularPainOrMasses?: boolean;
+    urinaryRetention?: boolean;
+    leakingUrine?: boolean;
+    excessiveNightUrination?: boolean;
+    urinaryHesitancy?: boolean;
+    kidneyStones?: boolean;
+    hernia?: boolean;
+    penileDischarge?: boolean;
+    shortWeakErections?: boolean;
+    painfulErection?: boolean;
+    decreasedSexualDesire?: boolean;
+    prematureEjaculation?: boolean;
+    note?: string;
+};
+
+export type RosGenitourinaryFemale = {
+    inabilityToControlBladder?: boolean;
+    unusualUrinaryColor?: boolean;
+    missedPeriods?: boolean;
+    excessivelyHeavyPeriods?: boolean;
+    lumpsOrSores?: boolean;
+    pelvicPain?: boolean;
+    urinaryRetention?: boolean;
+    vaginalDischarge?: boolean;
+    vaginalItching?: boolean;
+    vaginalRash?: boolean;
+    urinaryFrequency?: boolean;
+    urinaryHesitancy?: boolean;
+    excessiveNightUrination?: boolean;
+    urinaryUrgency?: boolean;
+    painfulMenstruation?: boolean;
+    irregularMenses?: boolean;
+    kidneyStones?: boolean;
+    note?: string;
+};
+
+export type RosMusculoskeletal = {
+    jointPain?: boolean;
+    jointStiffness?: boolean;
+    backPain?: boolean;
+    muscleCramps?: boolean;
+    muscleWeakness?: boolean;
+    muscleAches?: boolean;
+    lossOfStrength?: boolean;
+    neckPain?: boolean;
+    swellingHandsFeet?: boolean;
+    legCramps?: boolean;
+    shoulderPain?: boolean;
+    elbowPain?: boolean;
+    handPain?: boolean;
+    hipPain?: boolean;
+    thighPain?: boolean;
+    calfPain?: boolean;
+    legPain?: boolean;
+    wristPain?: boolean;
+    fingerPain?: boolean;
+    heelPain?: boolean;
+    toePain?: boolean;
+    anklePain?: boolean;
+    kneePain?: boolean;
+    note?: string;
+};
+
+export type RosSkin = {
+    suspiciousLesions?: boolean;
+    excessivePerspiration?: boolean;
+    poorWoundHealing?: boolean;
+    dryness?: boolean;
+    itching?: boolean;
+    rash?: boolean;
+    flushing?: boolean;
+    cyanosis?: boolean;
+    clammySkin?: boolean;
+    hairLoss?: boolean;
+    lumps?: boolean;
+    changesInHairOrNails?: boolean;
+    skinColorChanges?: boolean;
+    jaundice?: boolean;
+    note?: string;
+};
+
+export type RosNeurologic = {
+    headaches?: boolean;
+    poorBalance?: boolean;
+    difficultySpeaking?: boolean;
+    difficultyConcentrating?: boolean;
+    coordinationProblems?: boolean;
+    weakness?: boolean;
+    briefParalysis?: boolean;
+    numbness?: boolean;
+    tingling?: boolean;
+    visualDisturbances?: boolean;
+    seizures?: boolean;
+    tremors?: boolean;
+    roomSpinning?: boolean;
+    memoryLoss?: boolean;
+    excessiveDaytimeSleepiness?: boolean;
+    dizziness?: boolean;
+    facialPain?: boolean;
+    lightheadedness?: boolean;
+    faintingSpells?: boolean;
+    lethargy?: boolean;
+    insomnia?: boolean;
+    somnolence?: boolean;
+    disorientation?: boolean;
+    note?: string;
+};
+
+export type RosPsychiatric = {
+    anxiety?: boolean;
+    nervousness?: boolean;
+    depression?: boolean;
+    hallucinations?: boolean;
+    frighteningVisionsOrSounds?: boolean;
+    suicidalIdeation?: boolean;
+    homicidalIdeation?: boolean;
+    impendingSenseOfDoom?: boolean;
+    disturbingThoughts?: boolean;
+    memoryLoss?: boolean;
+    note?: string;
+};
+
+export type RosEndocrine = {
+    heatColdIntolerance?: boolean;
+    weightChange?: boolean;
+    excessiveThirstOrHunger?: boolean;
+    excessiveSweating?: boolean;
+    frequentUrination?: boolean;
+    note?: string;
+};
+
+export type RosHematologicLymphatic = {
+    skinDiscoloration?: boolean;
+    easyBleeding?: boolean;
+    enlargedLymphNodes?: boolean;
+    easyBruising?: boolean;
+    anemia?: boolean;
+    bloodClots?: boolean;
+    swollenGlandsOrThyroid?: boolean;
+    note?: string;
+};
+
+export type RosAllergicImmunologic = {
+    seasonalAllergies?: boolean;
+    hivesOrRash?: boolean;
+    persistentInfections?: boolean;
+    hivExposure?: boolean;
+    immuneDeficiencies?: boolean;
+    note?: string;
 };
 
 export type PastMedicalHistoryDto = {

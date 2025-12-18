@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -7,66 +5,57 @@ import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse, RosDto } from "@/utils/types";
 import ROSForm from "./Rosform";
 
-
-/** Safely parse JSON (handles empty body / 204 / 401) */
 async function safeJson<T>(res: Response): Promise<T | null> {
     const txt = await res.text().catch(() => "");
     if (!txt) return null;
-    try {
-        return JSON.parse(txt) as T;
-    } catch {
-        return null;
-    }
+    try { return JSON.parse(txt) as T; } catch { return null; }
 }
-
-/** Map backend payload -> UI RosDto */
-// function toRosDto(b: any): RosDto {
-//     return {
-//         id: b.id,
-//         patientId: b.patientId,
-//         encounterId: b.encounterId,
-//         system: b.systemName,
-//         status: b.isNegative ? "Negative" : "Positive",
-//         finding: Array.isArray(b.systemDetails) ? b.systemDetails.join(", ") : "",
-//         notes: b.notes ?? "",
-//         // treat either `esigned` or `signed` as the flag (depending on backend)
-//         esigned: Boolean(b.esigned ?? b.signed),
-//         audit: {
-//             createdDate: b.createdDate ?? b.audit?.createdDate,
-//             lastModifiedDate: b.lastModifiedDate ?? b.audit?.lastModifiedDate,
-//         },
-//     } as RosDto;
-// }
-function toRosDto(b: unknown): RosDto {
-    const rec = b as Record<string, unknown>;
-    return {
-        id: rec.id as number,
-        patientId: rec.patientId as number,
-        encounterId: rec.encounterId as number,
-        system: rec.systemName as string,
-        status: rec.isNegative ? "Negative" : "Positive",
-        finding: Array.isArray(rec.systemDetails) ? (rec.systemDetails as string[]).join(", ") : "",
-        notes: (rec.notes as string) ?? "",
-        esigned: Boolean(rec.esigned ?? rec.signed),
-        audit: {
-            createdDate: (rec.createdDate ?? (rec.audit as Record<string, unknown>)?.createdDate) as string | undefined,
-            lastModifiedDate: (rec.lastModifiedDate ?? (rec.audit as Record<string, unknown>)?.lastModifiedDate) as string | undefined,
-        },
-    };
-}
-
 
 type Props = { patientId: number; encounterId: number };
+
+function getPositiveSymptoms(ros: RosDto): string[] {
+    const symptoms: string[] = [];
+    const systems = [
+        { key: "constitutional", label: "Constitutional" },
+        { key: "eyes", label: "Eyes" },
+        { key: "ent", label: "ENT" },
+        { key: "neck", label: "Neck" },
+        { key: "cardiovascular", label: "Cardiovascular" },
+        { key: "respiratory", label: "Respiratory" },
+        { key: "gastrointestinal", label: "Gastrointestinal" },
+        { key: "genitourinaryMale", label: "Genitourinary (Male)" },
+        { key: "genitourinaryFemale", label: "Genitourinary (Female)" },
+        { key: "musculoskeletal", label: "Musculoskeletal" },
+        { key: "skin", label: "Skin" },
+        { key: "neurologic", label: "Neurologic" },
+        { key: "psychiatric", label: "Psychiatric" },
+        { key: "endocrine", label: "Endocrine" },
+        { key: "hematologicLymphatic", label: "Hematologic/Lymphatic" },
+        { key: "allergicImmunologic", label: "Allergic/Immunologic" },
+    ];
+
+    systems.forEach((sys) => {
+        const systemData = (ros as Record<string, unknown>)[sys.key] as Record<string, unknown>;
+        if (!systemData) return;
+
+        const positives = Object.entries(systemData)
+            .filter(([k, v]) => k !== "note" && v === true)
+            .map(([k]) => k.replace(/([A-Z])/g, " $1").trim());
+
+        if (positives.length > 0) {
+            symptoms.push(`${sys.label}: ${positives.join(", ")}`);
+        }
+    });
+
+    return symptoms;
+}
 
 export default function ROSList({ patientId, encounterId }: Props) {
     const [items, setItems] = useState<RosDto[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-
     const [showForm, setShowForm] = useState(false);
     const [editing, setEditing] = useState<RosDto | null>(null);
-
-    // ui feedback
     const [busyId, setBusyId] = useState<number | null>(null);
     const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
@@ -75,31 +64,22 @@ export default function ROSList({ patientId, encounterId }: Props) {
         setTimeout(() => setToast(null), 2500);
     }
 
-    /** Load list */
     async function load() {
         setLoading(true);
         setError(null);
         try {
-            const res = await fetchWithOrg(
-                `/api/reviewofsystems/${patientId}/${encounterId}`,
-                { headers: { Accept: "application/json" } }
-            );
-
-          //  const json = await safeJson<ApiResponse<any[]>>(res);
-            const json = await safeJson<ApiResponse<unknown[]>>(res);
-
+            const res = await fetchWithOrg(`/api/reviewofsystems/${patientId}/${encounterId}`, {
+                headers: { Accept: "application/json" },
+            });
+            const json = await safeJson<ApiResponse<RosDto[]>>(res);
             if (!res.ok || !json?.success) {
-
                 throw new Error(json?.message || `Load failed (${res.status})`);
             }
-
-            const data = Array.isArray(json.data) ? json.data : [];
-            setItems(data.map(toRosDto));
+            setItems(Array.isArray(json.data) ? json.data : []);
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : "Something went wrong");
             setItems([]);
-        }
-        finally {
+        } finally {
             setLoading(false);
         }
     }
@@ -115,15 +95,14 @@ export default function ROSList({ patientId, encounterId }: Props) {
         await load();
     }
 
-    /** Delete */
     async function remove(id: number) {
         if (!confirm("Delete this ROS entry?")) return;
         try {
             setBusyId(id);
-            const res = await fetchWithOrg(
-                `/api/reviewofsystems/${patientId}/${encounterId}/${id}`,
-                { method: "DELETE", headers: { Accept: "application/json" } }
-            );
+            const res = await fetchWithOrg(`/api/reviewofsystems/${patientId}/${encounterId}/${id}`, {
+                method: "DELETE",
+                headers: { Accept: "application/json" },
+            });
 
             if (res.status === 204) {
                 setItems((prev) => prev.filter((x) => x.id !== id));
@@ -138,22 +117,19 @@ export default function ROSList({ patientId, encounterId }: Props) {
             notify("success", "ROS entry deleted.");
         } catch (e: unknown) {
             notify("error", e instanceof Error ? e.message : "Something went wrong");
-        }
-        finally {
+        } finally {
             setBusyId(null);
         }
     }
 
-    /** eSign (backend) */
     async function esign(id: number) {
         try {
             setBusyId(id);
-            const res = await fetchWithOrg(
-                `/api/reviewofsystems/${patientId}/${encounterId}/${id}/esign`,
-                { method: "POST", headers: { Accept: "application/json" } }
-            );
-
-            const json = await safeJson<ApiResponse<unknown>>(res);
+            const res = await fetchWithOrg(`/api/reviewofsystems/${patientId}/${encounterId}/${id}/esign`, {
+                method: "POST",
+                headers: { Accept: "application/json" },
+            });
+            const json = await safeJson<ApiResponse<RosDto>>(res);
             if (!res.ok || (json && json.success === false)) {
                 throw new Error(json?.message || `eSign failed (${res.status})`);
             }
@@ -161,35 +137,26 @@ export default function ROSList({ patientId, encounterId }: Props) {
             await load();
         } catch (e: unknown) {
             notify("error", e instanceof Error ? e.message : "Something went wrong");
-        }
-        finally {
+        } finally {
             setBusyId(null);
         }
     }
 
-    /** Print (backend PDF/HTML) */
-    // Replace the old printROS(...) with this version.
     async function printROS(id: number) {
         try {
             setBusyId(id);
-
-            // Hit the backend through the same helper you use for all API calls
-            const res = await fetchWithOrg(
-                `/api/reviewofsystems/${patientId}/${encounterId}/${id}/print`,
-                { method: "GET" }
-            );
+            const res = await fetchWithOrg(`/api/reviewofsystems/${patientId}/${encounterId}/${id}/print`, {
+                method: "GET",
+            });
             if (!res.ok) throw new Error(`Print failed (${res.status})`);
 
             const ct = res.headers.get("content-type") || "";
-
             if (ct.includes("pdf")) {
-                // Backend returns a PDF → open as blob
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
                 const win = window.open(url, "_blank", "noopener,noreferrer");
                 if (!win) throw new Error("Popup blocked. Allow popups to view the PDF.");
             } else {
-                // Backend returns HTML → write it into a new tab
                 const html = await res.text();
                 const win = window.open("", "_blank", "noopener,noreferrer");
                 if (!win) throw new Error("Popup blocked. Allow popups to view the document.");
@@ -198,13 +165,11 @@ export default function ROSList({ patientId, encounterId }: Props) {
             }
         } catch (e: unknown) {
             notify("error", e instanceof Error ? e.message : "Unable to print");
-        }
-        finally {
+        } finally {
             setBusyId(null);
         }
     }
 
-    /** newest first */
     const sorted = useMemo(() => {
         return [...items].sort((a, b) => {
             const d1 = a.audit?.lastModifiedDate || a.audit?.createdDate || "";
@@ -262,16 +227,22 @@ export default function ROSList({ patientId, encounterId }: Props) {
 
             <ul className="space-y-3">
                 {sorted.map((ros) => {
-                    const readOnly = ros.esigned === true;
+                    const readOnly = ros.eSigned === true;
+                    const symptoms = getPositiveSymptoms(ros);
                     return (
                         <li key={ros.id} className="rounded-2xl border p-4 bg-white shadow-sm">
                             <div className="flex items-start justify-between gap-4">
                                 <div className="space-y-1">
-                                    <p className="font-medium text-gray-900">
-                                        {ros.system} · {ros.status}
-                                    </p>
-                                    {ros.finding && <p className="text-gray-800">Findings: {ros.finding}</p>}
-                                    {ros.notes && <p className="text-gray-700 whitespace-pre-wrap">{ros.notes}</p>}
+                                    <p className="font-medium text-gray-900">Review of Systems</p>
+                                    {symptoms.length > 0 ? (
+                                        <ul className="text-sm text-gray-800 list-disc pl-5">
+                                            {symptoms.map((s, i) => (
+                                                <li key={i}>{s}</li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="text-sm text-gray-600">All systems negative</p>
+                                    )}
                                     <p className="text-xs text-gray-500">
                                         {ros.audit?.createdDate && <>Created: {ros.audit.createdDate}</>}
                                         {ros.audit?.lastModifiedDate && <> · Updated: {ros.audit.lastModifiedDate}</>}

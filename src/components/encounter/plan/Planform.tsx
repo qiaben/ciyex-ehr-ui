@@ -144,7 +144,7 @@ export default function PlanForm({ patientId, encounterId, editing, onSaved, onC
         </div>
 
         <div className="md:col-span-2">
-          <label className="block text-sm font-medium mb-1">Notes <span className="text-red-600">*</span></label>
+          <label className="block text-sm font-medium mb-1">Notes </label>
           <textarea
             className="w-full rounded-lg border px-3 py-2 focus:ring min-h-20"
             value={notes}

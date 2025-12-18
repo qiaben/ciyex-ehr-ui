@@ -85,11 +85,9 @@ interface SocialHistory {
 
 interface ROSEntry {
     id?: number;
-    system?: string;
     systemName?: string;
-    status?: string;
     isNegative?: boolean;
-    finding?: string;
+    findings?: string[];
     notes?: string;
 }
 
@@ -145,6 +143,25 @@ interface ProviderNote {
     assessment?: string;
     plan?: string;
     narrative?: string;
+}
+
+interface Vitals {
+    id?: number;
+    weightKg?: number;
+    weightLbs?: number;
+    heightCm?: number;
+    heightIn?: number;
+    bpSystolic?: number;
+    bpDiastolic?: number;
+    pulse?: number;
+    respiration?: number;
+    temperatureC?: number;
+    temperatureF?: number;
+    oxygenSaturation?: number;
+    bmi?: number;
+    notes?: string;
+    signed?: boolean;
+    recordedAt?: string;
 }
 
 interface ProviderSignature {
@@ -238,6 +255,7 @@ export default function Encountersummary({
     const [providerSignature, setProviderSignature] = useState<ProviderSignature | null>(null);
     const [signoff, setSignoff] = useState<Signoff | null>(null);
     const [dateTimeFinalized, setDateTimeFinalized] = useState<DateTimeFinalized | null>(null);
+    const [vitals, setVitals] = useState<Vitals[] | null>(null);
 
     // const summaryRef = useRef<HTMLDivElement | null>(null);
 
@@ -389,6 +407,7 @@ const loadAll = useCallback(async () => {
       socialHistory: SocialHistory;
       ros: ROSEntry[];
       physicalExam: PhysicalExam[];
+      vitals: Vitals[];
       procedures: Procedure[];
       assessment: Assessment[];
       plan: Plan[];
@@ -412,6 +431,7 @@ const loadAll = useCallback(async () => {
     setSh(d.socialHistory || null);
     setRos(d.ros || null);
     setPe(d.physicalExam || null);
+    setVitals(d.vitals || null);
     setProcedures(d.procedures || null);
     setCodes(null);
     setAssessment(d.assessment || null);
@@ -479,11 +499,11 @@ const downloadPdf = useCallback(async () => {
 
     const hasAnyData = useMemo(() => {
         return [
-            assignedProviders, chiefComplaints, hpi, pmh, patientMH, fh, sh?.entries, ros, pe,
+            assignedProviders, chiefComplaints, hpi, pmh, patientMH, fh, sh?.entries, ros, pe, vitals,
             procedures, codes, assessment, plan, providerNotes, providerSignature, signoff, dateTimeFinalized
         ].some((x) => (Array.isArray(x) ? x.length > 0 : !!x));
     }, [
-        assignedProviders, chiefComplaints, hpi, pmh, patientMH, fh, sh, ros, pe,
+        assignedProviders, chiefComplaints, hpi, pmh, patientMH, fh, sh, ros, pe, vitals,
         procedures, codes, assessment, plan, providerNotes, providerSignature, signoff, dateTimeFinalized
     ]);
 
@@ -553,6 +573,17 @@ const downloadPdf = useCallback(async () => {
                                     <div className="font-medium text-gray-900">{cc?.title || cc?.complaint || "Chief Complaint"}</div>
                                     {cc?.notes && <div className="text-gray-700 whitespace-pre-wrap">{cc.notes}</div>}
                                 </li>
+                            ))}
+                        </ul>
+                    </Section>
+                ) : null}
+
+                {/* HPI */}
+                {hpi?.length ? (
+                    <Section title="History of Present Illness (HPI)">
+                        <ul className="list-disc pl-5 text-sm text-gray-800 space-y-1">
+                            {hpi.map((h, i) => (
+                                <li key={h?.id ?? i}>{h?.description || h?.text || h?.notes || JSON.stringify(h)}</li>
                             ))}
                         </ul>
                     </Section>
@@ -640,15 +671,52 @@ const downloadPdf = useCallback(async () => {
                 {/* ROS */}
                 {ros?.length ? (
                     <Section title="Review of Systems (ROS)">
-                        <ul className="text-sm text-gray-800 space-y-1">
-                            {ros.map((r, i) => (
-                                <li key={r?.id ?? i}>
-                                    <b>{r?.system || r?.systemName || "System"}:</b> {r?.status || (r?.isNegative ? "Negative" : "Positive")}
-                                    {r?.finding ? ` — ${r.finding}` : ""}
-                                    {r?.notes ? <div className="text-gray-700 whitespace-pre-wrap">{r.notes}</div> : null}
-                                </li>
-                            ))}
-                        </ul>
+                        <div className="space-y-2">
+                            {ros.map((r, i) => {
+                                const hasFindings = r.findings && r.findings.length > 0;
+                                if (!hasFindings && r.isNegative) return null;
+                                return (
+                                    <div key={i} className="text-sm">
+                                        <b>{r.systemName || "System"}:</b>
+                                        {hasFindings ? (
+                                            <ul className="list-disc pl-5 text-gray-800">
+                                                {r.findings!.map((f, j) => <li key={j}>{f}</li>)}
+                                            </ul>
+                                        ) : (
+                                            <span className="text-gray-600"> All Negative</span>
+                                        )}
+                                        {r.notes && <p className="text-gray-700 italic ml-5">Note: {r.notes}</p>}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </Section>
+                ) : null}
+
+                {/* Vitals */}
+                {vitals?.length ? (
+                    <Section title="Vitals">
+                        {vitals.map((v, i) => (
+                            <div key={v?.id ?? i} className="border rounded-lg p-3 mb-2 text-sm">
+                                <div className="grid md:grid-cols-2 gap-2">
+                                    {v?.bpSystolic && v?.bpDiastolic && (
+                                        <div><b>BP:</b> {v.bpSystolic}/{v.bpDiastolic} mmHg</div>
+                                    )}
+                                    {v?.pulse && <div><b>Pulse:</b> {v.pulse} bpm</div>}
+                                    {v?.temperatureC && <div><b>Temp:</b> {v.temperatureC} °C</div>}
+                                    {v?.temperatureF && <div><b>Temp:</b> {v.temperatureF} °F</div>}
+                                    {v?.respiration && <div><b>Respiration:</b> {v.respiration} /min</div>}
+                                    {v?.oxygenSaturation && <div><b>O2 Sat:</b> {v.oxygenSaturation}%</div>}
+                                    {v?.weightKg && <div><b>Weight:</b> {v.weightKg} kg</div>}
+                                    {v?.weightLbs && <div><b>Weight:</b> {v.weightLbs} lbs</div>}
+                                    {v?.heightCm && <div><b>Height:</b> {v.heightCm} cm</div>}
+                                    {v?.heightIn && <div><b>Height:</b> {v.heightIn} in</div>}
+                                    {v?.bmi && <div><b>BMI:</b> {v.bmi}</div>}
+                                </div>
+                                {v?.notes && <div className="mt-2 text-gray-700 whitespace-pre-wrap">{v.notes}</div>}
+                                {v?.recordedAt && <div className="mt-1 text-xs text-gray-500">Recorded: {v.recordedAt}</div>}
+                            </div>
+                        ))}
                     </Section>
                 ) : null}
 
