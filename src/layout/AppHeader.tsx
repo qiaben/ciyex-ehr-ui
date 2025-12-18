@@ -5,6 +5,7 @@ import { useSidebar } from "@/context/SidebarContext";
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
+import DatePicker from "@/components/DatePicker";
 import {
     Dialog,
     DialogContent,
@@ -356,13 +357,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({ pageTitle }) => {
                                 <label className="block text-sm font-medium mb-1">
                                     <span className="text-red-500">*</span> Date of Birth
                                 </label>
-                                <input
-                                    type="date"
-                                    name="dateOfBirth"
-                                    required
+                                <DatePicker
                                     value={formData.dateOfBirth}
-                                    onChange={handleInputChange}
-                                    className="w-full p-2 border rounded"
+                                    onChange={(date) => setFormData(prev => ({ ...prev, dateOfBirth: date }))}
+                                    placeholder="dd-mm-yyyy"
                                 />
                             </div>
                             <div>
