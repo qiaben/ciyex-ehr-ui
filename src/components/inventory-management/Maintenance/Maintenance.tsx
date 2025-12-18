@@ -18,42 +18,37 @@ type MaintenanceTask = {
     assignee: string;
     vendor?: string;
     priority: "Critical" | "High" | "Medium" | "Low";
-    status: "Open" | "In Progress" | "Done";
+    status: "Open" | "In Progress" | "Done" | "Scheduled";
     notes?: string;
 };
 
 function TableShell({ children }: { children: React.ReactNode }) {
     return (
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-md dark:border-gray-700 dark:bg-gray-900">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
             {children}
         </div>
     );
 }
 
-function Pill({
-                  children,
-                  tone = "neutral",
-              }: {
-    children: React.ReactNode;
-    tone?: "neutral" | "warn" | "ok";
-}) {
-    const map: Record<"neutral" | "warn" | "ok", string> = {
-        neutral: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
-        warn: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200",
-        ok: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200",
+function Pill({ children, color }: { children: React.ReactNode; color: string }) {
+    const colors: any = {
+        yellow: "bg-yellow-100 text-yellow-800 border border-yellow-300",
+        blue: "bg-blue-100 text-blue-800 border border-blue-300",
+        green: "bg-green-100 text-green-800 border border-green-300",
+        purple: "bg-purple-100 text-purple-800 border border-purple-300",
     };
+
     return (
-        <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${map[tone]}`}
-        >
-      {children}
-    </span>
+        <span className={`px-3 py-1 rounded-full text-xs font-medium ${colors[color]}`}>
+            {children}
+        </span>
     );
 }
 
 export default function Maintenance() {
     const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
     const [showModal, setShowModal] = useState(false);
+
     const [form, setForm] = useState<Partial<MaintenanceTask>>({
         equipment: "",
         category: "Preventive",
@@ -65,6 +60,7 @@ export default function Maintenance() {
         priority: "Medium",
         notes: "",
     });
+
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [totalPages, setTotalPages] = useState(1);
@@ -77,6 +73,14 @@ export default function Maintenance() {
         message: string;
     } | null>(null);
 
+    const [modalAlertData, setModalAlertData] = useState<{
+        variant: "success" | "error" | "warning" | "info";
+        title: string;
+        message: string;
+    } | null>(null);
+
+    const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
     useEffect(() => {
         if (alertData) {
             const timer = setTimeout(() => setAlertData(null), 4000);
@@ -84,15 +88,25 @@ export default function Maintenance() {
         }
     }, [alertData]);
 
-    // ✅ Fetch all tasks with pagination
+    useEffect(() => {
+        if (modalAlertData) {
+            const timer = setTimeout(() => setModalAlertData(null), 4000);
+            return () => clearTimeout(timer);
+        }
+    }, [modalAlertData]);
+
+    // Fetch tasks
     useEffect(() => {
         (async () => {
             setLoading(true);
             try {
                 const res = await fetchWithAuth(
-                    `${process.env.NEXT_PUBLIC_API_URL}/api/maintenances?page=${currentPage - 1}&size=${pageSize}`
+                    `${process.env.NEXT_PUBLIC_API_URL}/api/maintenances?page=${
+                        currentPage - 1
+                    }&size=${pageSize}`
                 );
                 const data = await res.json();
+
                 if (res.ok && data.success) {
                     setTasks(data.data.content ?? []);
                     setTotalPages(data.data.totalPages);
@@ -101,7 +115,7 @@ export default function Maintenance() {
                     setTasks([]);
                 }
             } catch (err) {
-                console.error("Failed to fetch maintenances:", err);
+                console.error("Fetch failed:", err);
                 setTasks([]);
             } finally {
                 setLoading(false);
@@ -109,98 +123,207 @@ export default function Maintenance() {
         })();
     }, [currentPage, pageSize]);
 
-    // ✅ Create task
+    // Validation function
+    function validateForm(): boolean {
+        const errors: Record<string, string> = {};
+        
+        if (!form.equipment?.trim()) {
+            errors.equipment = "Please fill out this field";
+        }
+        if (!form.category?.trim()) {
+            errors.category = "Please fill out this field";
+        }
+        if (!form.priority?.trim()) {
+            errors.priority = "Please fill out this field";
+        }
+        if (!form.location?.trim()) {
+            errors.location = "Please fill out this field";
+        }
+        if (!form.dueDate?.trim()) {
+            errors.dueDate = "Please fill out this field";
+        }
+        if (!form.assignee?.trim()) {
+            errors.assignee = "Please fill out this field";
+        }
+        
+        setValidationErrors(errors);
+        return Object.keys(errors).length === 0;
+    }
+
+    // Create or update
     async function createTask(e: React.FormEvent) {
         e.preventDefault();
+        
+        // Validate form
+        if (!validateForm()) {
+            setModalAlertData({
+                variant: "error",
+                title: "Validation Error",
+                message: "Please fill out all required fields.",
+            });
+            return;
+        }
+        
         try {
-            const payload = { ...form, status: "Open" };
-            const res = await fetchWithAuth(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/maintenances`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload),
+            if (form.id) {
+                // UPDATE
+                const res = await fetchWithAuth(
+                    `${process.env.NEXT_PUBLIC_API_URL}/api/maintenances/${form.id}`,
+                    {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(form),
+                    }
+                );
+                const data = await res.json();
+
+                if (res.ok && data?.success && data?.data) {
+                    setTasks((prev) => prev.map((t) => (t.id === form.id ? data.data : t)));
+                    setAlertData({
+                        variant: "success",
+                        title: "Updated",
+                        message: `${data.data.equipment || 'Task'} updated successfully.`,
+                    });
+                } else {
+                    throw new Error("Update failed");
                 }
-            );
-            const data = await res.json();
-            if (data.success) {
-                setTasks((prev) => [...prev, data.data]);
-                setShowModal(false);
-                setForm({
-                    equipment: "",
-                    category: "Preventive",
-                    location: "",
-                    dueDate: "",
-                    lastServiceDate: "",
-                    assignee: "",
-                    vendor: "",
-                    priority: "Medium",
-                    notes: "",
-                });
-                setAlertData({
-                    variant: "success",
-                    title: "Task Created",
-                    message: `${data.data.equipment} created successfully.`,
-                });
             } else {
-                throw new Error(data.message || "Failed to create task");
+                // CREATE
+                const payload = { ...form, status: "Open" };
+                const res = await fetchWithAuth(
+                    `${process.env.NEXT_PUBLIC_API_URL}/api/maintenances`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload),
+                    }
+                );
+                const data = await res.json();
+
+                if (res.ok && data?.success && data?.data) {
+                    setTasks((prev) => [...prev, data.data]);
+                    setAlertData({
+                        variant: "success",
+                        title: "Created",
+                        message: `${data.data.equipment || 'Task'} created successfully.`,
+                    });
+                } else {
+                    throw new Error("Create failed");
+                }
             }
-        } catch (err) {
-            console.error(err);
-            setAlertData({
+
+            // Reset
+            setShowModal(false);
+            setForm({
+                equipment: "",
+                category: "Preventive",
+                location: "",
+                dueDate: "",
+                lastServiceDate: "",
+                assignee: "",
+                vendor: "",
+                priority: "Medium",
+                notes: "",
+            });
+        } catch {
+            setModalAlertData({
                 variant: "error",
                 title: "Error",
-                message: "Failed to create maintenance task.",
+                message: "Failed to save task.",
             });
         }
     }
 
-    // ✅ Update status via dedicated endpoint
-    async function cycleStatus(id: number, current: "Open" | "In Progress" | "Done") {
-        const next: "Open" | "In Progress" | "Done" =
-            current === "Open" ? "In Progress" : current === "In Progress" ? "Done" : "Open";
-
+    // DELETE
+    async function deleteTask(id: number) {
+        if (!confirm("Are you sure you want to delete this task?")) return;
 
         try {
             const res = await fetchWithAuth(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/maintenances/${id}/status?status=${encodeURIComponent(next)}`,
-                { method: "PUT" }
+                `${process.env.NEXT_PUBLIC_API_URL}/api/maintenances/${id}`,
+                { method: "DELETE" }
             );
             const data = await res.json();
-            if (data.success) {
-                setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: next } : t)));
+
+            if (res.ok && data.success) {
+                setTasks((prev) => prev.filter((t) => t.id !== id));
                 setAlertData({
                     variant: "success",
-                    title: "Status Updated",
-                    message: `Task #${id} marked as ${next}.`,
+                    title: "Deleted",
+                    message: `Task #${id} removed successfully.`,
                 });
             } else {
-                throw new Error("Failed to update");
+                throw new Error("Delete failed");
             }
         } catch {
             setAlertData({
                 variant: "error",
                 title: "Error",
-                message: "Failed to update task status.",
+                message: "Failed to delete task.",
             });
         }
     }
 
+    async function cycleStatus(id: number, status: MaintenanceTask["status"]) {
+        const next = status === "Open" ? "In Progress" : status === "In Progress" ? "Done" : "Open";
+
+        try {
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+
+            const updatedTask = { ...task, status: next };
+            
+            const res = await fetchWithAuth(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/maintenances/${id}`,
+                {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(updatedTask),
+                }
+            );
+
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success) {
+                    setTasks(prev => prev.map(t => t.id === id ? { ...t, status: next } : t));
+                    setAlertData({
+                        variant: "success",
+                        title: "Updated",
+                        message: `Task status changed to ${next}`,
+                    });
+                    return;
+                }
+            }
+            
+            throw new Error("Update failed");
+        } catch {
+            setAlertData({
+                variant: "error",
+                title: "Failed",
+                message: "Status update failed.",
+            });
+        }
+    }
+
+    // Get badge color
+    function getStatusColor(status: string) {
+        if (status === "Done") return "green";
+        if (status === "In Progress") return "blue";
+        if (status === "Scheduled") return "purple";
+        return "yellow";
+    }
+
     return (
         <AdminLayout>
-            {/* ✅ Alert */}
+            {/* Alerts */}
             {alertData && (
                 <div className="mb-4">
-                    <Alert
-                        variant={alertData.variant}
-                        title={alertData.title}
-                        message={alertData.message}
-                    />
+                    <Alert {...alertData} />
                 </div>
             )}
 
             <div className="flex items-center justify-between p-1">
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                     Manage maintenance tasks, schedules, and statuses.
                 </p>
                 <Button
@@ -211,11 +334,12 @@ export default function Maintenance() {
                 </Button>
             </div>
 
-            <div className="mt-4 space-y-4">
+            {/* TABLE */}
+            <div className="mt-4">
                 <TableShell>
-                    <table className="w-full table-auto text-sm">
-                        <thead className="bg-gray-100 dark:bg-gray-800">
-                        <tr className="text-left text-sm font-medium text-gray-600 dark:text-gray-300">
+                    <table className="w-full text-sm">
+                        <thead className="bg-gray-50 dark:bg-gray-800">
+                        <tr className="text-left text-xs font-semibold text-gray-600 dark:text-gray-300">
                             <th className="px-6 py-3">Equipment</th>
                             <th className="px-6 py-3">Category</th>
                             <th className="px-6 py-3">Priority</th>
@@ -226,42 +350,57 @@ export default function Maintenance() {
                             <th className="px-6 py-3 text-right">Action</th>
                         </tr>
                         </thead>
+
                         <tbody>
                         {tasks.map((t) => (
                             <tr
                                 key={t.id}
-                                className="border-b border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                                className="border-b hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
                             >
                                 <td className="px-6 py-3">{t.equipment}</td>
                                 <td className="px-6 py-3">{t.category}</td>
                                 <td className="px-6 py-3">{t.priority}</td>
                                 <td className="px-6 py-3">{t.location}</td>
-                                <td className="px-6 py-3">{t.dueDate}</td>
+                                <td className="px-6 py-3">{new Date(t.dueDate).toLocaleDateString()}</td>
                                 <td className="px-6 py-3">{t.assignee}</td>
                                 <td className="px-6 py-3">
-                                    <Pill
-                                        tone={
-                                            t.status === "Done"
-                                                ? "ok"
-                                                : t.status === "In Progress"
-                                                    ? "neutral"
-                                                    : "warn"
-                                        }
-                                    >
-                                        {t.status}
-                                    </Pill>
+                                    <Pill color={getStatusColor(t.status)}>{t.status}</Pill>
                                 </td>
+
                                 <td className="px-6 py-3 text-right">
-                                    <Button
-                                        onClick={() => cycleStatus(t.id, t.status)}
-                                        className="rounded-2xl px-3 py-1 text-xs bg-blue-600 text-white hover:bg-blue-700"
-                                    >
-                                        {t.status === "Open"
-                                            ? "Progress"
-                                            : t.status === "In Progress"
-                                                ? "Mark Done"
-                                                : "Reopen"}
-                                    </Button>
+                                    <div className="flex justify-end gap-2">
+
+                                        {/* EDIT */}
+                                        <button
+                                            onClick={() => {
+                                                setForm({ ...t });
+                                                setShowModal(true);
+                                            }}
+                                            className="rounded px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200"
+                                        >
+                                            Edit
+                                        </button>
+
+                                        {/* DELETE */}
+                                        <button
+                                            onClick={() => deleteTask(t.id)}
+                                            className="rounded px-3 py-1.5 text-xs font-medium bg-red-100 text-red-700 border border-red-300 hover:bg-red-200"
+                                        >
+                                            Delete
+                                        </button>
+
+                                        {/* STATUS */}
+                                        <button
+                                            onClick={() => cycleStatus(t.id, t.status)}
+                                            className="rounded px-3 py-1.5 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
+                                        >
+                                            {t.status === "Open"
+                                                ? "Start"
+                                                : t.status === "In Progress"
+                                                    ? "Complete"
+                                                    : "Reopen"}
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -270,34 +409,42 @@ export default function Maintenance() {
                 </TableShell>
             </div>
 
-            {/* Pagination */}
-            <div className="mt-3 flex items-center justify-between px-3 py-2 border-t bg-white dark:bg-gray-900 dark:border-gray-700 text-sm">
-                <div className="flex items-center gap-3">
+            {/* PAGINATION */}
+            <div className="mt-4 flex justify-between items-center text-sm border-t py-3">
+                <div className="flex gap-3 items-center">
                     <button
-                        disabled={currentPage === 1 || loading}
+                        disabled={currentPage === 1}
                         onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                        className="px-3 py-1.5 border rounded disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800"
+                        className="px-3 py-1.5 border rounded disabled:opacity-40"
                     >
                         Prev
                     </button>
-                    <div>Page {currentPage} of {totalPages}</div>
+
+                    <span>
+                        Page {currentPage} of {totalPages}
+                    </span>
+
                     <button
-                        disabled={currentPage === totalPages || loading}
+                        disabled={currentPage === totalPages}
                         onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                        className="px-3 py-1.5 border rounded disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800"
+                        className="px-3 py-1.5 border rounded disabled:opacity-40"
                     >
                         Next
                     </button>
                 </div>
-                <div className="flex items-center gap-4">
-                    <div>Showing {loading ? "…" : tasks.length} of {totalItems}</div>
+
+                <div className="flex gap-3 items-center">
+                    <span>
+                        Showing {loading ? "…" : tasks.length} of {totalItems}
+                    </span>
+
                     <select
                         value={pageSize}
                         onChange={(e) => {
                             setPageSize(Number(e.target.value));
                             setCurrentPage(1);
                         }}
-                        className="border rounded px-3 py-1.5 bg-white dark:bg-gray-800 dark:border-gray-600 text-sm"
+                        className="border rounded px-3 py-1.5 bg-white"
                     >
                         <option value={5}>5</option>
                         <option value={10}>10</option>
@@ -307,117 +454,188 @@ export default function Maintenance() {
                 </div>
             </div>
 
-            {/* Modal */}
+            {/* MODAL */}
             {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                    <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
-                        <div className="flex items-start justify-between px-6 py-4 border-b dark:border-gray-700">
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                                New Maintenance Task
-                            </h3>
-                            <button
-                                onClick={() => setShowModal(false)}
-                                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                            >
-                                ✕
-                            </button>
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                    <div className="w-full max-w-2xl bg-white rounded-xl shadow-xl">
+                        <div className="px-6 py-4 border-b flex justify-between">
+                            <h3 className="font-semibold text-lg">Maintenance Task</h3>
+                            <button onClick={() => setShowModal(false)}>✕</button>
                         </div>
 
-                        <form onSubmit={createTask} className="flex flex-col max-h-[70vh]">
-                            <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 gap-6 sm:grid-cols-2 text-sm">
-                                <div>
-                                    <Label>Equipment</Label>
-                                    <Input
-                                        value={form.equipment}
-                                        onChange={(e) => setForm({ ...form, equipment: e.target.value })}
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <Label>Category</Label>
-                                    <select
-                                        value={form.category}
-                                        onChange={(e) => setForm({ ...form, category: e.target.value })}
-                                        className="h-10 w-full rounded-md border px-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                    >
-                                        <option>Preventive</option>
-                                        <option>Corrective</option>
-                                        <option>Calibration</option>
-                                        <option>Cleaning</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <Label>Priority</Label>
-                                    <select
-                                        value={form.priority}
-                                        onChange={(e) =>
-                                            setForm({
-                                                ...form,
-                                                priority: e.target.value as MaintenanceTask["priority"],
-                                            })
+                        {/* Modal Alert */}
+                        {modalAlertData && (
+                            <div className="px-6 pt-4">
+                                <Alert {...modalAlertData} />
+                            </div>
+                        )}
+
+                        <form onSubmit={createTask} className="p-6 grid grid-cols-2 gap-6">
+
+                            <div>
+                                <Label>Equipment <span className="text-red-500">*</span></Label>
+                                <Input
+                                    value={form.equipment}
+                                    onChange={(e) => {
+                                        setForm({ ...form, equipment: e.target.value });
+                                        if (validationErrors.equipment) {
+                                            setValidationErrors(prev => ({ ...prev, equipment: "" }));
                                         }
-                                        className="h-10 w-full rounded-md border px-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                    >
-                                        <option>Critical</option>
-                                        <option>High</option>
-                                        <option>Medium</option>
-                                        <option>Low</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <Label>Location</Label>
-                                    <Input
-                                        value={form.location}
-                                        onChange={(e) => setForm({ ...form, location: e.target.value })}
-                                    />
-                                </div>
-                                <div>
-                                    <Label>Due Date</Label>
-                                    <Input
-                                        type="date"
-                                        value={form.dueDate}
-                                        onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
-                                    />
-                                </div>
-                                <div>
-                                    <Label>Last Service Date</Label>
-                                    <Input
-                                        type="date"
-                                        value={form.lastServiceDate}
-                                        onChange={(e) =>
-                                            setForm({ ...form, lastServiceDate: e.target.value })
-                                        }
-                                    />
-                                </div>
-                                <div>
-                                    <Label>Assignee</Label>
-                                    <Input
-                                        value={form.assignee}
-                                        onChange={(e) => setForm({ ...form, assignee: e.target.value })}
-                                    />
-                                </div>
-                                <div>
-                                    <Label>Vendor</Label>
-                                    <Input
-                                        value={form.vendor}
-                                        onChange={(e) => setForm({ ...form, vendor: e.target.value })}
-                                    />
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <Label>Notes</Label>
-                                    <textarea
-                                        value={form.notes}
-                                        onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                                        className="w-full rounded-md border px-3 py-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                    />
-                                </div>
+                                    }}
+                                    className={validationErrors.equipment ? "border-red-500" : ""}
+                                />
+                                {validationErrors.equipment && (
+                                    <p className="text-red-500 text-sm mt-1">{validationErrors.equipment}</p>
+                                )}
                             </div>
 
-                            <div className="flex justify-end gap-3 px-6 py-4 border-t dark:border-gray-700">
-                                <Button type="button" onClick={() => setShowModal(false)}>
+                            <div>
+                                <Label>Category <span className="text-red-500">*</span></Label>
+                                <select
+                                    value={form.category}
+                                    onChange={(e) => {
+                                        setForm({ ...form, category: e.target.value });
+                                        if (validationErrors.category) {
+                                            setValidationErrors(prev => ({ ...prev, category: "" }));
+                                        }
+                                    }}
+                                    className={`h-10 w-full border rounded px-2 ${validationErrors.category ? "border-red-500" : ""}`}
+                                >
+                                    <option>Preventive</option>
+                                    <option>Corrective</option>
+                                    <option>Calibration</option>
+                                    <option>Cleaning</option>
+                                </select>
+                                {validationErrors.category && (
+                                    <p className="text-red-500 text-sm mt-1">{validationErrors.category}</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <Label>Priority <span className="text-red-500">*</span></Label>
+                                <select
+                                    value={form.priority}
+                                    onChange={(e) => {
+                                        setForm({
+                                            ...form,
+                                            priority:
+                                                e.target.value as MaintenanceTask["priority"],
+                                        });
+                                        if (validationErrors.priority) {
+                                            setValidationErrors(prev => ({ ...prev, priority: "" }));
+                                        }
+                                    }}
+                                    className={`h-10 w-full border rounded px-2 ${validationErrors.priority ? "border-red-500" : ""}`}
+                                >
+                                    <option>Critical</option>
+                                    <option>High</option>
+                                    <option>Medium</option>
+                                    <option>Low</option>
+                                </select>
+                                {validationErrors.priority && (
+                                    <p className="text-red-500 text-sm mt-1">{validationErrors.priority}</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <Label>Location <span className="text-red-500">*</span></Label>
+                                <Input
+                                    value={form.location}
+                                    onChange={(e) => {
+                                        setForm({ ...form, location: e.target.value });
+                                        if (validationErrors.location) {
+                                            setValidationErrors(prev => ({ ...prev, location: "" }));
+                                        }
+                                    }}
+                                    className={validationErrors.location ? "border-red-500" : ""}
+                                />
+                                {validationErrors.location && (
+                                    <p className="text-red-500 text-sm mt-1">{validationErrors.location}</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <Label>Due Date <span className="text-red-500">*</span></Label>
+                                <input
+                                    type="date"
+                                    value={form.dueDate}
+                                    onChange={(e) => {
+                                        setForm({ ...form, dueDate: e.target.value });
+                                        if (validationErrors.dueDate) {
+                                            setValidationErrors(prev => ({ ...prev, dueDate: "" }));
+                                        }
+                                    }}
+                                    className={`order-date-input flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${validationErrors.dueDate ? "border-red-500" : ""}`}
+                                    required
+                                />
+                                {validationErrors.dueDate && (
+                                    <p className="text-red-500 text-sm mt-1">{validationErrors.dueDate}</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <Label>Last Service Date</Label>
+                                <input
+                                    type="date"
+                                    value={form.lastServiceDate || ""}
+                                    onChange={(e) =>
+                                        setForm({ ...form, lastServiceDate: e.target.value })
+                                    }
+                                    className="order-date-input flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                />
+                            </div>
+
+                            <div>
+                                <Label>Assignee <span className="text-red-500">*</span></Label>
+                                <Input
+                                    value={form.assignee}
+                                    onChange={(e) => {
+                                        setForm({ ...form, assignee: e.target.value });
+                                        if (validationErrors.assignee) {
+                                            setValidationErrors(prev => ({ ...prev, assignee: "" }));
+                                        }
+                                    }}
+                                    className={validationErrors.assignee ? "border-red-500" : ""}
+                                />
+                                {validationErrors.assignee && (
+                                    <p className="text-red-500 text-sm mt-1">{validationErrors.assignee}</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <Label>Vendor</Label>
+                                <Input
+                                    value={form.vendor}
+                                    onChange={(e) =>
+                                        setForm({ ...form, vendor: e.target.value })
+                                    }
+                                />
+                            </div>
+
+                            <div className="col-span-2">
+                                <Label>Notes</Label>
+                                <textarea
+                                    value={form.notes}
+                                    onChange={(e) =>
+                                        setForm({ ...form, notes: e.target.value })
+                                    }
+                                    className="w-full border rounded px-3 py-2"
+                                />
+                            </div>
+
+                            <div className="col-span-2 flex justify-end gap-3">
+                                <Button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowModal(false);
+                                        setValidationErrors({});
+                                        setModalAlertData(null);
+                                    }}
+                                >
                                     Cancel
                                 </Button>
-                                <Button type="submit" className="bg-blue-600 text-white">
+
+                                <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-700">
                                     Save
                                 </Button>
                             </div>
