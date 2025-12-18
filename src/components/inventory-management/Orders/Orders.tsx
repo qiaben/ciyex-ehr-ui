@@ -1,12 +1,29 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
+
+// Add CSS to hide number input spinners
+if (typeof document !== 'undefined') {
+    const style = document.createElement('style');
+    style.textContent = `
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+    `;
+    document.head.appendChild(style);
+}
 import Button from "@/components/ui/button/Button";
 import Label from "@/components/form/Label";
 import { Input } from "@/components/ui/input";
 import AdminLayout from "@/app/(admin)/layout";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import Alert from "@/components/ui/alert/Alert";
+
 
 /** Types */
 type Order = {
@@ -28,12 +45,16 @@ type ApiResponse<T> = {
 };
 
 /** Helpers */
-const currency = (n: number) =>
-    new Intl.NumberFormat("en-IN", {
+const currency = (n: number) => {
+    if (n === null || n === undefined || !isFinite(n)) {
+        return "₹0";
+    }
+    return new Intl.NumberFormat("en-IN", {
         style: "currency",
         currency: "INR",
         maximumFractionDigits: 0,
     }).format(n);
+};
 
 function TableShell({ children }: { children: React.ReactNode }) {
     return (
@@ -88,12 +109,17 @@ function Info({ label, value }: { label: string; value: React.ReactNode }) {
     );
 }
 
+
+
 /** Component */
 export default function Orders() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [status, setStatus] = useState<string>("All");
     const [selected, setSelected] = useState<Order | null>(null);
     const [editMode, setEditMode] = useState(false);
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [modalError, setModalError] = useState<string | null>(null);
+    const [createModalError, setCreateModalError] = useState<string | null>(null);
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
@@ -170,90 +196,114 @@ export default function Orders() {
         [orders, status]
     );
 
-    /** ✅ Update or Receive Order */
-    async function updateOrder(id: number, updates: Partial<Order>) {
+    /** ✅ Generate next PO Number */
+    function generatePONumber() {
+        const existingNumbers = new Set(orders.map(order => order.orderNumber));
+        let counter = 10001;
+        let newPO;
+        do {
+            newPO = `PO-${counter}`;
+            counter++;
+        } while (existingNumbers.has(newPO));
+        return newPO;
+    }
+
+    /** ✅ Create New Order */
+    async function createOrder(orderData: Omit<Order, 'id' | 'orderNumber'>) {
+        setCreateModalError(null);
         try {
-            if (updates.status === "Received") {
-                const res = await fetchWithAuth(
-                    `${process.env.NEXT_PUBLIC_API_URL}/api/orders/${id}/receive`,
-                    {
-                        method: "PUT",
-                        headers: {"Content-Type": "application/json"},
-                        body: JSON.stringify({
-                            amount: updates.amount ?? 0,
-                            stock: updates.stock ?? 0   // ✅ pass stock too
-                        }),
-                    }
-                );
+            const orderWithPO = {
+                ...orderData,
+                orderNumber: generatePONumber()
+            };
 
-                // ✅ Safe parse with proper typing
-                let json: ApiResponse<Order> = {};
-                try {
-                    const text = await res.text();
-                    json = text ? (JSON.parse(text) as ApiResponse<Order>) : {};
-                } catch {
-                    json = {};
+            const res = await fetchWithAuth(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/orders`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(orderWithPO),
                 }
+            );
 
-                if (!res.ok || json.success === false) {
-                    throw new Error(json.message || "Failed to update order");
-                }
-
-                const received: Order | Partial<Order> = json.data ?? updates;
-
-                setOrders(prev =>
-                    prev.map(o => (o.id === id ? {...o, ...received} : o))
-                );
-                setSelected(null);
-                setEditMode(false);
-
-                setAlertData({
-                    variant: "success",
-                    title: "Order Received",
-                    message: `${"orderNumber" in received ? received.orderNumber : id} was marked as received — Amount: ${currency(received.amount ?? 0)}.`,
-                });
-            }else {
-                // Normal update
-                const res = await fetchWithAuth(
-                    `${process.env.NEXT_PUBLIC_API_URL}/api/orders/${id}`,
-                    {
-                        method: "PUT",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(updates),
-                    }
-                );
-
-                // ✅ Safe parse
-                let json: ApiResponse<Order> = {};
-                try {
-                    const text = await res.text();
-                    json = text ? JSON.parse(text) : {};
-                } catch {
-                    json = {};
-                }
-
-                if (!res.ok || json.success === false) {
-                    throw new Error(json.message || "Failed to update");
-                }
-
-                const updated = json.data ?? updates;
-                setOrders(prev => prev.map(o => (o.id === id ? { ...o, ...updated } : o)));
-                setSelected(null);
-                setEditMode(false);
-
-                setAlertData({
-                    variant: "success",
-                    title: "Order Updated",
-                    message: `${updated.orderNumber ?? id} was updated successfully — Amount: ${currency(updated.amount ?? 0)}.`,
-                });
+            let json: ApiResponse<Order> = {};
+            try {
+                const text = await res.text();
+                json = text ? JSON.parse(text) : {};
+            } catch {
+                json = {};
             }
+
+            if (!res.ok || json.success === false) {
+                throw new Error(json.message || "Failed to create order");
+            }
+
+            const newOrder = json.data ?? { ...orderWithPO, id: Date.now() };
+            setOrders(prev => [...prev, newOrder]);
+            setShowCreateModal(false);
+            setCreateModalError(null);
+
+            setAlertData({
+                variant: "success",
+                title: "Order Created",
+                message: `Order ${newOrder.orderNumber} was created successfully.`,
+            });
+        } catch (err) {
+            console.error("Create failed:", err);
+            setCreateModalError(err instanceof Error ? err.message : "Failed to create order.");
+        }
+    }
+
+    /** ✅ Update Order */
+    async function updateOrder(id: number, updates: Partial<Order>) {
+        setModalError(null);
+        try {
+            console.log('Updating order:', id, updates);
+            
+            // Use the regular update endpoint for all status changes
+            const res = await fetchWithAuth(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/orders/${id}`,
+                {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(updates),
+                }
+            );
+
+            console.log('Update response status:', res.status);
+
+            let json: ApiResponse<Order> = {};
+            try {
+                const text = await res.text();
+                console.log('Update response text:', text);
+                json = text ? JSON.parse(text) : {};
+            } catch (parseErr) {
+                console.error('Parse error:', parseErr);
+                json = {};
+            }
+
+            if (!res.ok || json.success === false) {
+                throw new Error(json.message || `HTTP ${res.status}: Failed to update order`);
+            }
+
+            const updated = json.data ?? { ...selected, ...updates };
+            setOrders(prev => prev.map(o => (o.id === id ? { ...o, ...updated } : o)));
+            setSelected(null);
+            setEditMode(false);
+            setModalError(null);
+
+            const statusMessage = updates.status === "Received" 
+                ? `Order ${updated.orderNumber ?? id} was marked as received — Amount: ${currency(updated.amount ?? 0)}`
+                : `Order ${updated.orderNumber ?? id} was updated successfully`;
+
+            setAlertData({
+                variant: "success",
+                title: updates.status === "Received" ? "Order Received" : "Order Updated",
+                message: statusMessage,
+            });
         } catch (err) {
             console.error("Update failed:", err);
-            setAlertData({
-                variant: "error",
-                title: "Error",
-                message: "Failed to update order.",
-            });
+            setModalError(err instanceof Error ? err.message : "Failed to update order.");
         }
     }
     return (
@@ -268,9 +318,17 @@ export default function Orders() {
                     />
                 </div>
             )}
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                View and manage purchase orders, statuses, and receipts.
-            </p>
+            <div className="flex items-center justify-between">
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    View and manage purchase orders, statuses, and receipts.
+                </p>
+                <Button
+                    className="h-8 px-3 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                    onClick={() => setShowCreateModal(true)}
+                >
+                    + New Order
+                </Button>
+            </div>
 
             <div className="space-y-4">
                 <div className="flex flex-wrap items-center gap-3">
@@ -416,6 +474,7 @@ export default function Orders() {
                                     onClick={() => {
                                         setSelected(null);
                                         setEditMode(false);
+                                        setModalError(null);
                                     }}
                                     className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                                 >
@@ -428,20 +487,39 @@ export default function Orders() {
                                 onSubmit={(e) => {
                                     e.preventDefault();
                                     const fd = new FormData(e.currentTarget);
+                                    
+                                    // Convert MM/DD/YYYY to ISO format if needed
+                                    const dateValue = String(fd.get("date") || selected!.date);
+                                    let isoDate = dateValue;
+                                    if (dateValue.includes("/")) {
+                                        const [mm, dd, yyyy] = dateValue.split("/");
+                                        isoDate = `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+                                    }
+
+                                    const statusValue = String(fd.get("status") || selected!.status);
+                                    const stockValue = Number(fd.get("stock") || selected!.stock || 0);
+                                    const amountValue = Number(fd.get("amount") || selected!.amount || 0);
 
                                     updateOrder(selected!.id, {
                                         orderNumber: String(fd.get("orderNumber") || selected!.orderNumber),
                                         supplier: String(fd.get("supplier") || selected!.supplier),
-                                        date: String(fd.get("date") || selected!.date),
-                                        status: (fd.get("status") as Order["status"]) || selected!.status,
-                                        stock: Number(fd.get("stock") || selected!.stock),
-                                        amount: Number(fd.get("amount") || selected!.amount),
+                                        itemName: String(fd.get("itemName") || selected!.itemName),
+                                        category: String(fd.get("category") || selected!.category),
+                                        date: isoDate,
+                                        status: statusValue as Order["status"],
+                                        stock: stockValue,
+                                        amount: amountValue,
                                     });
                                 }}
                                 className="flex flex-col max-h-[70vh]"
                             >
 
                                 <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 gap-4 text-sm">
+                                    {modalError && (
+                                        <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm dark:bg-red-900/20 dark:border-red-800 dark:text-red-400">
+                                            {modalError}
+                                        </div>
+                                    )}
                                     {editMode ? (
                                         <>
                                             <div>
@@ -449,31 +527,34 @@ export default function Orders() {
                                                 <Input name="orderNumber" defaultValue={selected.orderNumber} disabled />
                                             </div>
                                             <div>
-                                                <Label>Supplier</Label>
-                                                <Input name="supplier" defaultValue={selected.supplier} />
+                                                <Label>Supplier <span className="text-red-500">*</span></Label>
+                                                <Input name="supplier" defaultValue={selected.supplier} required />
                                             </div>
                                             <div>
-                                                <Label>Date</Label>
-                                                <Input
-                                                    type="text"
+                                                <Label>Item Name <span className="text-red-500">*</span></Label>
+                                                <Input name="itemName" defaultValue={selected.itemName} required />
+                                            </div>
+                                            <div>
+                                                <Label>Category <span className="text-red-500">*</span></Label>
+                                                <Input name="category" defaultValue={selected.category} required />
+                                            </div>
+                                            <div>
+                                                <Label>Date <span className="text-red-500">*</span></Label>
+                                                <input
+                                                    type="date"
                                                     name="date"
-                                                    defaultValue={dateLabel(selected.date)}
-                                                    placeholder="MM/DD/YYYY"
-                                                    maxLength={10}
-                                                    onChange={(e) => {
-                                                        let v = e.target.value.replace(/\D/g, "");
-                                                        if (v.length > 2) v = v.slice(0, 2) + "/" + v.slice(2);
-                                                        if (v.length > 5) v = v.slice(0, 5) + "/" + v.slice(5, 9);
-                                                        e.target.value = v;
-                                                    }}
+                                                    defaultValue={selected.date ? new Date(selected.date).toISOString().split('T')[0] : ''}
+                                                    className="order-date-input flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                                    required
                                                 />
                                             </div>
                                             <div>
-                                                <Label>Status</Label>
+                                                <Label>Status <span className="text-red-500">*</span></Label>
                                                 <select
                                                     name="status"
                                                     defaultValue={selected.status}
                                                     className="h-9 w-full rounded-md border dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                                    required
                                                 >
                                                     <option value="Pending">Pending</option>
                                                     <option value="Received">Received</option>
@@ -482,11 +563,31 @@ export default function Orders() {
                                             </div>
                                             <div>
                                                 <Label>Stock</Label>
-                                                <Input type="number" name="stock" defaultValue={selected.stock ?? 0} />
+                                                <input
+                                                    type="number"
+                                                    name="stock"
+                                                    defaultValue={selected.stock ?? 0}
+                                                    className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                                    style={{
+                                                        MozAppearance: 'textfield',
+                                                        WebkitAppearance: 'none'
+                                                    }}
+                                                    onWheel={(e) => e.currentTarget.blur()}
+                                                />
                                             </div>
                                             <div>
                                                 <Label>Amount (₹)</Label>
-                                                <Input type="number" name="amount" defaultValue={selected.amount ?? 0} />
+                                                <input
+                                                    type="number"
+                                                    name="amount"
+                                                    defaultValue={selected.amount ?? 0}
+                                                    className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                                    style={{
+                                                        MozAppearance: 'textfield',
+                                                        WebkitAppearance: 'none'
+                                                    }}
+                                                    onWheel={(e) => e.currentTarget.blur()}
+                                                />
                                             </div>
                                         </>
                                     ) : (
@@ -498,7 +599,7 @@ export default function Orders() {
                                             <Info label="Date" value={dateLabel(selected.date)} />
                                             <Info label="Status" value={selected.status} />
                                             <Info label="Stock" value={selected.stock ?? 0} />
-                                            <Info label="Amount" value={currency(selected.amount)} />
+                                            <Info label="Amount" value={currency(selected.amount ?? 0)} />
                                         </>
                                     )}
                                 </div>
@@ -510,6 +611,7 @@ export default function Orders() {
                                         onClick={() => {
                                             setEditMode(false); // cancel edit but keep modal open
                                             setSelected(null);  // close modal completely
+                                            setModalError(null);
                                         }}
                                     >
                                         {editMode ? "Cancel" : "Cancel"}
@@ -526,6 +628,117 @@ export default function Orders() {
                                             Edit
                                         </Button>
                                     )}
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Create Order Modal */}
+                {showCreateModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                        <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
+                            <div className="flex items-start justify-between px-6 py-4 border-b dark:border-gray-700">
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                    Create New Order
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        setShowCreateModal(false);
+                                        setCreateModalError(null);
+                                    }}
+                                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+
+                            <form
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    const fd = new FormData(e.currentTarget);
+                                    
+                                    createOrder({
+                                        supplier: String(fd.get("supplier") || ""),
+                                        itemName: String(fd.get("itemName") || ""),
+                                        category: String(fd.get("category") || ""),
+                                        date: String(fd.get("date") || ""),
+                                        status: "Pending",
+                                        stock: Number(fd.get("stock") || 0),
+                                        amount: Number(fd.get("amount") || 0),
+                                    });
+                                }}
+                                className="p-6 grid grid-cols-1 gap-4 text-sm"
+                            >
+                                {createModalError && (
+                                    <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm dark:bg-red-900/20 dark:border-red-800 dark:text-red-400">
+                                        {createModalError}
+                                    </div>
+                                )}
+
+                                <div>
+                                    <Label>Supplier <span className="text-red-500">*</span></Label>
+                                    <Input name="supplier" required />
+                                </div>
+                                <div>
+                                    <Label>Item Name <span className="text-red-500">*</span></Label>
+                                    <Input name="itemName" required />
+                                </div>
+                                <div>
+                                    <Label>Category <span className="text-red-500">*</span></Label>
+                                    <Input name="category" required />
+                                </div>
+                                <div>
+                                    <Label>Date <span className="text-red-500">*</span></Label>
+                                    <input
+                                        type="date"
+                                        name="date"
+                                        className="order-date-input flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <Label>Stock</Label>
+                                    <input
+                                        type="number"
+                                        name="stock"
+                                        defaultValue={0}
+                                        className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        style={{
+                                            MozAppearance: 'textfield',
+                                            WebkitAppearance: 'none'
+                                        }}
+                                        onWheel={(e) => e.currentTarget.blur()}
+                                    />
+                                </div>
+                                <div>
+                                    <Label>Amount (₹)</Label>
+                                    <input
+                                        type="number"
+                                        name="amount"
+                                        defaultValue={0}
+                                        className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        style={{
+                                            MozAppearance: 'textfield',
+                                            WebkitAppearance: 'none'
+                                        }}
+                                        onWheel={(e) => e.currentTarget.blur()}
+                                    />
+                                </div>
+
+                                <div className="flex justify-end gap-3 pt-4">
+                                    <Button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowCreateModal(false);
+                                            setCreateModalError(null);
+                                        }}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-700">
+                                        Create Order
+                                    </Button>
                                 </div>
                             </form>
                         </div>

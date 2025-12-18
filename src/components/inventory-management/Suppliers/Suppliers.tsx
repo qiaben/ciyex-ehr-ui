@@ -51,6 +51,13 @@ export default function Suppliers() {
         message: string;
     } | null>(null);
 
+    // Form validation errors
+    const [formErrors, setFormErrors] = useState<{
+        name?: string;
+        email?: string;
+        phone?: string;
+    }>({});
+
     useEffect(() => {
         if (alertData) {
             const timer = setTimeout(() => setAlertData(null), 4000);
@@ -82,16 +89,36 @@ export default function Suppliers() {
             }
         })();
     }, [currentPage, pageSize]);
+    // Validate form
+    function validateForm(data: { name: string; email: string; phone: string }) {
+        const errors: { name?: string; email?: string; phone?: string } = {};
+        
+        if (!data.name.trim()) errors.name = "Please fill out this field";
+        if (!data.email.trim()) errors.email = "Please fill out this field";
+        if (!data.phone.trim()) errors.phone = "Please fill out this field";
+        
+        return errors;
+    }
+
     // Add
     async function addSupplier(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         const body = {
             name: String(fd.get("name") || ""),
-            contact: String(fd.get("contact") || ""),
             phone: String(fd.get("phone") || ""),
             email: String(fd.get("email") || ""),
         };
+
+        // Validate mandatory fields
+        const errors = validateForm(body);
+        if (Object.keys(errors).length > 0) {
+            setFormErrors(errors);
+            return;
+        }
+        
+        setFormErrors({});
+        
         try {
             const res = await fetchWithAuth(
                 `${process.env.NEXT_PUBLIC_API_URL}/api/suppliers`,
@@ -109,6 +136,12 @@ export default function Suppliers() {
                     variant: "success",
                     title: "Supplier Added",
                     message: `${json.data.name} was added successfully.`,
+                });
+            } else {
+                setAlertData({
+                    variant: "error",
+                    title: "Error",
+                    message: json.message || "Failed to add supplier.",
                 });
             }
         } catch {
@@ -187,14 +220,18 @@ export default function Suppliers() {
                     Manage supplier information, ratings, and contact details.
                 </p>
                 <Button
-                    onClick={() => setAddOpen(true)}
+                    onClick={() => {
+                        setAddOpen(true);
+                        setFormErrors({});
+                        setAlertData(null);
+                    }}
                     className="h-8 px-3 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"
                 >
                     + Add Supplier
                 </Button>
             </div>
             <div className="space-y-4">
-                {alertData && (
+                {alertData && !addOpen && (
                     <Alert
                         variant={alertData.variant}
                         title={alertData.title}
@@ -207,7 +244,6 @@ export default function Suppliers() {
                         <thead className="bg-gray-100 dark:bg-gray-800">
                         <tr className="text-left text-sm font-medium text-gray-600 dark:text-gray-300">
                             <th className="px-6 py-3">Name</th>
-                            <th className="px-6 py-3">Contact</th>
                             <th className="px-6 py-3">Phone</th>
                             <th className="px-6 py-3">Email</th>
                             <th className="px-6 py-3 text-right">Actions</th>
@@ -220,7 +256,6 @@ export default function Suppliers() {
                                 className="border-b border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
                             >
                                 <td className="px-6 py-3">{s.name}</td>
-                                <td className="px-6 py-3">{s.contact}</td>
                                 <td className="px-6 py-3">{s.phone}</td>
                                 <td className="px-6 py-3">{s.email}</td>
                                 <td className="px-6 py-3 text-right">
@@ -299,29 +334,59 @@ export default function Suppliers() {
                                 </button>
                             </div>
 
+                            {/* Alert in modal */}
+                            {alertData && (
+                                <div className="px-6 pt-4">
+                                    <Alert
+                                        variant={alertData.variant}
+                                        title={alertData.title}
+                                        message={alertData.message}
+                                    />
+                                </div>
+                            )}
+
                             {/* Form */}
                             <form onSubmit={addSupplier} className="flex flex-col">
-                                <div className="flex-1 p-6 grid grid-cols-1 gap-6 sm:grid-cols-2 text-sm">
+                                <div className="flex-1 p-6 grid grid-cols-1 gap-6 text-sm">
                                     <div>
-                                        <Label>Name</Label>
-                                        <Input name="name" placeholder="Name" required className="h-10" />
+                                        <Label>
+                                            Name <span className="text-red-500">*</span>
+                                        </Label>
+                                        <Input 
+                                            name="name" 
+                                            placeholder="Name" 
+                                            className={`h-10 ${formErrors.name ? 'border-red-500' : ''}`}
+                                        />
+                                        {formErrors.name && (
+                                            <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
+                                        )}
                                     </div>
                                     <div>
-                                        <Label>Contact</Label>
-                                        <Input name="contact" placeholder="Contact" className="h-10" />
+                                        <Label>
+                                            Phone <span className="text-red-500">*</span>
+                                        </Label>
+                                        <Input 
+                                            name="phone" 
+                                            placeholder="Phone" 
+                                            className={`h-10 ${formErrors.phone ? 'border-red-500' : ''}`}
+                                        />
+                                        {formErrors.phone && (
+                                            <p className="text-red-500 text-xs mt-1">{formErrors.phone}</p>
+                                        )}
                                     </div>
                                     <div>
-                                        <Label>Phone</Label>
-                                        <Input name="phone" placeholder="Phone" className="h-10" />
-                                    </div>
-                                    <div>
-                                        <Label>Email</Label>
+                                        <Label>
+                                            Email <span className="text-red-500">*</span>
+                                        </Label>
                                         <Input
                                             name="email"
                                             type="email"
                                             placeholder="Email"
-                                            className="h-10"
+                                            className={`h-10 ${formErrors.email ? 'border-red-500' : ''}`}
                                         />
+                                        {formErrors.email && (
+                                            <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -366,7 +431,6 @@ export default function Suppliers() {
                                         const fd = new FormData(e.currentTarget);
                                         editSupplier(selected.id, {
                                             name: String(fd.get("name") || ""),
-                                            contact: String(fd.get("contact") || ""),
                                             phone: String(fd.get("phone") || ""),
                                             email: String(fd.get("email") || ""),
                                         });
@@ -374,14 +438,10 @@ export default function Suppliers() {
                                     className="p-6 space-y-4"
                                 >
                                     {/* ✅ Two-column layout */}
-                                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                    <div className="grid grid-cols-1 gap-6">
                                         <div>
                                             <Label>Name</Label>
                                             <Input name="name" defaultValue={selected.name} className="h-10" />
-                                        </div>
-                                        <div>
-                                            <Label>Contact</Label>
-                                            <Input name="contact" defaultValue={selected.contact} className="h-10" />
                                         </div>
                                         <div>
                                             <Label>Phone</Label>
@@ -405,7 +465,6 @@ export default function Suppliers() {
                             ) : (
                                 <div className="p-6 space-y-2 text-sm">
                                     <div><strong>Name:</strong> {selected.name}</div>
-                                    <div><strong>Contact:</strong> {selected.contact}</div>
                                     <div><strong>Phone:</strong> {selected.phone}</div>
                                     <div><strong>Email:</strong> {selected.email}</div>
                                     <div className="flex justify-end gap-2 pt-4">
