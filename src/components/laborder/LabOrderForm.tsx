@@ -508,8 +508,8 @@ export default function LabOrderForm({ initial }: { initial?: Partial<LabOrder> 
       const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
       if (!base) { setCodesList([]); return; }
 
-      const primaryBase = `${base}/api/codess`; // suspected new endpoint
-      const legacyBase = `${base}/api/codes`;
+      const primaryBase = `${base}/api/global_codes`;
+      const legacyBase = `${base}/api/global_codes`;
 
       const params = new URLSearchParams();
       if (q) params.append("q", q);
@@ -898,10 +898,12 @@ export default function LabOrderForm({ initial }: { initial?: Partial<LabOrder> 
                   value={draft.status ?? ""}
                   onChange={(e) => upd('status', e.target.value)}
                 >
+                  <option value="draft">Draft</option>
                   <option value="active">Active</option>
                   <option value="pending">Pending</option>
                   <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
+                  <option value="revoked">Revoked</option>
                 </select>
               </div>
               <div>

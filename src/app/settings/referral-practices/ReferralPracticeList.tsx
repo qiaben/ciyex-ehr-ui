@@ -19,6 +19,8 @@ interface ReferralPractice {
     postalCode: string | null;
     country: string | null;
     fhirId: string | null;
+    npiId: string | null;
+    taxId: string | null;
     status?: "ACTIVE" | "ARCHIVED";
 }
 

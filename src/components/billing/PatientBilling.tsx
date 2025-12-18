@@ -1,5 +1,7 @@
 
 
+
+
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -130,6 +132,17 @@ type PatientDepositDto = {
     description?: string | null;
 };
 
+type InsuranceDepositDto = {
+    id: number;
+    patientId: number;
+    depositAmount: number;
+    paymentMethod: PaymentMethod | string;
+    depositDate: string | number[]; // [year, month, day] or "YYYY-MM-DD"
+    description?: string | null;
+    policyId?: number | null;
+    providerId?: string | null;
+};
+
 type ServerProviderData = {
     id: number;
     identification?: {
@@ -227,6 +240,12 @@ type Patient = {
 type InsuranceCompany = {
     id: number;
     name: string;
+};
+
+type PatientPolicy = {
+    id: number;
+    planName: string;
+    policyNumber?: string;
 };
 
 type InvoiceLineDetail = {
@@ -1030,6 +1049,112 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         // TODO: Implement print functionality
     }
 
+    // =====================
+    // Insurance Deposit Actions
+    // =====================
+    async function fetchInsuranceDeposits() {
+        try {
+            const res = await fetchWithAuth(`${API}/insurance-deposit`);
+            const body = await res.json();
+            if (body?.success && Array.isArray(body.data)) {
+                setInsuranceDeposits(body.data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch insurance deposits:", error);
+        }
+    }
+
+    async function addInsuranceDeposit() {
+        if (!depositAmount || !depositMethod || !depositFromPatientId) return;
+        try {
+            const res = await fetchWithAuth(`${API}/insurance-deposit`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    amount: Number(depositAmount),
+                    paymentMethod: depositMethod,
+                    description: depositDesc,
+                    patientId: depositFromPatientId,
+                    policyId: depositPolicyId,
+                    providerId: depositToProviderId
+                }),
+            });
+            const body = await res.json();
+            if (!body?.success) {
+                alert(body?.message || "Failed to add insurance deposit");
+                return;
+            }
+            await fetchInsuranceDeposits();
+            setDepositAmount("");
+            setDepositDesc("");
+            setDepositFromPatientId(null);
+            setDepositPolicyId(null);
+            setDepositToProviderId(null);
+            setShowDepositType(null);
+            alert("Insurance deposit added successfully");
+        } catch (err) {
+            alert("Error: " + (err as Error).message);
+        }
+    }
+
+    async function updateInsuranceDeposit(depositId: number, request: { amount: number; paymentMethod: string; description?: string }) {
+        try {
+            const res = await fetchWithAuth(`${API}/insurance-deposit/${depositId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(request),
+            });
+            const body = await res.json();
+            if (body?.success) {
+                alert(body?.message || "Insurance deposit updated successfully");
+                await fetchInsuranceDeposits();
+                setEditInsuranceDepositModal(null);
+            } else {
+                alert(body?.message || "Failed to update insurance deposit");
+            }
+        } catch (error) {
+            console.error("Failed to update insurance deposit:", error);
+            alert("Failed to update insurance deposit. Please try again.");
+        }
+    }
+
+    async function deleteInsuranceDeposit(depositId: number) {
+        if (!confirm("Are you sure you want to delete this insurance deposit?")) return;
+        try {
+            const res = await fetchWithAuth(`${API}/insurance-deposit/${depositId}`, {
+                method: "DELETE",
+            });
+            const body = await res.json();
+            if (body?.success) {
+                alert(body?.message || "Insurance deposit deleted successfully");
+                await fetchInsuranceDeposits();
+            } else {
+                alert(body?.message || "Failed to delete insurance deposit");
+            }
+        } catch (error) {
+            console.error("Failed to delete insurance deposit:", error);
+            alert("Failed to delete insurance deposit. Please try again.");
+        }
+    }
+
+    async function printInsuranceDeposit(depositId: number) {
+        alert(`Print functionality for insurance deposit #${depositId} - To be implemented`);
+        // TODO: Implement print functionality
+    }
+
+    async function getInsuranceDeposit(depositId: number) {
+        try {
+            const res = await fetchWithAuth(`${API}/insurance-deposit/${depositId}`);
+            const body = await res.json();
+            if (body?.success && body.data) {
+                return body.data;
+            }
+        } catch (error) {
+            console.error("Failed to get insurance deposit:", error);
+        }
+        return null;
+    }
+
     // Print Invoice Statement
     async function fetchPrintInvoice(invoiceId: number) {
         setPrintInvoiceLoading(true);
@@ -1162,6 +1287,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             alert("Error: " + (err as Error).message);
         }
     }
+
     // Edit modals for insurance and patient payments
     const [editInsuranceModal, setEditInsuranceModal] = useState<{invoiceId: number, remit: InsuranceRemitLine} | null>(null);
     const [editPatientModal, setEditPatientModal] = useState<{invoiceId: number, payment: PatientPayment} | null>(null);
@@ -1169,15 +1295,102 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     // Patient deposits state
     const [patientDeposits, setPatientDeposits] = useState<PatientDepositDto[]>([]);
     const [editDepositModal, setEditDepositModal] = useState<PatientDepositDto | null>(null);
+    // Insurance deposits state
+    const [insuranceDeposits, setInsuranceDeposits] = useState<InsuranceDepositDto[]>([]);
+    const [editInsuranceDepositModal, setEditInsuranceDepositModal] = useState<InsuranceDepositDto | null>(null);
     // Notes state
     const [currentNotes, setCurrentNotes] = useState<Note[]>([]);
     const [editingNote, setEditingNote] = useState<Note | null>(null);
-    const [notesText, setNotesText] = useState<string>("");
-    const [showNotesFor, setShowNotesFor] = useState<{ invoiceId: number; anchor: HTMLElement | null } | null>(null); // Updated to use invoiceId directly
+    const [showNotesFor, setShowNotesFor] = useState<{ invoiceId: number; anchor: HTMLElement | null } | null>(null);
+    const notesInputRef = React.useRef<HTMLTextAreaElement>(null); // Updated to use invoiceId directly
     // Dropdown data
     const [providers, setProviders] = useState<Provider[]>([]);
     const [patients, setPatients] = useState<Patient[]>([]);
     const [insuranceCompanies, setInsuranceCompanies] = useState<InsuranceCompany[]>([]);
+    const [patientPolicies, setPatientPolicies] = useState<PatientPolicy[]>([]);
+
+    // Transfer Credit Modal state (move to top-level)
+    const [showTransferCreditModal, setShowTransferCreditModal] = useState<{ invoiceId: number, payment: PatientPaymentData } | null>(null);
+    const [transferToPatientId, setTransferToPatientId] = useState<number | null>(null);
+    const [transferAmount, setTransferAmount] = useState<string>("");
+    const [transferLoading, setTransferLoading] = useState(false);
+
+    // Modal for transferring patient credit to another patient
+    const TransferCreditModal = () => {
+        if (!showTransferCreditModal) return null;
+        return (
+            <div style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                width: "100vw",
+                height: "100vh",
+                background: "rgba(0,0,0,0.15)",
+                zIndex: 1000,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+            }} onClick={() => setShowTransferCreditModal(null)}>
+                <div style={{ background: "#fff", borderRadius: 8, minWidth: 340, maxWidth: 400, padding: 24, boxShadow: "0 2px 16px #0002" }} onClick={e => e.stopPropagation()}>
+                    <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 18 }}>Transfer Credit to Another Patient</div>
+                    <div className="mb-3">
+                        <label className="label">Select Patient</label>
+                        <select
+                            className="input w-full"
+                            value={transferToPatientId ?? ''}
+                            onChange={e => setTransferToPatientId(Number(e.target.value) || null)}
+                        >
+                            <option value="">-- Select Patient --</option>
+                            {patients.filter(p => p.id !== patientId).map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="mb-3">
+                        <label className="label">Amount</label>
+                        <input
+                            className="input w-full"
+                            type="number"
+                            min={0.01}
+                            step={0.01}
+                            value={transferAmount}
+                            onChange={e => setTransferAmount(e.target.value)}
+                            placeholder="Enter amount"
+                        />
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        <button className="btn-light" onClick={() => setShowTransferCreditModal(null)} disabled={transferLoading}>Cancel</button>
+                        <button
+                            className="btn-primary"
+                            disabled={transferLoading || !transferToPatientId || !transferAmount || Number(transferAmount) <= 0}
+                            onClick={async () => {
+                                if (!showTransferCreditModal || !transferToPatientId || !transferAmount) return;
+                                setTransferLoading(true);
+                                try {
+                                    await transferPatientCreditToPatient(
+                                        patientId,
+                                        transferToPatientId,
+                                        Number(transferAmount),
+                                        `Transferred from patient #${patientId} to #${transferToPatientId}`
+                                    );
+                                    setShowTransferCreditModal(null);
+                                    setTransferToPatientId(null);
+                                    setTransferAmount("");
+                                    alert("Credit transferred successfully.");
+                                } catch (err: any) {
+                                    alert(err?.message || "Transfer failed");
+                                } finally {
+                                    setTransferLoading(false);
+                                }
+                            }}
+                        >
+                            {transferLoading ? "Transferring..." : "Transfer"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     // Preview modal state
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -1189,18 +1402,24 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     const [expandedClaimId, setExpandedClaimId] = useState<number | null>(null);
     const [expandedInsPaymentId, setExpandedInsPaymentId] = useState<number | null>(null);
     const [expandedPtPaymentId, setExpandedPtPaymentId] = useState<number | null>(null);
+    const [expandedCreditAdjustmentId, setExpandedCreditAdjustmentId] = useState<number | null>(null);
+    const [expandedTransferOfCreditId, setExpandedTransferOfCreditId] = useState<number | null>(null);
 
     // Detailed data states
     const [invoiceLinesDetail, setInvoiceLinesDetail] = useState<InvoiceLineDetail[]>([]);
     const [claimLinesDetail, setClaimLinesDetail] = useState<ClaimLineDetail[]>([]);
     const [insPaymentDetail, setInsPaymentDetail] = useState<InsurancePaymentDetail | null>(null);
     const [ptPaymentDetail, setPtPaymentDetail] = useState<PatientPaymentDetail | null>(null);
+    const [creditAdjustmentDetail, setCreditAdjustmentDetail] = useState<any>(null);
+    const [transferOfCreditDetail, setTransferOfCreditDetail] = useState<any>(null);
 
     // Loading states
     const [loadingInvoiceLines, setLoadingInvoiceLines] = useState(false);
     const [loadingClaimLines, setLoadingClaimLines] = useState(false);
     const [loadingInsPaymentDetail, setLoadingInsPaymentDetail] = useState(false);
     const [loadingPtPaymentDetail, setLoadingPtPaymentDetail] = useState(false);
+    const [loadingCreditAdjustment, setLoadingCreditAdjustment] = useState(false);
+    const [loadingTransferOfCredit, setLoadingTransferOfCredit] = useState(false);
 
     // Fetch providers and patients for dropdowns
     useEffect(() => {
@@ -1303,14 +1522,15 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     }
 
     async function transferPatientCreditToPatient(fromPatientId: number, toPatientId: number, amount: number, note: string) {
-        const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patient-billing/patients/${fromPatientId}/transfer-credit/${toPatientId}`, {
+        const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patient-billing/${patientId}/patients/${fromPatientId}/${toPatientId}/transfer-credit`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ amount, note }),
+            body: JSON.stringify({ amount }),
         });
         const data = await res.json();
         if (!data?.success) throw new Error(data?.message || "Failed to transfer patient credit");
         await loadAll();
+        return data;
     }
 
     // =====================
@@ -1371,8 +1591,8 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         });
         const data = await res.json();
         if (data?.success) {
-            await fetchNotes(invoiceId); // Refresh list
-            setNotesText(""); // Clear textarea
+            await fetchNotes(invoiceId);
+            if (notesInputRef.current) notesInputRef.current.value = "";
         } else {
             throw new Error(data?.message || "Failed to create note");
         }
@@ -1386,9 +1606,9 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         });
         const data = await res.json();
         if (data?.success) {
-            await fetchNotes(invoiceId); // Refresh list
+            await fetchNotes(invoiceId);
             setEditingNote(null);
-            setNotesText(""); // Clear textarea
+            if (notesInputRef.current) notesInputRef.current.value = "";
         } else {
             throw new Error(data?.message || "Failed to update note");
         }
@@ -1409,31 +1629,40 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     const handleOpenNotes = async (invoiceId: number, e?: React.MouseEvent) => {
         setShowNotesFor({ invoiceId, anchor: e?.currentTarget as HTMLElement || null });
         setEditingNote(null);
-        setNotesText("");
         await fetchNotes(invoiceId);
+        setTimeout(() => {
+            if (notesInputRef.current) {
+                notesInputRef.current.value = "";
+                notesInputRef.current.focus();
+            }
+        }, 100);
     };
 
     const handleCloseNotes = () => {
         setShowNotesFor(null);
         setCurrentNotes([]);
         setEditingNote(null);
-        setNotesText("");
+        if (notesInputRef.current) notesInputRef.current.value = "";
     };
 
     const handleSaveNote = async () => {
-        if (!showNotesFor) return;
+        if (!showNotesFor || !notesInputRef.current) return;
+        const text = notesInputRef.current.value.trim();
+        if (!text) return;
+        
         if (editingNote) {
-            await updateNote(showNotesFor.invoiceId, editingNote.id, notesText.trim());
+            await updateNote(showNotesFor.invoiceId, editingNote.id, text);
         } else {
-            if (notesText.trim()) {
-                await createNote(showNotesFor.invoiceId, notesText.trim());
-            }
+            await createNote(showNotesFor.invoiceId, text);
         }
     };
 
     const handleEditNote = (note: Note) => {
         setEditingNote(note);
-        setNotesText(note.text);
+        if (notesInputRef.current) {
+            notesInputRef.current.value = note.text;
+            notesInputRef.current.focus();
+        }
     };
 
     const handleDeleteNote = async (noteId: number) => {
@@ -1550,17 +1779,57 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         }
     }
 
+    async function fetchCreditAdjustmentDetails(invoiceId: number, toggleExpand = true) {
+        if (toggleExpand && expandedCreditAdjustmentId === invoiceId) {
+            setExpandedCreditAdjustmentId(null);
+            return;
+        }
+        
+        setLoadingCreditAdjustment(true);
+        try {
+            const res = await fetchWithAuth(`${API}/invoices/${invoiceId}/credit-adjustment`);
+            const data = await res.json();
+            if (data?.success && data.data) {
+                setCreditAdjustmentDetail(data.data);
+                if (toggleExpand) setExpandedCreditAdjustmentId(invoiceId);
+            }
+        } catch (error) {
+            console.error("Failed to fetch credit adjustment:", error);
+        } finally {
+            setLoadingCreditAdjustment(false);
+        }
+    }
+
+    async function fetchTransferOfCreditDetails(invoiceId: number, toggleExpand = true) {
+        if (toggleExpand && expandedTransferOfCreditId === invoiceId) {
+            setExpandedTransferOfCreditId(null);
+            return;
+        }
+        
+        setLoadingTransferOfCredit(true);
+        try {
+            const res = await fetchWithAuth(`${API}/invoices/${invoiceId}/transfer-of-credit`);
+            const data = await res.json();
+            if (data?.success && data.data) {
+                setTransferOfCreditDetail(data.data);
+                if (toggleExpand) setExpandedTransferOfCreditId(invoiceId);
+            }
+        } catch (error) {
+            console.error("Failed to fetch transfer of credit:", error);
+        } finally {
+            setLoadingTransferOfCredit(false);
+        }
+    }
+
     // Notes Popover/Modal - Enhanced to use portal, anchor to row, and smooth input
   
-    // Notes Modal - Rendered as fixed overlay, no anchor, smooth controlled textarea
-    const NotesModal = ({ open, invoiceId, onClose, notes, editingNote, notesText, onNotesChange, onSave, onEdit, onDelete }: {
+    // Notes Modal - Uncontrolled textarea for smooth typing
+    const NotesModal = ({ open, invoiceId, onClose, notes, editingNote, onSave, onEdit, onDelete }: {
         open: boolean;
         invoiceId: number;
         onClose: () => void;
         notes: Note[];
         editingNote: Note | null;
-        notesText: string;
-        onNotesChange: (v: string) => void;
         onSave: () => void;
         onEdit: (note: Note) => void;
         onDelete: (noteId: number) => void;
@@ -1595,16 +1864,15 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                         ))}
                     </div>
                     <textarea
+                        ref={notesInputRef}
                         className="input"
                         style={{ width: "100%", minHeight: 60, marginBottom: 8, resize: "vertical" }}
                         placeholder={editingNote ? "Edit note..." : "Enter new note..."}
-                        value={notesText}
-                        onChange={e => onNotesChange(e.target.value)}
-                        autoFocus
+                        defaultValue=""
                     />
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                         <button className="btn-light" onClick={onClose}>Cancel</button>
-                        <button className="btn-primary" onClick={onSave} disabled={!notesText.trim()}>{editingNote ? "Update" : "Save"}</button>
+                        <button className="btn-primary" onClick={onSave}>{editingNote ? "Update" : "Save"}</button>
                     </div>
                 </div>
             </div>
@@ -1855,14 +2123,16 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     async function loadDropdowns() {
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
-            const [provRes, patRes, insRes] = await Promise.all([
+            const [provRes, patRes, insRes, polRes] = await Promise.all([
                 fetchWithAuth(`${API_URL}/api/providers`),
                 fetchWithAuth(`${API_URL}/api/patients`),
-                fetchWithAuth(`${API_URL}/api/insurance-companies`)
+                fetchWithAuth(`${API_URL}/api/insurance-companies`),
+                fetchWithAuth(`${API_URL}/api/coverages`)
             ]);
             const provData = await provRes.json();
             const patData = await patRes.json();
             const insData = await insRes.json();
+            const polData = await polRes.json();
 
             // Providers: expect data.data to be an array
             setProviders(
@@ -1890,8 +2160,20 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                     }))
                     : []
             );
+            // Patient Policies: filter by current patient
+            setPatientPolicies(
+                polData.success && Array.isArray(polData.data)
+                    ? polData.data
+                        .filter((c: any) => Number(c.patientId) === patientId)
+                        .map((c: any) => ({
+                            id: c.id,
+                            planName: c.planName || 'Unnamed Policy',
+                            policyNumber: c.policyNumber
+                        }))
+                    : []
+            );
         } catch (error) {
-            setProviders([]); setPatients([]); setInsuranceCompanies([]);
+            setProviders([]); setPatients([]); setInsuranceCompanies([]); setPatientPolicies([]);
         }
     }
 
@@ -1899,6 +2181,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
         void loadAll();
         void loadDropdowns();
         void fetchPatientDeposits();
+        void fetchInsuranceDeposits();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [patientId]);
 
@@ -2348,8 +2631,10 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                     <label className="label">Select Policy</label>
                                     <select className="input w-full" value={depositPolicyId ?? ''} onChange={e => setDepositPolicyId(Number(e.target.value) || null)}>
                                         <option value="">Select Policy</option>
-                                        {insuranceCompanies.map(ic => (
-                                            <option key={ic.id} value={ic.id}>{ic.name}</option>
+                                        {patientPolicies.map(pol => (
+                                            <option key={pol.id} value={pol.id}>
+                                                {pol.planName}{pol.policyNumber ? ` (${pol.policyNumber})` : ''}
+                                            </option>
                                         ))}
                                     </select>
                                 </div>
@@ -2371,11 +2656,66 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                     <input className="input w-full" value={depositDesc} onChange={e => setDepositDesc(e.target.value)} />
                                 </div>
                                 <div className="flex gap-2 mt-4">
-                                    <button className="btn-primary" onClick={() => { /* handle add deposit */ }}>Add Deposit</button>
+                                    <button className="btn-primary" onClick={addInsuranceDeposit}>Add Deposit</button>
                                     <button className="btn-light" onClick={() => setShowDepositType(null)}>Cancel</button>
                                 </div>
                             </div>
                         </div>
+                    )}
+
+                    {/* Insurance Deposits List */}
+                    {insuranceDeposits.length > 0 && (
+                        <SectionCard title="Insurance Deposits" actions={null}>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="border-b bg-gray-50">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left font-medium">Deposit ID</th>
+                                            <th className="px-3 py-2 text-left font-medium">Date</th>
+                                            <th className="px-3 py-2 text-left font-medium">Amount</th>
+                                            <th className="px-3 py-2 text-left font-medium">Payment Method</th>
+                                            <th className="px-3 py-2 text-left font-medium">Description</th>
+                                            <th className="px-3 py-2 text-center font-medium">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {insuranceDeposits.map((deposit) => {
+                                            const depositDateStr = Array.isArray(deposit.depositDate)
+                                                ? `${deposit.depositDate[0]}-${String(deposit.depositDate[1]).padStart(2, "0")}-${String(deposit.depositDate[2]).padStart(2, "0")}`
+                                                : typeof deposit.depositDate === 'string' ? deposit.depositDate : "—";
+                                            return (
+                                                <tr key={deposit.id} className="border-b hover:bg-gray-50">
+                                                    <td className="px-3 py-2">#{deposit.id}</td>
+                                                    <td className="px-3 py-2">{depositDateStr}</td>
+                                                    <td className="px-3 py-2 font-medium">{currency(deposit.depositAmount)}</td>
+                                                    <td className="px-3 py-2">{deposit.paymentMethod}</td>
+                                                    <td className="px-3 py-2">{deposit.description || "—"}</td>
+                                                    <td className="px-3 py-2">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <IconBtn title="Edit Deposit" onClick={() => setEditInsuranceDepositModal(deposit)}>
+                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                                                                </svg>
+                                                            </IconBtn>
+                                                            <IconBtn title="Void Deposit" onClick={() => deleteInsuranceDeposit(deposit.id)}>
+                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-red-600">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                                                </svg>
+                                                            </IconBtn>
+                                                            <IconBtn title="Print Deposit" onClick={() => printInsuranceDeposit(deposit.id)}>
+                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
+                                                                </svg>
+                                                            </IconBtn>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </SectionCard>
                     )}
 
                     {/* Courtesy Credit Modal */}
@@ -2425,6 +2765,52 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                 <div className="space-y-4">
                     {selectedInvoiceId === null ? (
                         <>
+                            {/* Insurance Deposits displayed as top-level items */}
+                            {insuranceDeposits.map((deposit) => {
+                                const depositDateStr = Array.isArray(deposit.depositDate) 
+                                    ? `${deposit.depositDate[1].toString().padStart(2, '0')}/${deposit.depositDate[2].toString().padStart(2, '0')}/${deposit.depositDate[0]}`
+                                    : typeof deposit.depositDate === 'string' ? new Date(deposit.depositDate).toLocaleDateString() : new Date().toLocaleDateString();
+                                
+                                return (
+                                    <div key={`insurance-deposit-${deposit.id}`} className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+                                        <div className="flex items-center gap-4 px-3 py-2 text-sm bg-green-50">
+                                            <Badge tone="green">
+                                                Insurance Deposit#{deposit.id} ({depositDateStr})
+                                            </Badge>
+                                            <div className="flex-1 flex items-center gap-4">
+                                                <span className="text-gray-700">with {deposit.paymentMethod}:</span>
+                                                <span className="font-bold text-green-600">{currency(deposit.depositAmount)}/{currency(deposit.depositAmount)}</span>
+                                            </div>
+                                            {/* Action icons: Edit, Void, Print */}
+                                            <div className="ml-auto flex items-center gap-2">
+                                                <IconBtn 
+                                                    title="Print Deposit" 
+                                                    onClick={() => printInsuranceDeposit(deposit.id)}
+                                                >
+                                                    🖨️
+                                                </IconBtn>
+                                                <IconBtn 
+                                                    title="Edit Deposit" 
+                                                    onClick={() => setEditInsuranceDepositModal(deposit)}
+                                                >
+                                                    ✏️
+                                                </IconBtn>
+                                                <IconBtn 
+                                                    title="Void Deposit" 
+                                                    onClick={() => {
+                                                        if (confirm(`Are you sure you want to void insurance deposit #${deposit.id}?`)) {
+                                                            void deleteInsuranceDeposit(deposit.id);
+                                                        }
+                                                    }}
+                                                >
+                                                    🗑️
+                                                </IconBtn>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
                             {/* Patient Deposits displayed as top-level items */}
                             {patientDeposits.map((deposit) => {
                                 const depositDateStr = Array.isArray(deposit.depositDate) 
@@ -2828,6 +3214,134 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                     )}
                                                 </div>
                                             )}
+                                            {/* Credit Adjustment Row */}
+                                            <div className="flex items-start gap-3 border-b px-3 py-2 text-sm bg-white" onMouseEnter={() => !creditAdjustmentDetail && fetchCreditAdjustmentDetails(inv.id, false)}>
+                                                <button
+                                                    className="mr-2 p-1 rounded-full hover:bg-gray-100"
+                                                    title="View/Add Notes"
+                                                    onClick={(e) => { e.stopPropagation(); handleOpenNotes(inv.id, e); }}
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-gray-600">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.556 0 8.25-3.694 8.25-8.25S16.556 3.75 12 3.75 3.75 7.444 3.75 12s3.694 8.25 8.25 8.25z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6" />
+                                                    </svg>
+                                                </button>
+                                                <div className="min-w-[100px] text-gray-500">{creditAdjustmentDetail?.date || ''}</div>
+                                                <div className="flex-1 cursor-pointer" onClick={() => fetchCreditAdjustmentDetails(inv.id)}>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-gray-700">Credit Adjustment #{creditAdjustmentDetail?.id || ''}: <span className="text-blue-600">Write Off</span>{currency(creditAdjustmentDetail?.writeOffAmount || creditAdjustmentDetail?.insWriteoff || 0)}</span>
+                                                        <div className="flex items-center gap-4">
+                                                            <span className="font-semibold">{currency(creditAdjustmentDetail?.endConcernAmount || creditAdjustmentDetail?.amount || 0)}</span>
+                                                            <span className="text-gray-500">ARO</span>
+                                                            <button className="p-1">
+                                                                {expandedCreditAdjustmentId === inv.id ? (
+                                                                    <span className="text-blue-600">▼</span>
+                                                                ) : (
+                                                                    <span className="text-gray-400">▶</span>
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {expandedCreditAdjustmentId === inv.id && creditAdjustmentDetail && (
+                                                <div className="px-3 py-2 bg-gray-50 border-t">
+                                                    {loadingCreditAdjustment ? (
+                                                        <div className="text-center py-4 text-gray-500">Loading credit adjustment...</div>
+                                                    ) : (
+                                                        <div className="overflow-x-auto">
+                                                            <table className="min-w-full text-sm">
+                                                                <thead className="text-left border-b">
+                                                                    <tr>
+                                                                        <th className="p-2">Code</th>
+                                                                        <th className="p-2">Treatment</th>
+                                                                        <th className="p-2">Ins. Writeoff</th>
+                                                                        <th className="p-2">Pt. Portion</th>
+                                                                        <th className="p-2">In. Portion</th>
+                                                                        <th className="p-2">Total Charge</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {creditAdjustmentDetail.lines?.map((line: any, idx: number) => (
+                                                                        <tr key={idx} className="border-b hover:bg-white">
+                                                                            <td className="p-2 font-mono">{line.code}</td>
+                                                                            <td className="p-2">{line.treatment}</td>
+                                                                            <td className="p-2">{currency(line.insWriteoff || 0)}</td>
+                                                                            <td className="p-2">{currency(line.ptPortion || 0)}</td>
+                                                                            <td className="p-2">{currency(line.inPortion || 0)}</td>
+                                                                            <td className="p-2 font-semibold">{currency(line.totalCharge || 0)}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {/* Transfer of Credit Row */}
+                                            <div className="flex items-start gap-3 border-b px-3 py-2 text-sm bg-white" onMouseEnter={() => !transferOfCreditDetail && fetchTransferOfCreditDetails(inv.id, false)}>
+                                                <button
+                                                    className="mr-2 p-1 rounded-full hover:bg-gray-100"
+                                                    title="View/Add Notes"
+                                                    onClick={(e) => { e.stopPropagation(); handleOpenNotes(inv.id, e); }}
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-gray-600">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.556 0 8.25-3.694 8.25-8.25S16.556 3.75 12 3.75 3.75 7.444 3.75 12s3.694 8.25 8.25 8.25z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6" />
+                                                    </svg>
+                                                </button>
+                                                <div className="min-w-[100px] text-gray-500">{transferOfCreditDetail?.date || ''}</div>
+                                                <div className="flex-1 cursor-pointer" onClick={() => fetchTransferOfCreditDetails(inv.id)}>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-gray-700">Transfer of credits #{transferOfCreditDetail?.transferCreditId || transferOfCreditDetail?.id || ''}</span>
+                                                        <div className="flex items-center gap-4">
+                                                            <span className="font-semibold">{currency(transferOfCreditDetail?.endConcernAmount || transferOfCreditDetail?.amount || 0)}</span>
+                                                            <span className="text-gray-500">ARO</span>
+                                                            <button className="p-1">
+                                                                {expandedTransferOfCreditId === inv.id ? (
+                                                                    <span className="text-blue-600">▼</span>
+                                                                ) : (
+                                                                    <span className="text-gray-400">▶</span>
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {expandedTransferOfCreditId === inv.id && transferOfCreditDetail && (
+                                                <div className="px-3 py-2 bg-gray-50 border-t">
+                                                    {loadingTransferOfCredit ? (
+                                                        <div className="text-center py-4 text-gray-500">Loading transfer of credit...</div>
+                                                    ) : (
+                                                        <div className="overflow-x-auto">
+                                                            <table className="min-w-full text-sm">
+                                                                <thead className="text-left border-b">
+                                                                    <tr>
+                                                                        <th className="p-2">Code</th>
+                                                                        <th className="p-2">Treatment</th>
+                                                                        <th className="p-2">Ins. Writeoff</th>
+                                                                        <th className="p-2">Pt. Portion</th>
+                                                                        <th className="p-2">In. Portion</th>
+                                                                        <th className="p-2">Total Charge</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {transferOfCreditDetail.lines?.map((line: any, idx: number) => (
+                                                                        <tr key={idx} className="border-b hover:bg-white">
+                                                                            <td className="p-2 font-mono">{line.code}</td>
+                                                                            <td className="p-2">{line.treatment}</td>
+                                                                            <td className="p-2">{currency(line.insWriteoff || 0)}</td>
+                                                                            <td className="p-2">{currency(line.ptPortion || 0)}</td>
+                                                                            <td className="p-2">{currency(line.inPortion || 0)}</td>
+                                                                            <td className="p-2 font-semibold">{currency(line.totalCharge || 0)}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </>
                                     )}
                                     {/* Patient payment summary (inline, only after insurance paid) */}
@@ -2878,10 +3392,13 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                     }}>
                                                         <span role="img" aria-label="refund">⋯</span>
                                                     </IconBtn>
-                                                    <IconBtn title="Transfer Credit to Insurance" onClick={() => {
-                                                        // Not implemented: transfer patient credit to insurance
+                                                    <IconBtn title="Transfer Credit to Patient" onClick={() => {
+                                                        const pay = pp[0];
+                                                        if (pay) setShowTransferCreditModal({ invoiceId: inv.id, payment: pay });
                                                     }}>
-                                                        <span role="img" aria-label="transfer">🔁</span>
+                                                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                            <path d="M10 2V18M10 18L5 13M10 18L15 13" stroke="#7C3AED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                        </svg>
                                                     </IconBtn>
                                                 </div>
                                             </div>
@@ -3139,8 +3656,6 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                 onClose={handleCloseNotes}
                 notes={currentNotes}
                 editingNote={editingNote}
-                notesText={notesText}
-                onNotesChange={setNotesText}
                 onSave={handleSaveNote}
                 onEdit={handleEditNote}
                 onDelete={handleDeleteNote}
@@ -3179,9 +3694,17 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                     <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
                         <div className="flex flex-wrap items-center gap-2 text-sm">
                             <div>
-                                <span className="font-semibold">Claim #{selectedClaim.id}</span> · For{" "}
-                                <span className="font-semibold">{patientName}</span> · To{" "}
+                                <span className="font-semibold">Claim #{selectedClaim.id}</span>
+                                {" · For "}
+                                <span className="font-semibold">{patientName}</span>
+                                {" · To "}
                                 <span className="font-semibold">{selectedClaim.payerName ?? "—"}</span>
+                                {((selectedClaim.provider || selectedClaim.treatingProviderId)) && (
+                                    <span> | Provider: <b>{selectedClaim.provider ?? selectedClaim.treatingProviderId}</b></span>
+                                )}
+                                {selectedClaim.policyNumber && (
+                                    <span> | Policy: <b>{selectedClaim.policyNumber}</b></span>
+                                )}
                             </div>
                             <div className="ml-auto flex items-center gap-2">
                                 <button className="btn-light" onClick={() => setShowClaimComposeFor(selectedInvoice.id)}>
@@ -3776,6 +4299,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                 </div>
             )}
 
+            <TransferCreditModal />
             {/* ...existing code... */}
             {showEditLinesFor && (
                 <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
@@ -4422,6 +4946,66 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                 </div>
                                 <div className="flex justify-end gap-2 mt-6">
                                     <button type="button" className="btn-light" onClick={() => setEditDepositModal(null)}>Cancel</button>
+                                    <button type="submit" className="btn-primary">Update</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Insurance Deposit Modal */}
+            {editInsuranceDepositModal && (
+                <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
+                    <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
+                        <div className="flex items-center justify-between border-b px-5 py-3 bg-green-600 text-white rounded-t-2xl">
+                            <h4 className="text-base font-semibold">Edit Insurance Deposit #{editInsuranceDepositModal.id}</h4>
+                            <button onClick={() => setEditInsuranceDepositModal(null)} className="rounded p-1 hover:bg-green-700" aria-label="Close">✕</button>
+                        </div>
+                        <div className="p-5">
+                            <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                const form = e.currentTarget as HTMLFormElement;
+                                try {
+                                    await updateInsuranceDeposit(editInsuranceDepositModal.id, {
+                                        amount: Number((form.elements.namedItem('amount') as HTMLInputElement).value),
+                                        paymentMethod: (form.elements.namedItem('paymentMethod') as HTMLSelectElement).value,
+                                        description: (form.elements.namedItem('description') as HTMLInputElement).value,
+                                    });
+                                } catch (error) {
+                                    console.error("Failed to update insurance deposit:", error);
+                                }
+                            }}>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="label">Amount</label>
+                                        <input
+                                            name="amount"
+                                            type="number"
+                                            step="0.01"
+                                            className="input w-full"
+                                            defaultValue={editInsuranceDepositModal.depositAmount}
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="label">Payment Method</label>
+                                        <select name="paymentMethod" className="input w-full" defaultValue={editInsuranceDepositModal.paymentMethod}>
+                                            {paymentMethods.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="label">Description</label>
+                                        <input
+                                            name="description"
+                                            type="text"
+                                            className="input w-full"
+                                            defaultValue={editInsuranceDepositModal.description || ''}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-2 mt-6">
+                                    <button type="button" className="btn-light" onClick={() => setEditInsuranceDepositModal(null)}>Cancel</button>
                                     <button type="submit" className="btn-primary">Update</button>
                                 </div>
                             </form>

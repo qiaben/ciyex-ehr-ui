@@ -146,6 +146,8 @@ function normalizeIntegrations(obj: any) {
     const root = obj?.integrations ?? obj ?? {};
     return {
         storage_type: S(root.storage_type ?? root.storageType),
+        payment_provider: S(root.payment_provider ?? root.paymentProvider ?? 'stripe'),
+        payment_enabled: S(root.payment_enabled ?? root.paymentEnabled ?? 'false'),
 
         practice_db: { schema: S(root.practice_db?.schema ?? root.practiceDb?.schema) },
 
@@ -162,9 +164,9 @@ function normalizeIntegrations(obj: any) {
             webhookSecret: S(root.stripe?.webhookSecret),
         },
 
-        sphere: {
-            merchantId: S(root.sphere?.merchantId),
-            apiKey: S(root.sphere?.apiKey),
+        gps: {
+            securityKey: S(root.gps?.securityKey),
+            transactUrl: S(root.gps?.transactUrl),
         },
 
         twilio: {
@@ -191,15 +193,15 @@ function normalizeIntegrations(obj: any) {
 
         ai: {
             vendor: S(root.ai?.vendor),
-            azure: {
+            azure: { 
                 endpoint: S(root.ai?.azure?.endpoint),
                 apiVersion: S(root.ai?.azure?.apiVersion),
                 deployment: S(root.ai?.azure?.deployment),
                 apiKey: S(root.ai?.azure?.apiKey),
                 useManagedIdentity: S(root.ai?.azure?.useManagedIdentity),
                 timeoutMs: S(root.ai?.azure?.timeoutMs),
-            },
-            defaults: {
+            }, 
+            defaults: {   
                 temperature: S(root.ai?.defaults?.temperature),
                 maxTokens: S(root.ai?.defaults?.maxTokens),
                 topP: S(root.ai?.defaults?.topP),
@@ -251,6 +253,16 @@ function normalizeIntegrations(obj: any) {
             apiKey: S(root.ghl?.apiKey),
             webhookSecret: S(root.ghl?.webhookSecret),
             locationId: S(root.ghl?.locationId),
+        },
+
+        dentalExchange: {
+            username: S(root.dentalExchange?.username ?? root.dental_xchange_username),
+            password: S(root.dentalExchange?.password ?? root.dental_xchange_password),
+            apiKey: S(root.dentalExchange?.apiKey ?? root.dental_xchange_api_key),
+            baseUrl: S(root.dentalExchange?.baseUrl ?? root.dental_xchange_base_url),
+            dxcGroupId: S(root.dentalExchange?.dxcGroupId ?? root.dental_xchange_dxc_group_id),
+            environment: S(root.dentalExchange?.environment ?? root.dental_xchange_environment),
+            enabled: S(root.dentalExchange?.enabled ?? root.dental_xchange_enabled),
         },
     };
 }
@@ -603,7 +615,8 @@ type SectionId =
     | 'ai'
     | 'insurance'   // Insurance Verification (Sikka & Zuub)
     | 'documents'
-    | 'ghl';        // GoHighLevel Integration
+    | 'ghl'         // GoHighLevel Integration
+    | 'dentalExchange'; // Dental Exchange Clearinghouse
 
 export default function Page() {
     const [open, setOpen] = useState<SectionId | null>(null);
@@ -620,6 +633,7 @@ export default function Page() {
         insurance: false,
         documents: false,
         ghl: false,
+        dentalExchange: false,
     });
     const [flashBtn, setFlashBtn] = useState<Record<SectionId, boolean>>({
         core: false,
@@ -634,10 +648,10 @@ export default function Page() {
         insurance: false,
         documents: false,
         ghl: false,
+        dentalExchange: false,
     });
 
     // Provider selections
-    const [paymentProvider, setPaymentProvider] = useState<'stripe' | 'sphere'>('stripe');
     const [insuranceProvider, setInsuranceProvider] = useState<'sikka' | 'zuub'>('sikka');
     const [googleMode, setGoogleMode] = useState<'auth' | 'recaptcha'>('auth'); // NEW
 
@@ -670,6 +684,7 @@ export default function Page() {
         insurance: 'Insurance Verification (Sikka & Zuub)',
         documents: 'Document Storage',
         ghl: 'GoHighLevel Integration',
+        dentalExchange: 'Dental Exchange Clearinghouse',
     };
 
     // ---- Save handler ----
@@ -683,6 +698,8 @@ export default function Page() {
             // Build the nested config structure - backend will flatten it
             const payload: any = {
                 storage_type: cfg.storage_type,
+                payment_provider: cfg.payment_provider,
+                payment_enabled: toBool(cfg.payment_enabled),
                 practice_db: {
                     schema: cfg.practice_db?.schema,
                 },
@@ -697,9 +714,9 @@ export default function Page() {
                     apiKey: cfg.stripe?.apiKey,
                     webhookSecret: cfg.stripe?.webhookSecret,
                 },
-                sphere: {
-                    merchantId: cfg.sphere?.merchantId,
-                    apiKey: cfg.sphere?.apiKey,
+                gps: {
+                    securityKey: cfg.gps?.securityKey,
+                    transactUrl: cfg.gps?.transactUrl,
                 },
                 twilio: {
                     accountSid: cfg.twilio?.accountSid,
@@ -776,6 +793,15 @@ export default function Page() {
                     webhookSecret: cfg.ghl?.webhookSecret,
                     locationId: cfg.ghl?.locationId,
                 },
+                dentalExchange: {
+                    username: cfg.dentalExchange?.username,
+                    password: cfg.dentalExchange?.password,
+                    apiKey: cfg.dentalExchange?.apiKey,
+                    baseUrl: cfg.dentalExchange?.baseUrl,
+                    dxcGroupId: cfg.dentalExchange?.dxcGroupId,
+                    environment: cfg.dentalExchange?.environment,
+                    enabled: cfg.dentalExchange?.enabled,
+                },
             };
 
             // Remove empty nested objects to keep payload clean
@@ -824,6 +850,7 @@ export default function Page() {
                 insurance: false,
                 documents: false,
                 ghl: false,
+                dentalExchange: false,
             });
 
             // flash "Saved" on all sections briefly
@@ -840,6 +867,7 @@ export default function Page() {
                 insurance: true,
                 documents: true,
                 ghl: true,
+                dentalExchange: true,
             });
             setTimeout(
                 () =>
@@ -856,6 +884,7 @@ export default function Page() {
                         insurance: false,
                         documents: false,
                         ghl: false,
+                        dentalExchange: false,
                     }),
                 1200
             );
@@ -1055,9 +1084,9 @@ export default function Page() {
                                 </div>
                             </SettingsCard>
 
-                            {/* 3) Payments (Stripe & Sphere) with provider switch */}
+                            {/* 3) Payments (Stripe & GPS) with provider switch */}
                             <SettingsCard
-                                title="Payments (Stripe & Sphere)"
+                                title="Payments (Stripe & GPS)"
                                 iconPath={paths.card}
                                 isOpen={open === 'payments'}
                                 isEditing={editing.payments}
@@ -1069,14 +1098,67 @@ export default function Page() {
                                     <Segmented
                                         options={[
                                             { value: 'stripe', label: 'Stripe' },
-                                            { value: 'sphere', label: 'Sphere' },
+                                            { value: 'gps', label: 'GPS' },
                                         ]}
-                                        value={paymentProvider}
-                                        onChange={(v) => setPaymentProvider(v as 'stripe' | 'sphere')}
+                                        value={cfg.payment_provider || 'stripe'}
+                                        onChange={(v) => {
+                                            // When switching providers, set the new provider to inactive by default
+                                            setCfg((c) => ({ ...c, payment_provider: v, payment_enabled: 'false' }));
+                                        }}
                                     />
                                 }
                             >
-                                {paymentProvider === 'stripe' && (
+                                {/* Payment Status - Single Compact Container */}
+                                <div className="mb-4 rounded-xl border border-neutral-200 bg-white p-3 dark:border-[#1b2437] dark:bg-[#0B1220]">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                                                {(cfg.payment_provider || 'stripe') === 'stripe' ? 'Stripe' : 'GPS'}
+                                            </div>
+                                            <div className={cx(
+                                                'flex items-center gap-1 text-[11px] font-medium',
+                                                cfg.payment_enabled === 'true'
+                                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                                    : 'text-neutral-500 dark:text-neutral-400'
+                                            )}>
+                                                <span className={cx(
+                                                    'inline-block h-1.5 w-1.5 rounded-full',
+                                                    cfg.payment_enabled === 'true'
+                                                        ? 'bg-emerald-500'
+                                                        : 'bg-neutral-400 dark:bg-neutral-500'
+                                                )} />
+                                                {cfg.payment_enabled === 'true' ? 'Active' : 'Inactive'}
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const newValue = cfg.payment_enabled === 'true' ? 'false' : 'true';
+                                                setCfg((c) => ({ ...c, payment_enabled: newValue }));
+                                            }}
+                                            disabled={!editing.payments}
+                                            className={cx(
+                                                'relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none',
+                                                cfg.payment_enabled === 'true'
+                                                    ? 'bg-emerald-500'
+                                                    : 'bg-neutral-300 dark:bg-neutral-600',
+                                                !editing.payments && 'opacity-50 cursor-not-allowed'
+                                            )}
+                                            aria-label="Toggle payment gateway"
+                                        >
+                                            <span
+                                                className={cx(
+                                                    'inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform',
+                                                    cfg.payment_enabled === 'true'
+                                                        ? 'translate-x-4'
+                                                        : 'translate-x-0.5'
+                                                )}
+                                            />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {(cfg.payment_provider || 'stripe') === 'stripe' && (
                                     <div className="grid gap-4 md:grid-cols-2">
                                         <div>
                                             <label htmlFor="stripe.apiKey" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
@@ -1098,26 +1180,33 @@ export default function Page() {
                                     </div>
                                 )}
 
-                                {paymentProvider === 'sphere' && (
+                                {(cfg.payment_provider || 'stripe') === 'gps' && (
                                     <div className="grid gap-4 md:grid-cols-2">
                                         <div>
-                                            <label htmlFor="sphere.merchantId" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                                                Sphere Merchant ID
+                                            <label htmlFor="gps.securityKey" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                                GPS Security Key
                                             </label>
-                                            <TextInput
-                                                id="sphere.merchantId"
-                                                name="sphere[merchantId]"
-                                                placeholder="MERCHANT001"
-                                                icon={paths.store}
+                                            <PasswordField
+                                                id="gps.securityKey"
+                                                name="gps[securityKey]"
+                                                placeholder="6457Thfj624V5r7WUwc5v6a68Zsd6YEm"
                                                 editable={editing.payments}
-                                                {...bind(['sphere', 'merchantId'])}
+                                                {...bind(['gps', 'securityKey'])}
                                             />
                                         </div>
                                         <div>
-                                            <label htmlFor="sphere.apiKey" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                                                Sphere API Key
+                                            <label htmlFor="gps.transactUrl" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                                GPS Transaction URL
                                             </label>
-                                            <PasswordField id="sphere.apiKey" name="sphere[apiKey]" editable={editing.payments} {...bind(['sphere', 'apiKey'])} />
+                                            <TextInput
+                                                id="gps.transactUrl"
+                                                name="gps[transactUrl]"
+                                                placeholder="https://secure.networkmerchants.com/api/transact.php"
+                                                type="url"
+                                                icon={paths.link}
+                                                editable={editing.payments}
+                                                {...bind(['gps', 'transactUrl'])}
+                                            />
                                         </div>
                                     </div>
                                 )}
@@ -1680,6 +1769,111 @@ export default function Page() {
                                             icon={paths.id}
                                             editable={editing.ghl}
                                             {...bind(['ghl', 'locationId'])}
+                                        />
+                                    </div>
+                                </div>
+                            </SettingsCard>
+
+                            {/* 14) Dental Exchange Clearinghouse */}
+                            <SettingsCard
+                                title="Dental Exchange Clearinghouse"
+                                iconPath={paths.shield}
+                                isOpen={open === 'dentalExchange'}
+                                isEditing={editing.dentalExchange}
+                                savedFlash={flashBtn.dentalExchange}
+                                onToggle={() => toggleOpen('dentalExchange')}
+                                onEdit={() => startEdit('dentalExchange')}
+                                onDone={() => endEdit('dentalExchange')}
+                            >
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label htmlFor="dentalExchange.username" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            Username
+                                        </label>
+                                        <TextInput
+                                            id="dentalExchange.username"
+                                            name="dentalExchange[username]"
+                                            placeholder="support@qiaben.com"
+                                            icon={paths.user}
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'username'])}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="dentalExchange.password" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            Password
+                                        </label>
+                                        <PasswordField
+                                            id="dentalExchange.password"
+                                            name="dentalExchange[password]"
+                                            placeholder="Enter password"
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'password'])}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="dentalExchange.apiKey" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            API Key
+                                        </label>
+                                        <PasswordField
+                                            id="dentalExchange.apiKey"
+                                            name="dentalExchange[apiKey]"
+                                            placeholder="84b25980d68e816f7057151387d272e"
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'apiKey'])}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="dentalExchange.baseUrl" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            Base URL
+                                        </label>
+                                        <TextInput
+                                            id="dentalExchange.baseUrl"
+                                            name="dentalExchange[baseUrl]"
+                                            placeholder="https://xconnect-api.dentalxchange.com"
+                                            icon={paths.link}
+                                            type="url"
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'baseUrl'])}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="dentalExchange.dxcGroupId" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            DXC Group ID
+                                        </label>
+                                        <TextInput
+                                            id="dentalExchange.dxcGroupId"
+                                            name="dentalExchange[dxcGroupId]"
+                                            placeholder="-149229"
+                                            icon={paths.id}
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'dxcGroupId'])}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="dentalExchange.environment" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            Environment
+                                        </label>
+                                        <TextInput
+                                            id="dentalExchange.environment"
+                                            name="dentalExchange[environment]"
+                                            placeholder="sandbox"
+                                            icon={paths.cog}
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'environment'])}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="dentalExchange.enabled" className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                            Enabled
+                                        </label>
+                                        <TextInput
+                                            id="dentalExchange.enabled"
+                                            name="dentalExchange[enabled]"
+                                            placeholder="true"
+                                            icon={paths.checkCircle}
+                                            editable={editing.dentalExchange}
+                                            {...bind(['dentalExchange', 'enabled'])}
                                         />
                                     </div>
                                 </div>

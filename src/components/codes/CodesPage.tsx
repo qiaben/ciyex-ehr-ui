@@ -34,9 +34,9 @@ const isCodeType = (v: string): v is CodeType =>
 
 // --- Safe base URL builder (avoid double slashes) ---
 const BASE_API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
-// Backend actual table/resource appears to be 'codess' (extra 's'). Use that as primary, fallback to legacy '/api/codes'.
-const PRIMARY_CODES_URL = `${BASE_API}/api/codess`;
-const LEGACY_CODES_URL = `${BASE_API}/api/codes`;
+// Backend global codes endpoint
+const PRIMARY_CODES_URL = `${BASE_API}/api/global_codes`;
+const LEGACY_CODES_URL = `${BASE_API}/api/global_codes`;
 
 // Detect https-page → http-api mixed-content (blocked by browsers)
 const isHttpsMixedContent = () =>
@@ -163,11 +163,11 @@ export default function CodesPage() {
           const msg =
             (parsed && (parsed.message || parsed.error)) ||
             bodyText ||
-            `Failed to load codes (status ${res.status}). Endpoint tried: ${url.includes('codess') ? '/api/codess' : '/api/codes'}`;
+            `Failed to load codes (status ${res.status}). Endpoint tried: /api/global_codes`;
           setCodes([]);
           setTotalCount(0);
           setError(msg);
-          console.error("/api/codes error", {
+          console.error("/api/global_codes error", {
             status: res.status,
             requestId: res.headers.get("x-request-id"),
             body: bodyText,

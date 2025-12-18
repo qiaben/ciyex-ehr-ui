@@ -364,6 +364,9 @@ export { default as ImmunizationsFlat } from "@/components/ImmunizationsFlat";
 /* ---------------- HEALTHCARE SERVICES (new) ---------------- */
 export { default as HealthcareServicesFlat } from "@/components/HealthcareServicesFlat";
 
+/* ---------------- PAYMENT ---------------- */
+export { default as PaymentFlat } from "@/components/PaymentFlat";
+
 /* ---------------- REPORT ---------------- */
 export const ReportFlat: React.FC<ReportFlatProps> = ({
                                                           useDateRange,

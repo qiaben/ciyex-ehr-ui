@@ -1,7 +1,7 @@
 "use client";
 
 import AdminLayout from "@/app/(admin)/layout";
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 
 /* ------------ Types ------------ */
@@ -271,7 +271,9 @@ const MessageBubble: React.FC<{
     onReply?: (message: MessageThread) => void;
     onArchive?: (message: MessageThread) => void;
     currentUserName?: string;
-}> = ({ message, isCurrentUser, onReply, onArchive, currentUserName }) => {
+    attachments?: Attachment[];
+    downloadAttachment?: (messageId: number, attachmentId: string, fileName: string) => void;
+}> = ({ message, isCurrentUser, onReply, onArchive, currentUserName, attachments = [], downloadAttachment }) => {
     const [showOptions, setShowOptions] = useState(false);
 
     // Check if the reply is to the current user's own message
@@ -362,6 +364,67 @@ const MessageBubble: React.FC<{
                 }`}>
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                 </div>
+
+                {/* Attachments */}
+                {attachments && attachments.length > 0 && (
+                    <div className={`mt-2 space-y-2 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
+                        {attachments.map((attachment) => (
+                            <div
+                                key={attachment.id}
+                                className={`flex items-center gap-2 p-2 rounded-lg max-w-xs ${
+                                    isCurrentUser
+                                        ? 'bg-green-600 text-white'
+                                        : 'bg-gray-100 text-gray-800'
+                                }`}
+                            >
+                                {/* File Icon */}
+                                <div className="flex-shrink-0">
+                                    {attachment.type === 'image' && (
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                    )}
+                                    {attachment.type === 'pdf' && (
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                    )}
+                                    {attachment.type === 'document' && (
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                    )}
+                                    {attachment.type === 'other' && (
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                    )}
+                                </div>
+
+                                {/* File Info */}
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">{attachment.name}</p>
+                                    <p className="text-xs opacity-75">{attachment.size}</p>
+                                </div>
+
+                                {/* Download Button */}
+                                {downloadAttachment && (
+                                    <button
+                                        onClick={() => downloadAttachment(parseInt(message.id), attachment.id, attachment.name)}
+                                        className={`p-1 rounded hover:bg-black hover:bg-opacity-20 transition-colors ${
+                                            isCurrentUser ? 'hover:bg-white hover:bg-opacity-20' : ''
+                                        }`}
+                                        title="Download attachment"
+                                    >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {/* Timestamp and status */}
                 <div className="flex items-center gap-2 mt-1 px-2">
@@ -859,6 +922,10 @@ export default function MessagingPage() {
     // Notification state
     const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
+    // Attachment state
+    const [messageAttachments, setMessageAttachments] = useState<Record<number, Attachment[]>>({});
+    const [loadingAttachments, setLoadingAttachments] = useState(false);
+
     // Dropdown options - REMOVED TRASH, CHANGED TO ARCHIVE
     const dropdownOptions = [
         { id: 'all', label: 'All messages', icon: '📨' },
@@ -1002,6 +1069,137 @@ export default function MessagingPage() {
         setTimeout(() => setNotification(null), 4000);
     };
 
+    /* ---- Helper Functions ---- */
+    const getFileType = (contentType: string | undefined, fileName?: string): 'image' | 'pdf' | 'document' | 'other' => {
+        if (!contentType && fileName) {
+            const ext = fileName.split('.').pop()?.toLowerCase();
+            switch (ext) {
+                case 'jpg':
+                case 'jpeg':
+                case 'png':
+                case 'gif':
+                case 'bmp':
+                case 'webp':
+                    return 'image';
+                case 'pdf':
+                    return 'pdf';
+                case 'doc':
+                case 'docx':
+                case 'txt':
+                case 'rtf':
+                    return 'document';
+                default:
+                    return 'other';
+            }
+        }
+
+        if (contentType?.startsWith('image/')) return 'image';
+        if (contentType === 'application/pdf') return 'pdf';
+        if (contentType?.includes('document') || contentType?.includes('text')) return 'document';
+        return 'other';
+    };
+
+    /* ---- Load Message Attachments ---- */
+    const loadMessageAttachments = useCallback(async (messageId: number): Promise<Attachment[]> => {
+        try {
+            const res = await fetchWithAuth(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/messages/${messageId}/attachments`
+            );
+
+            if (!res.ok) {
+                console.warn(`Failed to load attachments for message ${messageId}:`, res.status);
+                return [];
+            }
+
+            const json: ApiResponse<any[]> = await res.json();
+            if (json.success && json.data) {
+                return json.data.map(attachment => ({
+                    id: String(attachment.id),
+                    name: attachment.fileName,
+                    url: `${process.env.NEXT_PUBLIC_API_URL}/api/messages/${messageId}/attachments/${attachment.id}/download`,
+                    type: getFileType(attachment.contentType, attachment.fileName),
+                    size: attachment.fileSize || '0 KB'
+                }));
+            }
+            return [];
+        } catch (error) {
+            console.error('Failed to load message attachments:', error);
+            return [];
+        }
+    }, []);
+
+    /* ---- Upload Message Attachment ---- */
+    const uploadMessageAttachment = async (messageId: number, file: File): Promise<void> => {
+        const formData = new FormData();
+        
+        // Create the dto object with only the fields that match the backend DTO
+        const dto = {
+            fileName: file.name,
+            contentType: file.type,
+            description: '', // Optional description
+            category: 'attachment', // Default category
+            type: getFileType(file.type, file.name) // Use our getFileType helper
+        };
+
+        // Append the dto as JSON string
+        formData.append('dto', JSON.stringify(dto));
+        // Append the actual file
+        formData.append('file', file);
+
+        const res = await fetchWithAuth(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/messages/${messageId}/attachments`,
+            {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'Accept': 'application/json'
+                }
+            }
+        );
+
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`HTTP ${res.status}: ${errorText}`);
+        }
+
+        const json: ApiResponse<{ id: string }> = await res.json();
+        if (!json.success) {
+            throw new Error(json.message || 'Failed to upload attachment');
+        }
+    };
+
+    /* ---- Upload Multiple Attachments ---- */
+    const uploadMultipleAttachments = async (messageId: number, files: File[]): Promise<void> => {
+        const uploadPromises = files.map(file => uploadMessageAttachment(messageId, file));
+        await Promise.all(uploadPromises);
+    };
+
+    /* ---- Download Attachment ---- */
+    const downloadAttachment = async (messageId: number, attachmentId: string, fileName: string) => {
+        try {
+            const res = await fetchWithAuth(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/messages/${messageId}/attachments/${attachmentId}/download`
+            );
+
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+            }
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error('Failed to download attachment:', error);
+            showNotification('Failed to download attachment', 'error');
+        }
+    };
+
     /* ---- Load Data ---- */
     useEffect(() => {
         const loadInitialData = async () => {
@@ -1133,6 +1331,37 @@ export default function MessagingPage() {
             showNotification('Failed to load messages', 'error');
         }
     };
+
+    // Load attachments for thread messages when conversation is selected
+    useEffect(() => {
+        if (selectedConversation && selectedConversation.messages.length > 0) {
+            const loadThreadAttachments = async () => {
+                setLoadingAttachments(true);
+                try {
+                    const attachmentsMap: Record<number, Attachment[]> = {};
+
+                    for (const msg of selectedConversation.messages) {
+                        const messageId = msg.id;
+                        const attachments = await loadMessageAttachments(messageId);
+                        if (attachments.length > 0) {
+                            attachmentsMap[messageId] = attachments;
+                            console.log(`Loaded ${attachments.length} attachments for message ${messageId}:`, attachments);
+                        }
+                    }
+
+                    setMessageAttachments(attachmentsMap);
+                } catch (error) {
+                    console.error('Failed to load thread attachments:', error);
+                } finally {
+                    setLoadingAttachments(false);
+                }
+            };
+
+            loadThreadAttachments();
+        } else {
+            setMessageAttachments({});
+        }
+    }, [selectedConversation, loadMessageAttachments]);
 
     // Focus on input when conversation is selected
     useEffect(() => {
@@ -1418,14 +1647,21 @@ export default function MessagingPage() {
             if (json.success && json.data) {
                 // Handle attachments if any
                 if (pendingAttachments.length > 0) {
-                    console.log('Would upload attachments:', pendingAttachments);
+                    try {
+                        await uploadMultipleAttachments(json.data.id, pendingAttachments);
+                        showNotification(`Reply sent with ${pendingAttachments.length} attachment(s)! ✨`, 'success');
+                    } catch (error) {
+                        console.error('Failed to upload attachments:', error);
+                        showNotification(`Reply sent but some attachments failed to upload`, 'error');
+                    }
+                } else {
+                    showNotification('Reply sent successfully! ✨', 'success');
                 }
 
                 await loadCommunications();
                 setReplyBody("");
                 setReplyingTo(null);
                 setPendingAttachments([]);
-                showNotification('Reply sent successfully! ✨', 'success');
 
                 if (replyInputRef.current) {
                     replyInputRef.current.style.height = 'auto';
@@ -1519,6 +1755,9 @@ export default function MessagingPage() {
             const json: ApiResponse<CommunicationDto> = await res.json();
 
             if (json.success && json.data) {
+                // Handle attachments if any (for new messages)
+                // Note: EHR compose modal doesn't have attachment state yet, but this is ready for future implementation
+                
                 await loadCommunications();
                 showNotification('Message sent successfully! 📨', 'success');
 
@@ -1754,6 +1993,8 @@ export default function MessagingPage() {
                                         onReply={handleReplyToMessage}
                                         onArchive={handleArchiveMessage}
                                         currentUserName={currentUserName}
+                                        attachments={messageAttachments[parseInt(threadMsg.id)] || []}
+                                        downloadAttachment={downloadAttachment}
                                     />
                                 ))}
 

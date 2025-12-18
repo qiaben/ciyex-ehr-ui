@@ -10,8 +10,9 @@ import AdminLayout from "@/app/(admin)/layout";
 
 import Link from "next/link";
 import DemographicsFlat from "@/components/DemographicsFlat";
-import HistoryFlat from "@/components/HistoryFlat";
+import HistoryFlat, { HistoryForm } from "@/components/HistoryFlat";
 import PatientRelationshipsTab from "@/components/PatientRelationshipsTab";
+import PaymentFlat from "@/components/PaymentFlat";
 import {
     AppointmentsFlat,
     BillingFlat,
@@ -30,6 +31,9 @@ import EncounterTableExpandable from "@/components/encounter/EncounterTableExpan
 
 import PatientBilling from "@/components/billing/PatientBilling";
 
+// Normalize API base - if NEXT_PUBLIC_API_URL is unset, fall back to localhost backend
+// (other utils use http://localhost:8080 as a default when not set)
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080").replace(/\/$/, "");
 interface Patient {
     id: string;
     firstName: string;
@@ -161,9 +165,9 @@ function RecentActivityFeed({ patientId, limit = 10 }: RecentActivityProps) {
 
                 // Fetch data from multiple endpoints in parallel (we only process appointments, medications and labs here)
                 const [appointmentsRes, medicationsRes, labsRes] = await Promise.allSettled([
-                    fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patientId}/appointments?limit=5`),
-                    fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patientId}/medications?limit=5`),
-                    fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patientId}/labs?limit=5`),
+                    fetchWithAuth(`${API_BASE}/api/patients/${patientId}/appointments?limit=5`),
+                    fetchWithAuth(`${API_BASE}/api/patients/${patientId}/medications?limit=5`),
+                    fetchWithAuth(`${API_BASE}/api/patients/${patientId}/labs?limit=5`),
                 ]);
 
                 const allActivities: ActivityItem[] = [];
@@ -361,8 +365,11 @@ export default function PatientDashboardPage() {
     const search = useSearchParams();
     const id = params?.id as string;
 
-    const [historyForm, setHistoryForm] = useState({
-        general: { riskFactors: "", examsTests: "" },
+    const [historyForm, setHistoryForm] = useState<HistoryForm>({
+        general: { 
+            riskFactors: {} as Record<string, boolean | string>, 
+            examsTests: {} as Record<string, { status: "" | "N/A" | "Normal" | "Abnormal"; notes: string }>
+        },
         family: {
             father: "",
             mother: "",
@@ -387,17 +394,17 @@ export default function PatientDashboardPage() {
             mentalIllness: "",
         },
         lifestyle: {
-            tobacco: "",
-            coffee: "",
-            alcohol: "",
-            drugs: "",
-            counseling: "",
-            exercise: "",
-            hazardous: "",
+            tobacco: { value: "", status: "" },
+            coffee: { value: "", status: "" },
+            alcohol: { value: "", status: "" },
+            drugs: { value: "", status: "" },
+            counseling: { value: "", status: "" },
+            exercise: { value: "", status: "" },
+            hazardous: { value: "", status: "" },
             sleep: "",
             seatbelt: "",
         },
-        other: { nameValue: "", additionalHistory: "" },
+        other: { nameValue1: "", nameValue2: "", additionalHistory: "" },
     });
 
     const [activeHistoryTab, setActiveHistoryTab] = useState<keyof typeof historyForm>("general");
@@ -464,6 +471,7 @@ export default function PatientDashboardPage() {
     };
 
     const [reportFilters, setReportFilters] = useState<string[]>([]);
+    const [notification, setNotification] = useState<{message: string; type: 'success' | 'error'} | null>(null);
     const toggleFilter = (filter: string) => {
         setReportFilters((prev) =>
             prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]
@@ -607,15 +615,21 @@ export default function PatientDashboardPage() {
             try {
                 setLoading(true);
                 const res = await fetchWithAuth(
-                    `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}`
+                    `${API_BASE}/api/patients/${id}`
                 );
+                
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                
                 const text = await res.text();
+                if (!text || text.trim() === "") {
+                    throw new Error("Empty response from server");
+                }
+                
                 const data =
                     res.headers.get("content-type")?.includes("application/xml") || text.startsWith("<")
                         ? await parseXmlResponse(text)
                         : JSON.parse(text);
 
-                if (!res.ok) throw new Error(data.message || `HTTP error! status: ${res.status}`);
                 if (data.success) {
                     const fetched = data.data as Patient;
                     setPatient(fetched);
@@ -627,11 +641,15 @@ export default function PatientDashboardPage() {
                 const fetchHistory = async () => {
                     try {
                         const res = await fetchWithAuth(
-                            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}/history`
+                            `${API_BASE}/api/patients/${id}/history`
                         );
                         const data = await res.json();
-                        if (res.ok && data.success) {
-                            setHistoryForm(data.data);
+                        if (res.ok && data.success && data.data) {
+                            // Merge fetched data with default structure to ensure compatibility
+                            setHistoryForm(prev => ({
+                                ...prev,
+                                ...data.data
+                            }));
                         }
                     } catch (e) {
                         console.error("Failed to fetch history:", e);
@@ -641,7 +659,7 @@ export default function PatientDashboardPage() {
                 const fetchBilling = async () => {
                     try {
                         const res = await fetchWithAuth(
-                            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}/billing`
+                            `${API_BASE}/api/patients/${id}/billing`
                         );
                         const data = await res.json();
                         if (res.ok && data.success) {
@@ -655,7 +673,7 @@ export default function PatientDashboardPage() {
                 const fetchAppointments = async () => {
                     try {
                         const res = await fetchWithAuth(
-                            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}/appointments`
+                            `${API_BASE}/api/patients/${id}/appointments`
                         );
                         const data = await res.json();
                         if (res.ok && data.success) setAppointments(data.data);
@@ -667,7 +685,7 @@ export default function PatientDashboardPage() {
                 const fetchMedications = async () => {
                     try {
                         const res = await fetchWithAuth(
-                            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}/medications`
+                            `${API_BASE}/api/patients/${id}/medications`
                         );
                         const data = await res.json();
                         if (res.ok && data.success) setMedications(data.data);
@@ -679,7 +697,7 @@ export default function PatientDashboardPage() {
                 const fetchAllergies = async () => {
                     try {
                         const res = await fetchWithAuth(
-                            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}/allergies`
+                            `${API_BASE}/api/patients/${id}/allergies`
                         );
                         const data = await res.json();
                         if (res.ok && data.success) setAllergies(data.data);
@@ -715,7 +733,7 @@ export default function PatientDashboardPage() {
         if (!demoForm || !patient) return;
         const payload = { ...patient, ...demoForm };
         const res = await fetchWithAuth(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patient.id}`,
+            `${API_BASE}/api/patients/${patient.id}`,
             {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -740,18 +758,27 @@ export default function PatientDashboardPage() {
 
     async function saveHistory() {
         if (!patient) return;
-        const res = await fetchWithAuth(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patient.id}/history`,
-            {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(historyForm),
-            }
-        );
-        const data = await res.json();
-        if (!res.ok || !data.success) throw new Error(data.message || "Failed to save history");
-        setEditHistory(false);
-        setHistoryForm(data.data);
+        try {
+            const res = await fetchWithAuth(
+                `${API_BASE}/api/patients/${patient.id}/history`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(historyForm),
+                }
+            );
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.message || "Failed to save history");
+            setEditHistory(false);
+            if (data.data) setHistoryForm(data.data);
+            setNotification({message: "History saved successfully!", type: "success"});
+            setTimeout(() => setNotification(null), 3000);
+        } catch (error) {
+            console.error("Failed to save history:", error);
+            setNotification({message: "Failed to save history", type: "error"});
+            setTimeout(() => setNotification(null), 3000);
+            throw error;
+        }
     }
 
     async function saveInsurance() {
@@ -759,7 +786,7 @@ export default function PatientDashboardPage() {
 
         const payload = { policies: insuranceForm };
         const res = await fetchWithAuth(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patient.id}/insurance`,
+            `${API_BASE}/api/patients/${patient.id}/insurance`,
             {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -785,7 +812,7 @@ export default function PatientDashboardPage() {
     async function saveEncounter() {
         if (!patient) throw new Error("No patient loaded");
         const res = await fetchWithAuth(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patient.id}/encounters`,
+            `${API_BASE}/api/patients/${patient.id}/encounters`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -908,6 +935,7 @@ export default function PatientDashboardPage() {
         { key: "immunizations", label: "Immunizations" },
         { key: "healthcareservices", label: "Healthcare Services" },
         { key: "relationships", label: "Relationships" },
+        { key: "payment", label: "Payment" },
     ];
 
     const renderTabContent = (tabKey: string) => {
@@ -1126,9 +1154,6 @@ export default function PatientDashboardPage() {
 
 
 
-            case "documents":
-                return <DocumentsFlat />;
-
             case "report":
                 return (
                     <ReportFlat
@@ -1217,9 +1242,12 @@ export default function PatientDashboardPage() {
             
 
             case "documents":
-                return <DocumentsFlat />;
+                return <DocumentsFlat patientId={Number(patient.id)} />;
             case "relationships":
                 return <PatientRelationshipsTab patientId={Number(patient.id)} />;
+            
+            case "payment":
+                return <PaymentFlat patientId={Number(patient.id)} />;
 
             default:
                 return (
@@ -1272,7 +1300,7 @@ export default function PatientDashboardPage() {
                                 href="/patients"
                                 className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 border border-gray-300 text-xs font-medium text-gray-700 flex items-center"
                             >
-                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className= "w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                                 Patients
@@ -1302,17 +1330,7 @@ export default function PatientDashboardPage() {
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-3 shrink-0">
-                            <button
-                                className="h-8 px-3 rounded bg-blue-600 hover:bg-blue-700 text-xs font-medium text-white shadow-sm inline-flex items-center"
-                                onClick={handleOpenEncounter}
-                            >
-                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                </svg>
-                                New Encounter
-                            </button>
-                        </div>
+
                     </div>
 
                     <div className="mt-1.5">
@@ -1370,6 +1388,29 @@ export default function PatientDashboardPage() {
                     </div>
                 </div>
             </div>
+            
+            {/* Toast Notification */}
+            {notification && (
+                <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 ${
+                    notification.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+                }`}>
+                    {notification.type === 'success' ? (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                    ) : (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                    )}
+                    {notification.message}
+                    <button onClick={() => setNotification(null)} className="ml-2">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            )}
         </AdminLayout>
     );
 }

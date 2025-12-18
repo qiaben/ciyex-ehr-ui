@@ -395,6 +395,7 @@
 import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
 import type { ApiResponse, SocialHistoryDto, SocialHistoryEntryDto } from "@/utils/types";
+import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
 type Props = {
     patientId: number;
@@ -426,7 +427,13 @@ export default function Shform({ patientId, encounterId, shId, entries, editing,
     const [err, setErr] = useState<string | null>(null);
 
     useEffect(() => {
-        if (editing) {
+        const encounterData = getEncounterData(patientId, encounterId);
+        if (encounterData.socialHistory && !editing) {
+            const data = encounterData.socialHistory;
+            setCategory(data.category || CATEGORIES[0]);
+            setValue(data.value || "");
+            setDetails(data.details || "");
+        } else if (editing) {
             setCategory(editing.category || CATEGORIES[0]);
             setValue(editing.value || "");
             setDetails(editing.details || "");
@@ -435,7 +442,17 @@ export default function Shform({ patientId, encounterId, shId, entries, editing,
             setValue("");
             setDetails("");
         }
-    }, [editing]);
+    }, [editing, patientId, encounterId]);
+
+    useEffect(() => {
+        if (category || value || details) {
+            setEncounterSection(patientId, encounterId, "socialHistory", {
+                category,
+                value,
+                details
+            });
+        }
+    }, [category, value, details, patientId, encounterId]);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -483,7 +500,8 @@ export default function Shform({ patientId, encounterId, shId, entries, editing,
                 throw new Error(json?.message || `Save failed (${res.status})`);
             }
 
-            onSaved(); // parent reloads to keep shape in sync
+            removeEncounterSection(patientId, encounterId, "socialHistory");
+            onSaved();
         }  catch (e: unknown) {
         if (e instanceof Error) {
             setErr(e.message);
@@ -502,28 +520,31 @@ finally {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                    <label className="block text-sm font-medium mb-1">Category</label>
+                    <label className="block text-sm font-medium mb-1">Category <span className="text-red-600">*</span></label>
                     <select className="w-full rounded-lg border px-3 py-2 focus:ring"
                             value={category}
-                            onChange={(e) => setCategory(e.target.value)}>
+                            onChange={(e) => setCategory(e.target.value)}
+                            required>
                         {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium mb-1">Value</label>
+                    <label className="block text-sm font-medium mb-1">Value <span className="text-red-600">*</span></label>
                     <input className="w-full rounded-lg border px-3 py-2 focus:ring"
                            value={value}
                            onChange={(e) => setValue(e.target.value)}
-                           placeholder='e.g., "Former smoker" or "Vegetarian"' />
+                           placeholder='e.g., "Former smoker" or "Vegetarian"'
+                           required />
                 </div>
 
                 <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Details</label>
+                    <label className="block text-sm font-medium mb-1">Details <span className="text-red-600">*</span></label>
                     <textarea className="w-full rounded-lg border px-3 py-2 focus:ring min-h-20"
                               value={details}
                               onChange={(e) => setDetails(e.target.value)}
-                              placeholder='e.g., "Quit in 2023" or "Mostly plant-based, occasional dairy"' />
+                              placeholder='e.g., "Quit in 2023" or "Mostly plant-based, occasional dairy"'
+                              required />
                 </div>
             </div>
 
@@ -534,7 +555,7 @@ finally {
                     {saving ? "Saving..." : editing ? "Update" : "Save"}
                 </button>
                 {onCancel && (
-                    <button type="button" onClick={onCancel} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
+                    <button type="button" onClick={() => { removeEncounterSection(patientId, encounterId, "socialHistory"); onCancel(); }} className="rounded-xl border px-4 py-2 hover:bg-gray-50">
                         Cancel
                     </button>
                 )}

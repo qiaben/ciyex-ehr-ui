@@ -16,6 +16,17 @@ import {
   AppointmentIcon, InventoryIcon,
 } from "../icons/index";
 
+// Prevent hydration mismatch
+const useHasMounted = () => {
+  const [hasMounted, setHasMounted] = useState(false);
+  
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+  
+  return hasMounted;
+};
+
 
 // ===== Types (nested) =====
 type SubItem = {
@@ -113,6 +124,7 @@ const navItems: NavItem[] = [
     icon: <SettingsIcon />,
     name: "Settings",
     subItems: [
+     
       { name: "Providers", path: "/settings/providers" },
       { name: "Referral Providers", path: "/settings/referral-providers" },
       { name: "Referral Practices", path: "/settings/referral-practices" },
@@ -133,6 +145,8 @@ const navItems: NavItem[] = [
           { name: "Encounters Section", path: "/settings/forms/admin" },
         ],
       },
+       { name: "Facilities", path: "/settings/facilities" },
+      { name: "Practice", path: "/settings/practice" },
     ],
   },
 
@@ -159,6 +173,7 @@ const navItems: NavItem[] = [
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
+  const hasMounted = useHasMounted();
 
   // Safe isActive (handles undefined, ignores query)
   const isActive = useCallback(
@@ -413,10 +428,19 @@ const AppSidebar: React.FC = () => {
     </ul>
   );
 
+  // Show loading state until mounted to prevent hydration mismatch
+  if (!hasMounted) {
+    return (
+      <div className="text-center">
+        {/* Loading placeholder that matches server render */}
+      </div>
+    );
+  }
+
   return (
     <aside
       className={`fixed mt-16 flex flex-col lg:mt-0 top-0 px-5 left-0 bg-white dark:bg-gray-900 dark:border-gray-800 text-gray-900 h-screen transition-all duration-300 ease-in-out z-50 border-r border-gray-200
-        ${isExpanded || isMobileOpen ? "w-[290px]" : isHovered ? "w-[290px]" : "w-[90px]"}
+        ${(isExpanded || isMobileOpen) ? "w-[290px]" : isHovered ? "w-[290px]" : "w-[90px]"}
         ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
         lg:translate-x-0`}
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
