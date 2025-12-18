@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
+import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import type { ApiResponse } from "@/utils/types";
 import type { DateTimeFinalizedDto } from "./DatetimefinalizedCard";
 import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
@@ -17,6 +18,13 @@ type Props = {
     editing?: DateTimeFinalizedDto | null;
     onSaved: (saved: DateTimeFinalizedDto) => void;
     onCancel?: () => void;
+};
+
+type ProviderOption = {
+    id: number;
+    name: string;
+    email?: string;
+    npi?: string;
 };
 
 const TARGET_TYPES = ["NOTE", "ORDER", "RESULT"];
@@ -31,6 +39,7 @@ async function safeJson<T = unknown>(res: Response): Promise<T | null> {
 }
 
 export default function Datetimefinalizedform({ patientId, encounterId, editing, onSaved, onCancel }: Props) {
+    const [providerId, setProviderId] = useState<number | "">("");
     const [targetType, setTargetType] = useState<string>("NOTE");
     const [targetId, setTargetId] = useState<string>("");
     const [targetVersion, setTargetVersion] = useState<string>("v1");
@@ -47,13 +56,52 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
     const [providerSignatureId, setProviderSignatureId] = useState<string>("");
     const [signoffId, setSignoffId] = useState<string>("");
 
+    const [options, setOptions] = useState<ProviderOption[]>([]);
+    const [loadingProviders, setLoadingProviders] = useState(false);
     const [saving, setSaving] = useState(false);
     const [err, setErr] = useState<string | null>(null);
+
+    useEffect(() => {
+        async function fetchProviders() {
+            setLoadingProviders(true);
+            try {
+                const orgIds = JSON.parse(localStorage.getItem("orgIds") || "[]");
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+                const res = await fetchWithAuth(
+                    `${apiUrl}/api/providers?orgIds=${orgIds.join(",")}`,
+                    { method: "GET", headers: { Accept: "application/json" } }
+                );
+                const json = await res.json();
+                if (res.ok && json.success) {
+                    const list: unknown[] = json?.data || [];
+                    const mapped: ProviderOption[] = list.map((item: any) => {
+                        const firstName = item.identification?.firstName || "";
+                        const lastName = item.identification?.lastName || "";
+                        const prefix = item.identification?.prefix || "";
+                        const fullName = `${prefix} ${firstName} ${lastName}`.trim();
+                        return {
+                            id: item.id,
+                            name: fullName || "Provider",
+                            email: item.contact?.email,
+                            npi: item.npi,
+                        };
+                    }).filter((p) => p.id > 0);
+                    setOptions(mapped);
+                }
+            } catch (e) {
+                console.error('Fetch error:', e);
+            } finally {
+                setLoadingProviders(false);
+            }
+        }
+        fetchProviders();
+    }, []);
 
     useEffect(() => {
         const encounterData = getEncounterData(patientId, encounterId);
         if (encounterData.dateTimeFinalized && !editing?.id) {
             const data = encounterData.dateTimeFinalized;
+            setProviderId(data.providerId ? Number(data.providerId) : "");
             setTargetType(data.targetType || "NOTE");
             setTargetId(data.targetId || "");
             setTargetVersion(data.targetVersion || "v1");
@@ -68,6 +116,7 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
             setProviderSignatureId((data as any).providerSignatureId || "");
             setSignoffId((data as any).signoffId || "");
         } else if (editing?.id) {
+            setProviderId(editing.providerId || "");
             setTargetType(editing.targetType || "NOTE");
             setTargetId(editing.targetId?.toString() ?? "");
             setTargetVersion(editing.targetVersion || "v1");
@@ -82,6 +131,7 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
             setProviderSignatureId(editing.providerSignatureId?.toString() ?? "");
             setSignoffId(editing.signoffId?.toString() ?? "");
         } else {
+            setProviderId("");
             setTargetType("NOTE");
             setTargetId("");
             setTargetVersion("v1");
@@ -99,8 +149,9 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
     }, [editing, patientId, encounterId]);
 
     useEffect(() => {
-        if (targetType || finalizedAt || finalizedBy || reason) {
+        if (providerId || targetType || finalizedAt || finalizedBy || reason) {
             setEncounterSection(patientId, encounterId, "dateTimeFinalized", {
+                providerId: String(providerId),
                 targetType,
                 targetId,
                 targetVersion,
@@ -113,7 +164,12 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
                 comments
             } as any);
         }
-    }, [targetType, targetId, targetVersion, finalizedAt, finalizedBy, finalizerRole, method, status, reason, comments, patientId, encounterId]);
+    }, [providerId, targetType, targetId, targetVersion, finalizedAt, finalizedBy, finalizerRole, method, status, reason, comments, patientId, encounterId]);
+
+    function chooseProvider(p: ProviderOption) {
+        setProviderId(p.id);
+        setFinalizedBy(p.email || "");
+    }
 
     function setNow() {
         setFinalizedAt(new Date().toISOString());
@@ -159,6 +215,7 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
             removeEncounterSection(patientId, encounterId, "dateTimeFinalized");
 
             if (!editing?.id) {
+                setProviderId("");
                 setTargetType("NOTE");
                 setTargetId("");
                 setTargetVersion("v1");
@@ -183,6 +240,27 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
     return (
         <form onSubmit={submit} className="space-y-4 rounded-2xl border p-4 shadow-sm bg-white">
             <h3 className="text-lg font-semibold">{editing?.id ? "Edit Finalization Timestamp" : "Add Finalization Timestamp"}</h3>
+
+            <div>
+                <label className="block text-sm font-medium mb-1">Provider</label>
+                <select
+                    className="w-full rounded-lg border px-3 py-2 focus:ring"
+                    value={providerId}
+                    onChange={(e) => {
+                        const selectedId = Number(e.target.value);
+                        const selected = options.find(p => p.id === selectedId);
+                        if (selected) chooseProvider(selected);
+                    }}
+                >
+                    <option value="">Select Provider</option>
+                    {options.map((p) => (
+                        <option key={p.id} value={p.id}>
+                            {p.name} {p.npi ? `(NPI: ${p.npi})` : ""}
+                        </option>
+                    ))}
+                </select>
+                {loadingProviders && <p className="text-xs text-gray-500 mt-1">Loading providers…</p>}
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
@@ -218,7 +296,7 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
                     </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">Finalized By <span className="text-red-600">*</span></label>
-                        <input className="w-full rounded-lg border px-3 py-2" value={finalizedBy} onChange={(e) => setFinalizedBy(e.target.value)} placeholder="dr.smith@clinic" required />
+                        <input className="w-full rounded-lg border px-3 py-2 bg-gray-50" value={finalizedBy} onChange={(e) => setFinalizedBy(e.target.value)} placeholder="Auto-filled from provider" required />
                     </div>
                 </div>
 

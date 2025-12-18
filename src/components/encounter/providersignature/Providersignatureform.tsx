@@ -194,6 +194,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { fetchWithOrg } from "@/utils/fetchWithOrg";
+import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import type { ApiResponse, ProviderSignatureDto } from "@/utils/types";
 import { getEncounterData, setEncounterSection, removeEncounterSection } from "@/utils/encounterStorage";
 
@@ -203,6 +204,13 @@ type Props = {
     value?: ProviderSignatureDto | null;
     onSaved: (saved: ProviderSignatureDto) => void;
     onAfterSubmit?: () => void;
+};
+
+type ProviderOption = {
+    id: number;
+    name: string;
+    email?: string;
+    npi?: string;
 };
 
 const ROLES = ["MD", "DO", "NP", "PA", "RN", "Other"];
@@ -238,9 +246,12 @@ export default function Providersignatureform({
                                                   onSaved,
                                                   onAfterSubmit,
                                               }: Props) {
+    const [providerId, setProviderId] = useState<number | "">("");
     const [signedBy, setSignedBy] = useState("");
     const [signerRole, setSignerRole] = useState(ROLES[0]);
     const [comments, setComments] = useState("");
+    const [options, setOptions] = useState<ProviderOption[]>([]);
+    const [loadingProviders, setLoadingProviders] = useState(false);
     const [saving, setSaving] = useState(false);
     const [err, setErr] = useState<string | null>(null);
     const fileRef = useRef<HTMLInputElement | null>(null);
@@ -250,13 +261,51 @@ export default function Providersignatureform({
         value?.status?.toLowerCase() === "locked";
 
     useEffect(() => {
+        async function fetchProviders() {
+            setLoadingProviders(true);
+            try {
+                const orgIds = JSON.parse(localStorage.getItem("orgIds") || "[]");
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+                const res = await fetchWithAuth(
+                    `${apiUrl}/api/providers?orgIds=${orgIds.join(",")}`,
+                    { method: "GET", headers: { Accept: "application/json" } }
+                );
+                const json = await res.json();
+                if (res.ok && json.success) {
+                    const list: unknown[] = json?.data || [];
+                    const mapped: ProviderOption[] = list.map((item: any) => {
+                        const firstName = item.identification?.firstName || "";
+                        const lastName = item.identification?.lastName || "";
+                        const prefix = item.identification?.prefix || "";
+                        const fullName = `${prefix} ${firstName} ${lastName}`.trim();
+                        return {
+                            id: item.id,
+                            name: fullName || "Provider",
+                            email: item.contact?.email,
+                            npi: item.npi,
+                        };
+                    }).filter((p) => p.id > 0);
+                    setOptions(mapped);
+                }
+            } catch (e) {
+                console.error('Fetch error:', e);
+            } finally {
+                setLoadingProviders(false);
+            }
+        }
+        fetchProviders();
+    }, []);
+
+    useEffect(() => {
         const encounterData = getEncounterData(patientId, encounterId);
         if (encounterData.providerSignature && !value?.id) {
             const data = encounterData.providerSignature;
+            setProviderId(data.providerId ? Number(data.providerId) : "");
             setSignedBy(data.signedBy || "");
             setSignerRole(data.signerRole || ROLES[0]);
             setComments(data.comments || "");
         } else {
+            setProviderId(value?.providerId || "");
             setSignedBy(value?.signedBy || "");
             setSignerRole(value?.signerRole || ROLES[0]);
             setComments(value?.comments || "");
@@ -264,14 +313,20 @@ export default function Providersignatureform({
     }, [value, patientId, encounterId]);
 
     useEffect(() => {
-        if (signedBy || comments) {
+        if (providerId || signedBy || comments) {
             setEncounterSection(patientId, encounterId, "providerSignature", {
+                providerId: String(providerId),
                 signedBy,
                 signerRole,
                 comments
             });
         }
-    }, [signedBy, signerRole, comments, patientId, encounterId]);
+    }, [providerId, signedBy, signerRole, comments, patientId, encounterId]);
+
+    function chooseProvider(p: ProviderOption) {
+        setProviderId(p.id);
+        setSignedBy(p.email || "");
+    }
 
     async function submit() {
         if (isLocked) return;
@@ -332,12 +387,34 @@ export default function Providersignatureform({
 
     return (
         <div className="rounded-2xl border p-4 shadow-sm bg-white space-y-3">
+            <div>
+                <label className="block text-sm font-medium mb-1">Provider</label>
+                <select
+                    className="w-full rounded-lg border px-3 py-2 focus:ring"
+                    value={providerId}
+                    disabled={isLocked}
+                    onChange={(e) => {
+                        const selectedId = Number(e.target.value);
+                        const selected = options.find(p => p.id === selectedId);
+                        if (selected) chooseProvider(selected);
+                    }}
+                >
+                    <option value="">Select Provider</option>
+                    {options.map((p) => (
+                        <option key={p.id} value={p.id}>
+                            {p.name} {p.npi ? `(NPI: ${p.npi})` : ""}
+                        </option>
+                    ))}
+                </select>
+                {loadingProviders && <p className="text-xs text-gray-500 mt-1">Loading providers…</p>}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                     <label className="block text-sm font-medium mb-1">Signed By <span className="text-red-600">*</span></label>
                     <input
-                        className="w-full rounded-lg border px-3 py-2"
-                        placeholder="dr.rajaclinic.test"
+                        className="w-full rounded-lg border px-3 py-2 bg-gray-50"
+                        placeholder="Auto-filled from provider"
                         value={signedBy}
                         disabled={isLocked}
                         onChange={(e) => setSignedBy(e.target.value)}
