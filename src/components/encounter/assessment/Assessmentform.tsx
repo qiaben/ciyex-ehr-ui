@@ -261,7 +261,6 @@ export default function Assessmentform({ patientId, encounterId, editing, onSave
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Any additional notes"
-                        required
                     />
                 </div>
             </div>
