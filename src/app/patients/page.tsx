@@ -148,13 +148,7 @@ export default function PatientListPage() {
 
     const handleEdit = (patient: Patient) => setEditPatient(patient);
 
-    const handleDelete = async (patient: Patient) => {
-        if (!confirm(`Delete patient ${patient.firstName} ${patient.lastName}?`)) return;
-        await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patients/${patient.id}`, {
-            method: "DELETE",
-        });
-        fetchPatients(currentPage, patientsPerPage, search);
-    };
+
 
     const handleSaveEdit = async (updatedPatient: Patient) => {
         if (!updatedPatient) return;
@@ -334,32 +328,7 @@ export default function PatientListPage() {
                                                 </svg>
                                             </button>
 
-                                            {/* Delete */}
-                                            <button
-                                                onClick={() => handleDelete(patient)}
-                                                className="text-gray-500 hover:text-red-600"
-                                            >
-                                                <svg
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    className="w-5 h-5"
-                                                    viewBox="0 0 24 24"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    strokeWidth={1.5}
-                                                >
-                                                    {/* Sleek modern trash bin */}
-                                                    <path
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        d="M9 3h6l1 2h4a1 1 0 010 2h-1v12a2 2 0 01-2 2H7a2 2 0 01-2-2V7H4a1 1 0 010-2h4l1-2z"
-                                                    />
-                                                    <path
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        d="M10 11v6M14 11v6"
-                                                    />
-                                                </svg>
-                                            </button>
+
 
                                         </div>
                                     </td>
