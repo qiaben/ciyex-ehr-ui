@@ -13,23 +13,26 @@ interface PersonalInfoFormData {
 interface PersonalInfoProps {
     formData: PersonalInfoFormData;
     handleChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
-    errors?: Partial<Record<keyof PersonalInfoFormData, string>>;
+    errors: Record<string, string>;
 }
 
-const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, handleChange, errors = {} }) => {
+const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, handleChange, errors }) => {
     return (
         <div className="bg-white p-6 rounded-lg shadow-md grid grid-cols-1 md:grid-cols-2 gap-6">
             {/*<h2 className="text-xl font-semibold mb-4 col-span-2">Personal Information</h2>*/}
 
             {/* First Name Input */}
             <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name</label>
+                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
+                    First Name <span className="text-red-500">*</span>
+                </label>
                 <input
                     type="text"
                     id="firstName"
                     name="firstName"
                     value={formData.firstName}
                     onChange={handleChange}
+                    required
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter your first name"
                 />
@@ -38,13 +41,16 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, handleChange, err
 
             {/* Last Name Input */}
             <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name</label>
+                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
+                    Last Name <span className="text-red-500">*</span>
+                </label>
                 <input
                     type="text"
                     id="lastName"
                     name="lastName"
                     value={formData.lastName}
                     onChange={handleChange}
+                    required
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter your last name"
                 />
@@ -54,21 +60,22 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, handleChange, err
 
             {/* Date of Birth Input */}
             <div>
-                <label htmlFor="dob" className="block text-sm text-gray-700">Date of Birth</label>
+                <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
                 <input
                     type="date"
-                    id="dob"
                     name="dob"
                     value={formData.dob}
                     onChange={handleChange}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="order-date-input flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 />
                 {errors.dob && <p className="text-red-500 text-xs">{errors.dob}</p>}
             </div>
 
             {/* Gender Input */}
             <div>
-                <label htmlFor="gender" className="block text-sm font-medium text-gray-700">Gender</label>
+                <label htmlFor="gender" className="block text-sm font-medium text-gray-700">
+                    Gender
+                </label>
                 <select
                     id="gender"
                     name="gender"
@@ -86,28 +93,34 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, handleChange, err
 
             {/* Phone Input */}
             <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone</label>
+                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
+                    Mobile Number <span className="text-red-500">*</span>
+                </label>
                 <input
                     type="tel"
                     id="phone"
                     name="phone"
                     value={formData.phone}
                     onChange={handleChange}
+                    required
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter your phone number"
+                    placeholder="Enter your mobile number"
                 />
                 {errors.phone && <p className="text-red-500 text-xs">{errors.phone}</p>}
             </div>
 
             {/* Email Input */}
             <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                    Email <span className="text-red-500">*</span>
+                </label>
                 <input
                     type="email"
                     id="email"
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
+                    required
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter your email"
                 />
