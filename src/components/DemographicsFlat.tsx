@@ -1,6 +1,8 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
+import PatientDeletionFlow from "@/components/patients/PatientDeletionFlow";
+import { useRouter } from "next/navigation";
 
 interface Provider {
     id: number;
@@ -56,6 +58,8 @@ export default function DemographicsFlat({
         type: "success" | "error";
         message: string;
     } | null>(null);
+    const [showDeleteFlow, setShowDeleteFlow] = useState(false);
+    const router = useRouter();
 
     useEffect(() => {
         const fetchProviders = async () => {
@@ -227,17 +231,25 @@ export default function DemographicsFlat({
                 </div>
             )}
 
-            {/* Header with Edit/Save/Cancel */}
+            {/* Header with Edit/Save/Cancel/Delete */}
             <div className="flex justify-between items-center mb-4">
                 <h1 className="text-lg font-semibold text-gray-800">Demographics</h1>
                 <div className="flex gap-2">
                     {!editDemographics ? (
-                        <button
-                            onClick={() => setEditDemographics(true)}
-                            className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs"
-                        >
-                            Edit
-                        </button>
+                        <>
+                            <button
+                                onClick={() => setEditDemographics(true)}
+                                className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs"
+                            >
+                                Edit
+                            </button>
+                            <button
+                                onClick={() => setShowDeleteFlow(true)}
+                                className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs hover:bg-red-200"
+                            >
+                                Delete Patient
+                            </button>
+                        </>
                     ) : (
                         <>
                             <button
@@ -582,6 +594,19 @@ export default function DemographicsFlat({
                     {renderField("Telehealth Consent", "telehealthConsent", "text", ["Yes", "No"])}
                 </div>
             </Section>
+
+            {/* Patient Deletion Flow */}
+            {showDeleteFlow && (
+                <PatientDeletionFlow
+                    patientId={patient.id}
+                    patientName={`${patient.firstName || ''} ${patient.lastName || ''}`.trim()}
+                    onSuccess={() => {
+                        setShowDeleteFlow(false);
+                        router.push('/patients');
+                    }}
+                    onCancel={() => setShowDeleteFlow(false)}
+                />
+            )}
         </div>
     );
 }
