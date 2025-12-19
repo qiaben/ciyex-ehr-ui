@@ -7,6 +7,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 
+
 /* =========================================================
    Props / Types
 ========================================================= */
@@ -63,6 +64,13 @@ type InvoiceLine = {
     insWriteOff?: number;
     insPortion?: number;
     patientPortion?: number;
+};
+
+type ProcedureLineInput = {
+    code: string;
+    description: string;
+    rate: number;
+    units: number;
 };
 
 type Invoice = {
@@ -1989,6 +1997,13 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     const [showEditLinesFor, setShowEditLinesFor] = useState<number | null>(null);
     const [showAdjustmentFor, setShowAdjustmentFor] = useState<number | null>(null);
     const [showAddProcedure, setShowAddProcedure] = useState(false);
+    const [procedureList, setProcedureList] = useState<Array<{ code: string; description: string; rate: number }>>([{ code: "D2391", description: "Composite Resin, 1 surface", rate: 239 }]);
+    
+    useEffect(() => {
+        if (showAddProcedure) {
+            setProcedureList([{ code: "D2391", description: "Composite Resin, 1 surface", rate: 239 }]);
+        }
+    }, [showAddProcedure]);
     const [showClaimEditFor, setShowClaimEditFor] = useState<number | null>(null);
     const [showVoidFor, setShowVoidFor] = useState<number | null>(null);
     const [showClaimComposeFor, setShowClaimComposeFor] = useState<number | null>(null);
@@ -2227,20 +2242,16 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     }
     async function createInvoiceFromProcedure(p: {
         dos: string;
-        code: string;
-        treatment: string;
         provider: string;
-        rate: number;
+        procedures: Array<{ code: string; description: string; rate: number }>;
     }) {
         const res = await fetchWithAuth(`${API}/invoices`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                code: p.code,
-                description: p.treatment,
                 provider: p.provider,
                 dos: p.dos,
-                rate: p.rate,
+                procedures: p.procedures
             }),
         });
         const body = await res.json();
@@ -4309,76 +4320,133 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             {/* ...existing code... */}
 
             {showAddProcedure && (
-                <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
-                    <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl">
-                        <div className="flex items-center justify-between border-b px-5 py-3">
-                            <h4 className="text-base font-semibold">Add Procedure (creates Invoice)</h4>
-                            <button onClick={() => setShowAddProcedure(false)} className="rounded p-1 hover:bg-gray-100" aria-label="Close">
-                                ✕
-                            </button>
-                        </div>
-                        <div className="p-5 space-y-5">
-                            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                                <div className="md:col-span-2">
-                                    <label className="label">Code</label>
-                                    <input id="p-code" className="input w-full" placeholder="e.g., D2391" defaultValue="D2391" />
-                                </div>
-                                <div>
-                                    <label className="label">Units</label>
-                                    <input id="p-units" className="input w-full" defaultValue={1} type="number" />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="label">Rate</label>
-                                <input id="p-rate" className="input w-full" placeholder="e.g., 239.00" defaultValue={239} />
-                            </div>
-                            <div>
-                                <label className="label">Description</label>
-                                <input id="p-desc" className="input w-full" defaultValue="Composite Resin, 1 surface" />
-                            </div>
-                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                                <div>
-                                    <label className="label">Date of Service</label>
-                                    <input id="p-dos" className="input w-full" placeholder="YYYY-MM-DD" />
-                                </div>
-                                <div>
-                                    <label className="label">Provider</label>
-                                    <select id="p-prov" className="input w-full" defaultValue={providers[0]?.name || ""}>
-                                        <option value="">Select Provider</option>
-                                        {providers.map((prov) => (
-                                            <option key={prov.id} value={prov.name}>
-                                                {prov.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="flex justify-end gap-2">
-                                <button className="btn-light" onClick={() => setShowAddProcedure(false)}>
-                                    Cancel
+                    <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
+                        <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl max-h-[90vh] overflow-y-auto">
+                            <div className="flex items-center justify-between border-b px-5 py-3 sticky top-0 bg-white">
+                                <h4 className="text-base font-semibold">Add Procedure (creates Invoice)</h4>
+                                <button onClick={() => setShowAddProcedure(false)} className="rounded p-1 hover:bg-gray-100" aria-label="Close">
+                                    ✕
                                 </button>
-                                <button
-                                    className="btn-primary"
-                                    onClick={() => {
-                                        const code = (document.getElementById("p-code") as HTMLInputElement).value || "D2391";
-                                        const rate = Number((document.getElementById("p-rate") as HTMLInputElement).value || "239");
-                                        const treatment = (document.getElementById("p-desc") as HTMLInputElement).value || "Procedure";
-                                        const dos =
-                                            (document.getElementById("p-dos") as HTMLInputElement).value ||
-                                            new Date().toISOString().slice(0, 10);
-                                        const provider = (document.getElementById("p-prov") as HTMLSelectElement).value || providers[0]?.name || "PROV-01";
+                            </div>
+                            <div className="p-5 space-y-5">
+                                {/* Common fields */}
+                                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                    <div>
+                                        <label className="label">Date of Service</label>
+                                        <input id="p-dos" className="input w-full" placeholder="YYYY-MM-DD" defaultValue={new Date().toISOString().slice(0, 10)} />
+                                    </div>
+                                    <div>
+                                        <label className="label">Provider</label>
+                                        <select id="p-prov" className="input w-full" defaultValue={providers[0]?.name || ""}>
+                                            <option value="">Select Provider</option>
+                                            {providers.map((prov) => (
+                                                <option key={prov.id} value={prov.name}>
+                                                    {prov.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
 
-                                        void createInvoiceFromProcedure({ dos, code, treatment, provider, rate });
-                                        setShowAddProcedure(false);
-                                        setTab("INVOICE");
-                                    }}
-                                >
-                                    Save & Create Invoice
-                                </button>
+                                {/* Procedures list */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <label className="label mb-0">Procedures</label>
+                                        <button 
+                                            className="btn-light text-sm"
+                                            onClick={() => setProcedureList([...procedureList, { code: "", description: "", rate: 0 }])}
+                                        >
+                                            + Add Another Procedure
+                                        </button>
+                                    </div>
+                                    
+                                    {procedureList.map((proc, idx) => (
+                                        <div key={idx} className="border rounded-lg p-4 space-y-3 bg-gray-50">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-sm font-medium text-gray-700">Procedure #{idx + 1}</span>
+                                                {procedureList.length > 1 && (
+                                                    <button 
+                                                        className="text-red-600 hover:text-red-800 text-sm"
+                                                        onClick={() => setProcedureList(procedureList.filter((_, i) => i !== idx))}
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                                <div>
+                                                    <label className="label">Code</label>
+                                                    <input 
+                                                        className="input w-full" 
+                                                        placeholder="e.g., D2391"
+                                                        value={proc.code}
+                                                        onChange={(e) => {
+                                                            const updated = [...procedureList];
+                                                            updated[idx].code = e.target.value;
+                                                            setProcedureList(updated);
+                                                        }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="label">Rate</label>
+                                                    <input 
+                                                        className="input w-full" 
+                                                        type="number"
+                                                        placeholder="e.g., 239"
+                                                        value={proc.rate || ""}
+                                                        onChange={(e) => {
+                                                            const updated = [...procedureList];
+                                                            updated[idx].rate = Number(e.target.value);
+                                                            setProcedureList(updated);
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="label">Description</label>
+                                                <input 
+                                                    className="input w-full" 
+                                                    placeholder="e.g., Composite Resin, 1 surface"
+                                                    value={proc.description}
+                                                    onChange={(e) => {
+                                                        const updated = [...procedureList];
+                                                        updated[idx].description = e.target.value;
+                                                        setProcedureList(updated);
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="flex justify-end gap-2 pt-4 border-t">
+                                    <button className="btn-light" onClick={() => setShowAddProcedure(false)}>
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="btn-primary"
+                                        onClick={() => {
+                                            const dos = (document.getElementById("p-dos") as HTMLInputElement).value || new Date().toISOString().slice(0, 10);
+                                            const provider = (document.getElementById("p-prov") as HTMLSelectElement).value || providers[0]?.name || "Dr. John Smith";
+                                            
+                                            const validProcedures = procedureList.filter(p => p.code && p.description && p.rate > 0);
+                                            
+                                            if (validProcedures.length === 0) {
+                                                alert("Please add at least one valid procedure with code, description, and rate.");
+                                                return;
+                                            }
+
+                                            void createInvoiceFromProcedure({ dos, provider, procedures: validProcedures });
+                                            setShowAddProcedure(false);
+                                            setTab("INVOICE");
+                                        }}
+                                    >
+                                        Save & Create Invoice
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
             )}
 
             {showClaimComposeFor && (
