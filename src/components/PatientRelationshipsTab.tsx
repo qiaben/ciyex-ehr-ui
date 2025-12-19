@@ -151,24 +151,21 @@ export default function PatientRelationshipsTab({ patientId }: Props) {
       setSearchLoading(true);
       setShowSearchResults(true);
 
+      const params = new URLSearchParams();
+      params.set("page", "0");
+      params.set("size", "10");
+      params.set("search", query.trim());
+      params.set("sort", "id,asc");
+
       const response = await fetchWithAuth(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/patients/search?query=${encodeURIComponent(query)}&size=10`
+        `${process.env.NEXT_PUBLIC_API_URL}/api/patients?${params.toString()}`
       );
 
       const data = await response.json();
 
-      if (data.success) {
-        let patients = [];
-
-        // Handle different response structures
-        if (data.data?.content && Array.isArray(data.data.content)) {
-          patients = data.data.content;
-        } else if (Array.isArray(data.data)) {
-          patients = data.data;
-        } else if (data.content && Array.isArray(data.content)) {
-          patients = data.content;
-        }
-
+      if (data.success && data.data) {
+        const patients = data.data.content || [];
+        
         // Filter out current patient
         const filteredPatients = patients.filter(
           (p: PatientSearchResult) => p.id !== patientId
