@@ -481,7 +481,7 @@ export default function FHform({ patientId, encounterId, fhId, entries, editing,
                               value={notes}
                               onChange={(e) => setNotes(e.target.value)}
                               placeholder="Additional context"
-                              required />
+                               />
                 </div>
             </div>
 

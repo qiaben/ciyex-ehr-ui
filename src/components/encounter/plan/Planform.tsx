@@ -150,7 +150,6 @@ export default function PlanForm({ patientId, encounterId, editing, onSaved, onC
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Patient is compliant with meds."
-            required
           />
         </div>
 
