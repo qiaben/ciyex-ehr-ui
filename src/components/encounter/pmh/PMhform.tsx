@@ -71,13 +71,12 @@ export default function PMhform({ patientId, encounterId, editing, onSaved, onCa
 
     return (
         <form onSubmit={submit} className="space-y-3 rounded-2xl border p-4 shadow-sm bg-white">
-            <h3 className="text-lg font-semibold">{editing?.id ? "Edit History" : "Add History"}</h3>
+            <h3 className="text-lg font-semibold">{editing?.id ? "Edit History" : "Add History"}<span className="text-red-600"> *</span></h3>
             <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Enter medical history details"
                 className="w-full min-h-28 rounded-lg border px-3 py-2 focus:ring"
-                required
             />
             {err && <p className="text-sm text-red-600">{err}</p>}
             <div className="flex gap-2">

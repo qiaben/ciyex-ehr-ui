@@ -115,7 +115,6 @@ export default function Chiefcomplaintform({
                     onChange={(e) => setDetails(e.target.value)}
                     placeholder="Clinical details or context"
                     className="w-full min-h-28 rounded-lg border px-3 py-2 focus:ring"
-                    required
                 />
             </div>
 
