@@ -6,7 +6,7 @@ import PersonalInfo from "@/components/settings/provider-registration/PersonalIn
 import ProfessionalInfo from "@/components/settings/provider-registration/ProfessionalInfo";
 import { useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
-import Alert from "@/components/ui/alert/Alert"; // Import your Alert component
+import { Modal } from "@/components/ui/modal";
 
 interface ProviderRequestData {
     npi: string;
@@ -49,8 +49,9 @@ const ProviderRegistrationForm = () => {
         npiNumber: "",
     });
 
-    const [alertData, setAlertData] = useState<{
-        variant: "success" | "error" | "warning" | "info";
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const [showErrorModal, setShowErrorModal] = useState(false);
+    const [modalError, setModalError] = useState<{
         title: string;
         message: string;
     } | null>(null);
@@ -62,32 +63,56 @@ const ProviderRegistrationForm = () => {
     ) => {
         const { name, value } = e.target;
         setFormData({ ...formData, [name]: value });
+
+        // Clear error for this field when user starts typing
+        if (errors[name]) {
+            setErrors({ ...errors, [name]: "" });
+        }
     };
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL as string; //  ADD THIS LINE
 
-    const handleSubmit = async () => {
-        const requiredFields = [
-            (formData as any).firstName,
-            formData.lastName,
-            formData.dob,
-            formData.gender,
-            formData.phone,
-            formData.email,
-            formData.providerType,
-            formData.specialty,
-            formData.licenseNumber,
-            formData.licenseState,
-            formData.licenseExpiry,
-            formData.npiNumber,
-        ];
+    const validateFields = () => {
+        const newErrors: Record<string, string> = {};
 
-        if (requiredFields.some((field) => !field)) {
-            setAlertData({
-                variant: "warning",
-                title: "Missing Information",
-                message: "Please fill in all the fields.",
-            });
+        // Validate mandatory fields (all except dob and gender)
+        if (!formData.firstName?.trim()) {
+            newErrors.firstName = "Please fill out this field";
+        }
+        if (!formData.lastName?.trim()) {
+            newErrors.lastName = "Please fill out this field";
+        }
+        if (!formData.phone?.trim()) {
+            newErrors.phone = "Please fill out this field";
+        }
+        if (!formData.email?.trim()) {
+            newErrors.email = "Please fill out this field";
+        }
+        if (!formData.specialty?.trim()) {
+            newErrors.specialty = "Please fill out this field";
+        }
+        if (!formData.providerType?.trim()) {
+            newErrors.providerType = "Please fill out this field";
+        }
+        if (!formData.npiNumber?.trim()) {
+            newErrors.npiNumber = "Please fill out this field";
+        }
+        if (!formData.licenseNumber?.trim()) {
+            newErrors.licenseNumber = "Please fill out this field";
+        }
+        if (!formData.licenseState?.trim()) {
+            newErrors.licenseState = "Please fill out this field";
+        }
+        if (!formData.licenseExpiry) {
+            newErrors.licenseExpiry = "Please fill out this field";
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const handleSubmit = async () => {
+        if (!validateFields()) {
             return;
         }
 
@@ -119,11 +144,11 @@ const ProviderRegistrationForm = () => {
         // Quick check: ensure an auth token exists in local/session storage
         const token = typeof window !== "undefined" ? (localStorage.getItem("token") || localStorage.getItem("authToken") || sessionStorage.getItem("token")) : null;
         if (!token) {
-            setAlertData({
-                variant: "error",
+            setModalError({
                 title: "Not Signed In",
                 message: "You are not signed in. Please sign in and try again.",
             });
+            setShowErrorModal(true);
             return;
         }
 
@@ -142,38 +167,30 @@ const ProviderRegistrationForm = () => {
             }
 
             if (response.ok) {
-                setAlertData({
-                    variant: "success",
-                    title: "Success",
-                    message: "Provider created successfully!",
-                });
-
-                // Redirect to provider list so the newly created provider is visible
-                setTimeout(() => {
-                    router.push("/settings/providers");
-                }, 1200);
+                // Redirect to provider list immediately on success
+                router.push("/settings/providers");
             } else if (response.status === 401) {
                 // Unauthorized — surface clear message
                 console.error("Create provider unauthorized", { status: response.status, body: result });
-                setAlertData({
-                    variant: "error",
+                setModalError({
                     title: "Unauthorized",
                     message: "Your session has expired or you are not signed in. Please sign in and try again.",
                 });
+                setShowErrorModal(true);
             } else {
                 console.error("Create provider failed", { status: response.status, body: result });
-                setAlertData({
-                    variant: "error",
+                setModalError({
                     title: "Error",
                     message: (result && (result.message || result.error)) || `Save failed (status ${response.status})`,
                 });
+                setShowErrorModal(true);
             }
         } catch {
-            setAlertData({
-                variant: "error",
+            setModalError({
                 title: "Error",
                 message: "An error occurred while submitting the form.",
             });
+            setShowErrorModal(true);
         }
     };
 
@@ -183,26 +200,51 @@ const ProviderRegistrationForm = () => {
 
     return (
         <div>
-            {/* Show alert if exists */}
-            {alertData && (
-                <div className="mb-4">
-                    <Alert
-                        variant={alertData.variant}
-                        title={alertData.title}
-                        message={alertData.message}
-                    />
+            {/* Error Modal */}
+            <Modal
+                isOpen={showErrorModal}
+                onClose={() => setShowErrorModal(false)}
+                className="max-w-md mx-4"
+            >
+                <div className="p-6">
+                    <div className="flex items-center mb-4">
+                        <div className="flex-shrink-0">
+                            <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                            </svg>
+                        </div>
+                        <div className="ml-3">
+                            <h3 className="text-lg font-medium text-gray-900">
+                                {modalError?.title}
+                            </h3>
+                        </div>
+                    </div>
+                    <div className="mb-4">
+                        <p className="text-sm text-gray-700">
+                            {modalError?.message}
+                        </p>
+                    </div>
+                    <div className="flex justify-end">
+                        <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => setShowErrorModal(false)}
+                        >
+                            OK
+                        </Button>
+                    </div>
                 </div>
-            )}
+            </Modal>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white p-6 rounded shadow-md">
                     <h3 className="text-lg font-semibold mb-4">Personal Information</h3>
-                    <PersonalInfo formData={formData} handleChange={handleChange} errors={{}} />
+                    <PersonalInfo formData={formData} handleChange={handleChange} errors={errors} />
                 </div>
 
                 <div className="bg-white p-6 rounded shadow-md">
                     <h3 className="text-lg font-semibold mb-4">Professional Information</h3>
-                    <ProfessionalInfo formData={formData} handleChange={handleChange} errors={{}} />
+                    <ProfessionalInfo formData={formData} handleChange={handleChange} errors={errors} />
                 </div>
             </div>
 
