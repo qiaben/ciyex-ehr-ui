@@ -105,6 +105,8 @@ export default function Inventory() {
     const [criticalLowPercentage, setCriticalLowPercentage] = useState(10);
     const [lowStockAlerts, setLowStockAlerts] = useState(false);
     const [supplierOptions, setSupplierOptions] = useState<{ id: string; name: string }[]>([]);
+    const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+    const [showErrorPopup, setShowErrorPopup] = useState(false);
 
 
 
@@ -284,9 +286,49 @@ export default function Inventory() {
         });
     }, [inventory, query, status, type, expiry]);
 
+    // Validate mandatory fields
+    function validateForm(formData: FormData): boolean {
+        const errors: Record<string, string> = {};
+        
+        if (!formData.get("name")?.toString().trim()) {
+            errors.name = "Please fill out this field";
+        }
+        if (!formData.get("category")?.toString().trim()) {
+            errors.category = "Please fill out this field";
+        }
+        if (!formData.get("lot")?.toString().trim()) {
+            errors.lot = "Please fill out this field";
+        }
+        if (!formData.get("sku")?.toString().trim()) {
+            errors.sku = "Please fill out this field";
+        }
+        if (!formData.get("stock") || Number(formData.get("stock")) < 0) {
+            errors.stock = "Please fill out this field";
+        }
+        if (!formData.get("unit")?.toString().trim()) {
+            errors.unit = "Please fill out this field";
+        }
+        if (!formData.get("minStock") || Number(formData.get("minStock")) < 0) {
+            errors.minStock = "Please fill out this field";
+        }
+        if (!formData.get("location")?.toString().trim()) {
+            errors.location = "Please fill out this field";
+        }
+        if (!formData.get("supplier")?.toString().trim()) {
+            errors.supplier = "Please fill out this field";
+        }
+        
+        setValidationErrors(errors);
+        return Object.keys(errors).length === 0;
+    }
+
     async function addItem(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
         const form = new FormData(e.currentTarget);
+        
+        if (!validateForm(form)) {
+            return;
+        }
 
         const dto = {
             name: String(form.get("name") || "New Item"),
@@ -330,6 +372,7 @@ export default function Inventory() {
 
             setInventory(prev => [uiItem, ...prev]);
             setAddOpen(false);
+            setValidationErrors({});
 
             // ✅ Success alert
             setAlertData({
@@ -339,7 +382,7 @@ export default function Inventory() {
             });
         } catch (err) {
             console.error("Create inventory failed:", err);
-            // ✅ Error alert
+            setShowErrorPopup(true);
             setAlertData({
                 variant: "error",
                 title: "Error",
@@ -374,8 +417,7 @@ export default function Inventory() {
             });
         } catch (err) {
             console.error("Edit failed:", err);
-
-            // ✅ Error alert
+            setShowErrorPopup(true);
             setAlertData({
                 variant: "error",
                 title: "Error",
@@ -428,6 +470,7 @@ export default function Inventory() {
             });
         } catch (err) {
             console.error("Reorder failed:", err);
+            setShowErrorPopup(true);
             setAlertData({
                 variant: "error",
                 title: "Error",
@@ -460,8 +503,7 @@ export default function Inventory() {
             });
         } catch (err) {
             console.error("Delete failed:", err);
-
-            // ✅ Error alert
+            setShowErrorPopup(true);
             setAlertData({
                 variant: "error",
                 title: "Error",
@@ -539,7 +581,10 @@ export default function Inventory() {
                 </div>
                 <div>
                     <Button
-                        onClick={() => setAddOpen(true)}
+                        onClick={() => {
+                            setAddOpen(true);
+                            setValidationErrors({});
+                        }}
                         className="w-30 h-10 rounded-md bg-blue-600 text-white hover:bg-blue-700"
                     >
                         + Add Item
@@ -984,12 +1029,18 @@ export default function Inventory() {
                             <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 gap-6 sm:grid-cols-2 text-sm">
                                 <div>
                                     <div>
-                                        <Label>Supplier</Label>
+                                        <Label>Supplier <span className="text-red-500">*</span></Label>
                                         <select
                                             name="supplier"
                                             defaultValue=""
-                                            className="h-10 w-full rounded-md border px-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                            required
+                                            className={`h-10 w-full rounded-md border px-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
+                                                validationErrors.supplier ? 'border-red-500' : ''
+                                            }`}
+                                            onChange={() => {
+                                                if (validationErrors.supplier) {
+                                                    setValidationErrors(prev => ({ ...prev, supplier: '' }));
+                                                }
+                                            }}
                                         >
                                             <option value="" disabled>Select supplier</option>
                                             {supplierOptions.map(s => (
@@ -998,19 +1049,41 @@ export default function Inventory() {
                                                 </option>
                                             ))}
                                         </select>
+                                        {validationErrors.supplier && (
+                                            <p className="mt-1 text-xs text-red-500">{validationErrors.supplier}</p>
+                                        )}
                                     </div>
                                 </div>
                                 <div>
-                                    <Label>Name</Label>
-                                    <Input name="name" required className="h-10" />
+                                    <Label>Name <span className="text-red-500">*</span></Label>
+                                    <Input 
+                                        name="name" 
+                                        className={`h-10 ${
+                                            validationErrors.name ? 'border-red-500' : ''
+                                        }`}
+                                        onChange={() => {
+                                            if (validationErrors.name) {
+                                                setValidationErrors(prev => ({ ...prev, name: '' }));
+                                            }
+                                        }}
+                                    />
+                                    {validationErrors.name && (
+                                        <p className="mt-1 text-xs text-red-500">{validationErrors.name}</p>
+                                    )}
                                 </div>
                                 <div>
-                                    <Label>Category</Label>
+                                    <Label>Category <span className="text-red-500">*</span></Label>
                                     <select
                                         name="category"
                                         defaultValue={typeOptions.length > 0 ? typeOptions[0].label : ""}
-                                        className="h-10 w-full rounded-md border px-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                        required
+                                        className={`h-10 w-full rounded-md border px-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
+                                            validationErrors.category ? 'border-red-500' : ''
+                                        }`}
+                                        onChange={() => {
+                                            if (validationErrors.category) {
+                                                setValidationErrors(prev => ({ ...prev, category: '' }));
+                                            }
+                                        }}
                                     >
                                         {typeOptions.map(opt => (
                                             <option key={opt.id} value={opt.label}>
@@ -1018,10 +1091,27 @@ export default function Inventory() {
                                             </option>
                                         ))}
                                     </select>
+                                    {validationErrors.category && (
+                                        <p className="mt-1 text-xs text-red-500">{validationErrors.category}</p>
+                                    )}
                                 </div>
                                 <div>
-                                    <Label>Lot</Label>
-                                    <Input name="lot" placeholder="LOT- / SN-" className="h-10" />
+                                    <Label>Lot <span className="text-red-500">*</span></Label>
+                                    <Input 
+                                        name="lot" 
+                                        placeholder="LOT- / SN-" 
+                                        className={`h-10 ${
+                                            validationErrors.lot ? 'border-red-500' : ''
+                                        }`}
+                                        onChange={() => {
+                                            if (validationErrors.lot) {
+                                                setValidationErrors(prev => ({ ...prev, lot: '' }));
+                                            }
+                                        }}
+                                    />
+                                    {validationErrors.lot && (
+                                        <p className="mt-1 text-xs text-red-500">{validationErrors.lot}</p>
+                                    )}
                                 </div>
                                 <div>
                                     <Label>Expiry</Label>
@@ -1040,24 +1130,95 @@ export default function Inventory() {
                                     />
                                 </div>
                                 <div>
-                                    <Label>SKU</Label>
-                                    <Input name="sku" required className="h-10" />
+                                    <Label>SKU <span className="text-red-500">*</span></Label>
+                                    <Input 
+                                        name="sku" 
+                                        className={`h-10 ${
+                                            validationErrors.sku ? 'border-red-500' : ''
+                                        }`}
+                                        onChange={() => {
+                                            if (validationErrors.sku) {
+                                                setValidationErrors(prev => ({ ...prev, sku: '' }));
+                                            }
+                                        }}
+                                    />
+                                    {validationErrors.sku && (
+                                        <p className="mt-1 text-xs text-red-500">{validationErrors.sku}</p>
+                                    )}
                                 </div>
                                 <div>
-                                    <Label>Unit</Label>
-                                    <Input name="unit" placeholder="pcs / box / pair" required className="h-10" />
+                                    <Label>Unit <span className="text-red-500">*</span></Label>
+                                    <Input 
+                                        name="unit" 
+                                        placeholder="pcs / box / pair" 
+                                        className={`h-10 ${
+                                            validationErrors.unit ? 'border-red-500' : ''
+                                        }`}
+                                        onChange={() => {
+                                            if (validationErrors.unit) {
+                                                setValidationErrors(prev => ({ ...prev, unit: '' }));
+                                            }
+                                        }}
+                                    />
+                                    {validationErrors.unit && (
+                                        <p className="mt-1 text-xs text-red-500">{validationErrors.unit}</p>
+                                    )}
                                 </div>
                                 <div>
-                                    <Label>On Hand</Label>
-                                    <Input name="stock" type="number" min={0} required className="h-10" />
+                                    <Label>On Hand <span className="text-red-500">*</span></Label>
+                                    <Input 
+                                        name="stock" 
+                                        type="number" 
+                                        min={0} 
+                                        className={`h-10 ${
+                                            validationErrors.stock ? 'border-red-500' : ''
+                                        }`}
+                                        onChange={() => {
+                                            if (validationErrors.stock) {
+                                                setValidationErrors(prev => ({ ...prev, stock: '' }));
+                                            }
+                                        }}
+                                    />
+                                    {validationErrors.stock && (
+                                        <p className="mt-1 text-xs text-red-500">{validationErrors.stock}</p>
+                                    )}
                                 </div>
                                 <div>
-                                    <Label>Min. Required</Label>
-                                    <Input name="minStock" type="number" min={0} required className="h-10" />
+                                    <Label>Min. Required <span className="text-red-500">*</span></Label>
+                                    <Input 
+                                        name="minStock" 
+                                        type="number" 
+                                        min={0} 
+                                        className={`h-10 ${
+                                            validationErrors.minStock ? 'border-red-500' : ''
+                                        }`}
+                                        onChange={() => {
+                                            if (validationErrors.minStock) {
+                                                setValidationErrors(prev => ({ ...prev, minStock: '' }));
+                                            }
+                                        }}
+                                    />
+                                    {validationErrors.minStock && (
+                                        <p className="mt-1 text-xs text-red-500">{validationErrors.minStock}</p>
+                                    )}
                                 </div>
                                 <div>
-                                    <Label>Clinic</Label>
-                                    <Input name="location" placeholder="Main" className="h-10" />
+                                    <Label>Clinic <span className="text-red-500">*</span></Label>
+                                    <Input 
+                                        name="location" 
+                                        placeholder="Main" 
+                                        className={`h-10 ${
+                                            validationErrors.location ? 'border-red-500' : ''
+                                        }`}
+                                        onChange={() => {
+                                            if (validationErrors.location) {
+                                                setValidationErrors(prev => ({ ...prev, location: '' }));
+                                            }
+                                        }}
+                                    />
+                                    {validationErrors.location && (
+                                        <p className="mt-1 text-xs text-red-500">{validationErrors.location}</p>
+                                    )}
                                 </div>
                                 <div>
                                     <Label>Status</Label>
@@ -1074,7 +1235,10 @@ export default function Inventory() {
 
                             {/* Footer */}
                             <div className="flex justify-end gap-3 px-6 py-4 border-t dark:border-gray-700">
-                                <Button type="button" onClick={() => setAddOpen(false)}>
+                                <Button type="button" onClick={() => {
+                                    setAddOpen(false);
+                                    setValidationErrors({});
+                                }}>
                                     Cancel
                                 </Button>
                                 <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-700">
@@ -1086,6 +1250,36 @@ export default function Inventory() {
                 </div>
             )}
 
+
+            {/* Error Popup */}
+            {showErrorPopup && alertData && alertData.variant === "error" && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+                    <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+                        <div className="flex items-center gap-3">
+                            <div className="flex-shrink-0">
+                                <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-semibold text-gray-900">{alertData.title}</h4>
+                                <p className="mt-1 text-sm text-gray-600">{alertData.message}</p>
+                            </div>
+                        </div>
+                        <div className="mt-4 flex justify-end">
+                            <button
+                                className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+                                onClick={() => {
+                                    setShowErrorPopup(false);
+                                    setAlertData(null);
+                                }}
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div>
             </div>

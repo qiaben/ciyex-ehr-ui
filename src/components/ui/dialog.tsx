@@ -10,7 +10,7 @@ interface DialogProps {
 export function Dialog({ open, onOpenChange, children }: DialogProps) {
     if (!open) return null;
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
             <div
                 className="fixed inset-0 bg-black/50"
                 onClick={() => onOpenChange(false)}
@@ -33,7 +33,7 @@ export function DialogContent({
 }) {
     return (
         <div
-            className={`relative z-50 w-full max-w-lg rounded-lg border bg-white p-6 shadow-lg dark:bg-gray-800 ${className}`}
+            className={`relative z-[9999] w-full max-w-lg rounded-lg border bg-white p-6 shadow-lg dark:bg-gray-800 ${className}`}
         >
             {children}
             {showCloseButton && (

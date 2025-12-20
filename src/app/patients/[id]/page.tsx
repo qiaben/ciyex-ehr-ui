@@ -1292,7 +1292,7 @@ export default function PatientDashboardPage() {
             <div className="pageScroll bg-gray-50">
                 <div
                     ref={tabsHeaderRef}
-                    className="sticky top-0 z-50 border-b border-gray-200 bg-white/95 backdrop-blur px-3 py-1.5"
+                    className="sticky top-0 z-10 border-b border-gray-200 bg-white/95 backdrop-blur px-3 py-1.5"
                 >
                     <div className="flex items-center justify-between gap-3 min-w-0">
                         <div className="flex items-center gap-3 min-w-0">
