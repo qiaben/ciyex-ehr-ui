@@ -115,6 +115,8 @@ export default function ImmunizationsFlat({ patientId, orgId }: Props) {
     const [form, setForm] = useState<ImmunizationItem>(() => createEmptyForm());
     const [submitting, setSubmitting] = useState(false);
     const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+    const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+    const [showErrorPopup, setShowErrorPopup] = useState(false);
 
     // Helpers
     const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
@@ -150,6 +152,8 @@ export default function ImmunizationsFlat({ patientId, orgId }: Props) {
     function openAdd() {
         setIsEdit(false);
         setForm(createEmptyForm());
+        setValidationErrors({});
+        setErr(null);
         setIsOpen(true);
     }
 
@@ -157,15 +161,47 @@ export default function ImmunizationsFlat({ patientId, orgId }: Props) {
     function openEdit(row: ImmunizationItem) {
         setIsEdit(true);
         setForm({ ...row });
+        setValidationErrors({});
+        setErr(null);
         setIsOpen(true);
+    }
+
+    // Validate mandatory fields
+    function validateForm(): boolean {
+        const errors: Record<string, string> = {};
+        
+        if (!form.cvxCode?.trim()) {
+            errors.cvxCode = "Please fill out this field";
+        }
+        if (!form.dateTimeAdministered?.trim()) {
+            errors.dateTimeAdministered = "Please fill out this field";
+        }
+        if (!form.manufacturer?.trim()) {
+            errors.manufacturer = "Please fill out this field";
+        }
+        if (!form.administratorName?.trim()) {
+            errors.administratorName = "Please fill out this field";
+        }
+        if (!form.amountAdministered?.trim()) {
+            errors.amountAdministered = "Please fill out this field";
+        }
+        
+        setValidationErrors(errors);
+        return Object.keys(errors).length === 0;
     }
 
     // Save (create or update)
     async function onSubmit(e: React.FormEvent) {
         e.preventDefault();
         if (submitting) return;
+        
+        if (!validateForm()) {
+            return;
+        }
+        
         setSubmitting(true);
         setErr(null);
+        setShowErrorPopup(false);
 
         try {
             if (isEdit && form.id) {
@@ -207,9 +243,11 @@ export default function ImmunizationsFlat({ patientId, orgId }: Props) {
             }
             setIsOpen(false);
             setForm(createEmptyForm());
+            setValidationErrors({});
             await load();
         } catch (e: any) {
             setErr(e.message || "Save failed");
+            setShowErrorPopup(true);
         } finally {
             setSubmitting(false);
         }
@@ -332,25 +370,34 @@ export default function ImmunizationsFlat({ patientId, orgId }: Props) {
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                     <div>
                                         <label className="mb-1 block text-xs font-medium text-gray-700">
-                                            CVX Code *
+                                            CVX Code <span className="text-red-500">*</span>
                                         </label>
                                         <input
-                                            className="w-full rounded-md border px-3 py-2 text-sm"
+                                            className={`w-full rounded-md border px-3 py-2 text-sm ${
+                                                validationErrors.cvxCode ? 'border-red-500' : ''
+                                            }`}
                                             placeholder="e.g. 207"
                                             value={form.cvxCode || ""}
-                                            onChange={(e) =>
-                                                setForm((p) => ({ ...p, cvxCode: e.target.value }))
-                                            }
-                                            required
+                                            onChange={(e) => {
+                                                setForm((p) => ({ ...p, cvxCode: e.target.value }));
+                                                if (validationErrors.cvxCode) {
+                                                    setValidationErrors(prev => ({ ...prev, cvxCode: '' }));
+                                                }
+                                            }}
                                         />
+                                        {validationErrors.cvxCode && (
+                                            <p className="mt-1 text-xs text-red-500">{validationErrors.cvxCode}</p>
+                                        )}
                                     </div>
                                     <div>
                                         <label className="mb-1 block text-xs font-medium text-gray-700">
-                                            Date/Time Administered *
+                                            Date/Time Administered <span className="text-red-500">*</span>
                                         </label>
                                         <input
                                             type="datetime-local"
-                                            className="w-full rounded-md border px-3 py-2 text-sm"
+                                            className={`w-full rounded-md border px-3 py-2 text-sm ${
+                                                validationErrors.dateTimeAdministered ? 'border-red-500' : ''
+                                            }`}
                                             value={
                                                 form.dateTimeAdministered
                                                     ? new Date(form.dateTimeAdministered)
@@ -358,16 +405,21 @@ export default function ImmunizationsFlat({ patientId, orgId }: Props) {
                                                         .slice(0, 16)
                                                     : ""
                                             }
-                                            onChange={(e) =>
+                                            onChange={(e) => {
                                                 setForm((p) => ({
                                                     ...p,
                                                     dateTimeAdministered: new Date(
                                                         e.target.value
                                                     ).toISOString(),
-                                                }))
-                                            }
-                                            required
+                                                }));
+                                                if (validationErrors.dateTimeAdministered) {
+                                                    setValidationErrors(prev => ({ ...prev, dateTimeAdministered: '' }));
+                                                }
+                                            }}
                                         />
+                                        {validationErrors.dateTimeAdministered && (
+                                            <p className="mt-1 text-xs text-red-500">{validationErrors.dateTimeAdministered}</p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -375,16 +427,24 @@ export default function ImmunizationsFlat({ patientId, orgId }: Props) {
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                     <div>
                                         <label className="mb-1 block text-xs font-medium text-gray-700">
-                                            Manufacturer
+                                            Manufacturer <span className="text-red-500">*</span>
                                         </label>
                                         <input
-                                            className="w-full rounded-md border px-3 py-2 text-sm"
+                                            className={`w-full rounded-md border px-3 py-2 text-sm ${
+                                                validationErrors.manufacturer ? 'border-red-500' : ''
+                                            }`}
                                             value={form.manufacturer || ""}
-                                            onChange={(e) =>
-                                                setForm((p) => ({ ...p, manufacturer: e.target.value }))
-                                            }
+                                            onChange={(e) => {
+                                                setForm((p) => ({ ...p, manufacturer: e.target.value }));
+                                                if (validationErrors.manufacturer) {
+                                                    setValidationErrors(prev => ({ ...prev, manufacturer: '' }));
+                                                }
+                                            }}
                                             placeholder="Pfizer, Moderna…"
                                         />
+                                        {validationErrors.manufacturer && (
+                                            <p className="mt-1 text-xs text-red-500">{validationErrors.manufacturer}</p>
+                                        )}
                                     </div>
                                     <div>
                                         <label className="mb-1 block text-xs font-medium text-gray-700">
@@ -429,6 +489,56 @@ export default function ImmunizationsFlat({ patientId, orgId }: Props) {
                                                 }))
                                             }
                                         />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label className="mb-1 block text-xs font-medium text-gray-700">
+                                            Administrator Name <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            className={`w-full rounded-md border px-3 py-2 text-sm ${
+                                                validationErrors.administratorName ? 'border-red-500' : ''
+                                            }`}
+                                            value={form.administratorName || ""}
+                                            onChange={(e) => {
+                                                setForm((p) => ({
+                                                    ...p,
+                                                    administratorName: e.target.value,
+                                                }));
+                                                if (validationErrors.administratorName) {
+                                                    setValidationErrors(prev => ({ ...prev, administratorName: '' }));
+                                                }
+                                            }}
+                                        />
+                                        {validationErrors.administratorName && (
+                                            <p className="mt-1 text-xs text-red-500">{validationErrors.administratorName}</p>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-xs font-medium text-gray-700">
+                                            Amount Administered <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            className={`w-full rounded-md border px-3 py-2 text-sm ${
+                                                validationErrors.amountAdministered ? 'border-red-500' : ''
+                                            }`}
+                                            value={form.amountAdministered || ""}
+                                            onChange={(e) => {
+                                                setForm((p) => ({
+                                                    ...p,
+                                                    amountAdministered: e.target.value,
+                                                }));
+                                                if (validationErrors.amountAdministered) {
+                                                    setValidationErrors(prev => ({ ...prev, amountAdministered: '' }));
+                                                }
+                                            }}
+                                            placeholder="e.g. 0.5 mL"
+                                        />
+                                        {validationErrors.amountAdministered && (
+                                            <p className="mt-1 text-xs text-red-500">{validationErrors.amountAdministered}</p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -486,22 +596,7 @@ export default function ImmunizationsFlat({ patientId, orgId }: Props) {
                                         More fields (optional)
                                     </summary>
                                     <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                                        <div>
-                                            <label className="mb-1 block text-xs font-medium text-gray-700">
-                                                Amount Administered
-                                            </label>
-                                            <input
-                                                className="w-full rounded-md border px-3 py-2 text-sm"
-                                                value={form.amountAdministered || ""}
-                                                onChange={(e) =>
-                                                    setForm((p) => ({
-                                                        ...p,
-                                                        amountAdministered: e.target.value,
-                                                    }))
-                                                }
-                                                placeholder="e.g. 0.5 mL"
-                                            />
-                                        </div>
+
                                         <div>
                                             <label className="mb-1 block text-xs font-medium text-gray-700">
                                                 Expiration Date
@@ -547,21 +642,7 @@ export default function ImmunizationsFlat({ patientId, orgId }: Props) {
                                                 }
                                             />
                                         </div>
-                                        <div>
-                                            <label className="mb-1 block text-xs font-medium text-gray-700">
-                                                Administrator Name
-                                            </label>
-                                            <input
-                                                className="w-full rounded-md border px-3 py-2 text-sm"
-                                                value={form.administratorName || ""}
-                                                onChange={(e) =>
-                                                    setForm((p) => ({
-                                                        ...p,
-                                                        administratorName: e.target.value,
-                                                    }))
-                                                }
-                                            />
-                                        </div>
+
                                         <div>
                                             <label className="mb-1 block text-xs font-medium text-gray-700">
                                                 Administrator Title
@@ -631,6 +712,8 @@ export default function ImmunizationsFlat({ patientId, orgId }: Props) {
                                 onClick={() => {
                                     setIsOpen(false);
                                     setForm(createEmptyForm());
+                                    setValidationErrors({});
+                                    setErr(null);
                                 }}
                                 className="rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50"
                                 disabled={submitting}
@@ -670,6 +753,36 @@ export default function ImmunizationsFlat({ patientId, orgId }: Props) {
                                 onClick={onDeleteConfirmed}
                             >
                                 Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Error Popup */}
+            {showErrorPopup && err && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+                    <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+                        <div className="flex items-center gap-3">
+                            <div className="flex-shrink-0">
+                                <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-semibold text-gray-900">Error</h4>
+                                <p className="mt-1 text-sm text-gray-600">{err}</p>
+                            </div>
+                        </div>
+                        <div className="mt-4 flex justify-end">
+                            <button
+                                className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+                                onClick={() => {
+                                    setShowErrorPopup(false);
+                                    setErr(null);
+                                }}
+                            >
+                                OK
                             </button>
                         </div>
                     </div>
