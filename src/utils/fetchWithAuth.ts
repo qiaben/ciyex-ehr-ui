@@ -30,7 +30,10 @@ export async function fetchWithAuth(
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(input, {
+  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+  const url = typeof input === 'string' && input.startsWith('/') ? `${base}${input}` : input;
+
+  const res = await fetch(url, {
     credentials: init?.credentials ?? "include",
     ...init,
     headers,
@@ -38,7 +41,7 @@ export async function fetchWithAuth(
 
   if (res.status === 401) {
     console.warn("⚠️ 401 Unauthorized - Token expired, redirecting to sign-in:", input);
-    
+
     // Clear all auth data
     if (typeof window !== "undefined") {
       localStorage.removeItem("token");
@@ -55,7 +58,7 @@ export async function fetchWithAuth(
       localStorage.removeItem("primaryGroup");
       localStorage.removeItem("selectedTenant");
       sessionStorage.removeItem("token");
-      
+
       // Redirect to sign-in page
       window.location.href = "/signin";
     }
