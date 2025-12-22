@@ -179,7 +179,7 @@ export default function AssignedProviderform({ patientId, encounterId, editing, 
             <h3 className="text-lg font-semibold">{editing?.id ? "Edit Assignment" : "Assign Provider"}</h3>
 
             <div>
-                <label className="block text-sm font-medium mb-1">Provider</label>
+                <label className="block text-sm font-medium mb-1">Provider <span className="text-red-600">*</span></label>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="md:col-span-2">
                         <select

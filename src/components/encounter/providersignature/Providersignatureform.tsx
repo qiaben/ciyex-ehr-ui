@@ -388,7 +388,7 @@ export default function Providersignatureform({
     return (
         <div className="rounded-2xl border p-4 shadow-sm bg-white space-y-3">
             <div>
-                <label className="block text-sm font-medium mb-1">Provider</label>
+                <label className="block text-sm font-medium mb-1">Provider<span className="text-red-600">*</span></label>
                 <select
                     className="w-full rounded-lg border px-3 py-2 focus:ring"
                     value={providerId}
@@ -450,7 +450,7 @@ export default function Providersignatureform({
             </div>
 
             <div>
-                <label className="block text-sm font-medium mb-1">Comments <span className="text-red-600">*</span></label>
+                <label className="block text-sm font-medium mb-1">Comments </label>
                 <textarea
                     className="w-full rounded-lg border px-3 py-2 min-h-20"
                     value={comments}

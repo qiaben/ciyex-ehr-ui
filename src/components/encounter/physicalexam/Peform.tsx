@@ -279,7 +279,7 @@ export default function Peform({ patientId, encounterId, editing, onSaved, onCan
 
                         <div className="space-y-3">
                             <div>
-                                <label className="block text-sm font-medium mb-1">Normal</label>
+                                <label className="block text-sm font-medium mb-1">Normal <span className="text-red-600">*</span></label>
                                 <textarea
                                     className="w-full rounded-lg border px-3 py-2 focus:ring min-h-20 disabled:bg-gray-50 disabled:text-gray-700"
                                     value={sec.normalText || ""}
@@ -289,7 +289,7 @@ export default function Peform({ patientId, encounterId, editing, onSaved, onCan
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium mb-1">Findings</label>
+                                <label className="block text-sm font-medium mb-1">Findings <span className="text-red-600">*</span></label>
                                 <textarea
                                     className="w-full rounded-lg border px-3 py-2 focus:ring min-h-20"
                                     value={sec.findings || ""}

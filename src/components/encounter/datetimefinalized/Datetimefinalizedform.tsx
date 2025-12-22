@@ -242,7 +242,7 @@ export default function Datetimefinalizedform({ patientId, encounterId, editing,
             <h3 className="text-lg font-semibold">{editing?.id ? "Edit Finalization Timestamp" : "Add Finalization Timestamp"}</h3>
 
             <div>
-                <label className="block text-sm font-medium mb-1">Provider</label>
+                <label className="block text-sm font-medium mb-1">Provider <span className="text-red-600">*</span></label>
                 <select
                     className="w-full rounded-lg border px-3 py-2 focus:ring"
                     value={providerId}
