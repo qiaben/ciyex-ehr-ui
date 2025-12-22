@@ -104,6 +104,16 @@ interface PhysicalExam {
     sections?: PhysicalExamSection[];
 }
 
+interface CodeItem {
+    cpt4?: string;
+    description?: string;
+    units?: number;
+    rate?: number;
+    relatedIcds?: string;
+    modifier1?: string;
+    note?: string;
+}
+
 interface Procedure {
     id?: number;
     cpt4?: string;
@@ -112,6 +122,7 @@ interface Procedure {
     units?: number;
     rate?: number;
     relatedIcds?: string;
+    codeItems?: CodeItem[];
 }
 
 interface Code {
@@ -746,16 +757,34 @@ const downloadPdf = useCallback(async () => {
                 {/* Procedures */}
                 {procedures?.length ? (
                     <Section title="Procedures">
-                        <ul className="text-sm text-gray-800 space-y-1">
+                        <div className="space-y-3">
                             {procedures.map((p, i) => (
-                                <li key={p?.id ?? i}>
-                                    {p?.cpt4 ? `${p.cpt4} · ${p?.description || ""}` : (p?.procedureName || "Procedure")}
-                                    {typeof p?.units === "number" ? ` · Units: ${p.units}` : ""}
-                                    {p?.rate ? ` · $${p.rate}` : ""}
-                                    {p?.relatedIcds ? ` · ICDs: ${p.relatedIcds}` : ""}
-                                </li>
+                                <div key={p?.id ?? i}>
+                                    {p?.codeItems?.length ? (
+                                        <ul className="text-sm text-gray-800 space-y-1">
+                                            {p.codeItems.map((item, j) => (
+                                                <li key={j}>
+                                                    {item?.cpt4 ? <b>{item.cpt4}</b> : ""}
+                                                    {item?.description ? ` · ${item.description}` : ""}
+                                                    {typeof item?.units === "number" ? ` · Units: ${item.units}` : ""}
+                                                    {item?.rate ? ` · $${item.rate}` : ""}
+                                                    {item?.relatedIcds ? ` · ICDs: ${item.relatedIcds}` : ""}
+                                                    {item?.modifier1 ? ` · Modifier: ${item.modifier1}` : ""}
+                                                    {item?.note ? <div className="text-xs text-gray-600 ml-4">Note: {item.note}</div> : null}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <div className="text-sm text-gray-800">
+                                            {p?.cpt4 ? `${p.cpt4} · ${p?.description || ""}` : (p?.procedureName || "Procedure")}
+                                            {typeof p?.units === "number" ? ` · Units: ${p.units}` : ""}
+                                            {p?.rate ? ` · $${p.rate}` : ""}
+                                            {p?.relatedIcds ? ` · ICDs: ${p.relatedIcds}` : ""}
+                                        </div>
+                                    )}
+                                </div>
                             ))}
-                        </ul>
+                        </div>
                     </Section>
                 ) : null}
 

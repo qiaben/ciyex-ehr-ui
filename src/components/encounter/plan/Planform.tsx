@@ -174,7 +174,7 @@ export default function PlanForm({ patientId, encounterId, editing, onSaved, onC
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Section 1</label>
+          <label className="block text-sm font-medium mb-1">Section 1<span className="text-red-600">*</span></label>
           <input
             className="w-full rounded-lg border px-3 py-2 focus:ring"
             value={section1}
@@ -184,7 +184,7 @@ export default function PlanForm({ patientId, encounterId, editing, onSaved, onC
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Section 2</label>
+          <label className="block text-sm font-medium mb-1">Section 2<span className="text-red-600">*</span></label>
           <input
             className="w-full rounded-lg border px-3 py-2 focus:ring"
             value={section2}

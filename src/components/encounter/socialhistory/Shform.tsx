@@ -544,7 +544,7 @@ finally {
                               value={details}
                               onChange={(e) => setDetails(e.target.value)}
                               placeholder='e.g., "Quit in 2023" or "Mostly plant-based, occasional dairy"'
-                              required />
+                              />
                 </div>
             </div>
 

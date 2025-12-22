@@ -434,15 +434,23 @@ export default function Procedurelist({ patientId, encounterId }: Props) {
 
     useEffect(() => { load(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [patientId, encounterId]);
 
-    function onSaved(saved: ExtendedProcedureDto) {
+    function onSaved(saved: ExtendedProcedureDto | ExtendedProcedureDto[]) {
         setShowForm(false);
         setEditing(null);
-        setItems((prev) => {
-            const i = prev.findIndex((x) => x.id === saved.id);
-            if (i >= 0) { const copy = [...prev]; copy[i] = saved; return copy; }
-            return [saved, ...prev];
-        });
-        setAlert({ type: "success", msg: "Procedure saved." });
+        
+        if (Array.isArray(saved)) {
+            // Multiple procedures created
+            setItems((prev) => [...saved, ...prev]);
+            setAlert({ type: "success", msg: `${saved.length} procedures saved.` });
+        } else {
+            // Single procedure created or updated
+            setItems((prev) => {
+                const i = prev.findIndex((x) => x.id === saved.id);
+                if (i >= 0) { const copy = [...prev]; copy[i] = saved; return copy; }
+                return [saved, ...prev];
+            });
+            setAlert({ type: "success", msg: "Procedure saved." });
+        }
         setTimeout(() => setAlert(null), 3000);
     }
 
@@ -641,55 +649,76 @@ export default function Procedurelist({ patientId, encounterId }: Props) {
                     <li key={p.id} className="rounded-2xl border p-4 bg-white shadow-sm">
                         <div className="flex items-start justify-between gap-4">
                             <div className="space-y-1">
-                                <p className="font-medium text-gray-900">
-                                    {/* Current billing-style display */}
-                                    {p.cpt4 ? `${p.cpt4} · ${p.description}` : p.procedureName || "Procedure"}
-                                    {typeof p.units === "number" ? ` · Units: ${p.units}` : ""}
-                                    {p.rate ? ` · $${p.rate}` : ""}
-                                    {/* Legacy status if present */}
-                                    {p.status ? ` · ${p.status}` : ""}
-                                </p>
+                                {/* Display codeItems if available */}
+                                {(p as any).codeItems && Array.isArray((p as any).codeItems) && (p as any).codeItems.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {(p as any).codeItems.map((item: any, idx: number) => (
+                                            <div key={idx} className="border-l-2 border-indigo-500 pl-3">
+                                                <p className="font-medium text-gray-900">
+                                                    {item.cpt4} · {item.description}
+                                                    {typeof item.units === "number" ? ` · Units: ${item.units}` : ""}
+                                                    {item.rate ? ` · $${item.rate}` : ""}
+                                                </p>
+                                                {item.relatedIcds && (
+                                                    <p className="text-sm text-gray-700">ICDs: {item.relatedIcds}</p>
+                                                )}
+                                                {item.modifier1 && (
+                                                    <p className="text-sm text-gray-700">Modifier: {item.modifier1}</p>
+                                                )}
+                                                {item.note && <p className="text-sm text-gray-600">{item.note}</p>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <>
+                                        <p className="font-medium text-gray-900">
+                                            {p.cpt4 ? `${p.cpt4} · ${p.description}` : p.procedureName || "Procedure"}
+                                            {typeof p.units === "number" ? ` · Units: ${p.units}` : ""}
+                                            {p.rate ? ` · $${p.rate}` : ""}
+                                            {p.status ? ` · ${p.status}` : ""}
+                                        </p>
 
-                                {p.relatedIcds && (
-                                    <p className="text-sm text-gray-700">ICDs: {p.relatedIcds}</p>
-                                )}
+                                        {p.relatedIcds && (
+                                            <p className="text-sm text-gray-700">ICDs: {p.relatedIcds}</p>
+                                        )}
 
-                                {(p.hospitalBillingStart || p.hospitalBillingEnd) && (
-                                    <p className="text-sm text-gray-700">
-                                        {p.hospitalBillingStart ? `HB Start: ${p.hospitalBillingStart}` : ""}
-                                        {p.hospitalBillingEnd ? ` · HB End: ${p.hospitalBillingEnd}` : ""}
-                                    </p>
-                                )}
+                                        {(p.hospitalBillingStart || p.hospitalBillingEnd) && (
+                                            <p className="text-sm text-gray-700">
+                                                {p.hospitalBillingStart ? `HB Start: ${p.hospitalBillingStart}` : ""}
+                                                {p.hospitalBillingEnd ? ` · HB End: ${p.hospitalBillingEnd}` : ""}
+                                            </p>
+                                        )}
 
-                                {(p.modifier1 || p.modifier2 || p.modifier3 || p.modifier4) && (
-                                    <p className="text-sm text-gray-700">
-                                        Modifiers:
-                                        {p.modifier1 ? ` ${p.modifier1}` : ""}
-                                        {p.modifier2 ? `, ${p.modifier2}` : ""}
-                                        {p.modifier3 ? `, ${p.modifier3}` : ""}
-                                        {p.modifier4 ? `, ${p.modifier4}` : ""}
-                                    </p>
-                                )}
+                                        {(p.modifier1 || p.modifier2 || p.modifier3 || p.modifier4) && (
+                                            <p className="text-sm text-gray-700">
+                                                Modifiers:
+                                                {p.modifier1 ? ` ${p.modifier1}` : ""}
+                                                {p.modifier2 ? `, ${p.modifier2}` : ""}
+                                                {p.modifier3 ? `, ${p.modifier3}` : ""}
+                                                {p.modifier4 ? `, ${p.modifier4}` : ""}
+                                            </p>
+                                        )}
 
-                                {/* Legacy clinical display if present */}
-                                {(p.datePerformed || p.performer) && (
-                                    <p className="text-sm text-gray-700">
-                                        {p.datePerformed ? `Date: ${p.datePerformed}` : ""}
-                                        {p.performer ? ` · Performer: ${p.performer}` : ""}
-                                    </p>
-                                )}
-                                {(p.bodySite || p.laterality || p.modifiers || p.anesthesia) && (
-                                    <p className="text-sm text-gray-700">
-                                        {p.bodySite ? `Site: ${p.bodySite}` : ""}
-                                        {p.laterality ? ` · ${p.laterality}` : ""}
-                                        {p.modifiers ? ` · Mod: ${p.modifiers}` : ""}
-                                        {p.anesthesia ? ` · Anes: ${p.anesthesia}` : ""}
-                                    </p>
-                                )}
+                                        {(p.datePerformed || p.performer) && (
+                                            <p className="text-sm text-gray-700">
+                                                {p.datePerformed ? `Date: ${p.datePerformed}` : ""}
+                                                {p.performer ? ` · Performer: ${p.performer}` : ""}
+                                            </p>
+                                        )}
+                                        {(p.bodySite || p.laterality || p.modifiers || p.anesthesia) && (
+                                            <p className="text-sm text-gray-700">
+                                                {p.bodySite ? `Site: ${p.bodySite}` : ""}
+                                                {p.laterality ? ` · ${p.laterality}` : ""}
+                                                {p.modifiers ? ` · Mod: ${p.modifiers}` : ""}
+                                                {p.anesthesia ? ` · Anes: ${p.anesthesia}` : ""}
+                                            </p>
+                                        )}
 
-                                {p.note && <p className="text-gray-800 whitespace-pre-wrap">{p.note}</p>}
-                                {p.notes && !p.note && (
-                                    <p className="text-gray-800 whitespace-pre-wrap">{p.notes}</p>
+                                        {p.note && <p className="text-gray-800 whitespace-pre-wrap">{p.note}</p>}
+                                        {p.notes && !p.note && (
+                                            <p className="text-gray-800 whitespace-pre-wrap">{p.notes}</p>
+                                        )}
+                                    </>
                                 )}
 
                                 <p className="text-xs text-gray-500">
