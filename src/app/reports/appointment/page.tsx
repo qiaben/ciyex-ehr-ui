@@ -159,13 +159,8 @@ export default function AppointmentReportPage() {
         size: pageSize.toString(),
         sort: 'id,asc'
       });
-      if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter);
-      if (from) params.set('startDate', from);
-      if (to) params.set('endDate', to);
-      if (provider !== 'All Providers') params.set('providerId', provider);
-      if (location !== 'All Locations') params.set('locationId', location);
-      if (search) params.set('search', search);
-
+      // Only send basic pagination to API
+      
       const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/appointments?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch appointments');
       const data = await res.json();
@@ -200,18 +195,47 @@ export default function AppointmentReportPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, currentPage, pageSize, from, to, provider, location, search]);
+  }, [currentPage, pageSize]);
 
   useEffect(() => { loadAppointments(); }, [loadAppointments]);
 
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(0);
-  }, [from, to, provider, location, search, statusFilter]);
+  }, [search, statusFilter, from, to, provider, location]);
 
   const filtered = useMemo(() => {
-    return Array.isArray(rows) ? rows : [];
-  }, [rows]);
+    if (!Array.isArray(rows)) return [];
+
+    return rows.filter(a => {
+      // Search filter
+      const searchMatch = !search || 
+        (patientNames.get(a.patientId) || '').toLowerCase().includes(search.toLowerCase()) ||
+        String(a.id).includes(search) ||
+        String(a.patientId).includes(search);
+
+      // Date range filter
+      const appointmentDate = new Date(a.appointmentStartDate);
+      const fromDate = from ? new Date(from) : null;
+      const toDate = to ? new Date(to + 'T23:59:59') : null;
+      const dateMatch = (!fromDate || appointmentDate >= fromDate) && 
+                       (!toDate || appointmentDate <= toDate);
+
+      // Provider filter
+      const providerMatch = provider === 'All Providers' || 
+                           String(a.providerId) === provider;
+
+      // Location filter
+      const locationMatch = location === 'All Locations' || 
+                           String(a.locationId) === location;
+
+      // Status filter
+      const statusMatch = statusFilter === 'all' || 
+                         a.status.toLowerCase() === statusFilter.toLowerCase();
+
+      return searchMatch && dateMatch && providerMatch && locationMatch && statusMatch;
+    }).sort((a, b) => a.id - b.id);
+  }, [rows, search, from, to, provider, location, statusFilter, patientNames]);
 
   const applyFilters = () => {
     setVisibleColumns(draftVisibleColumns);
