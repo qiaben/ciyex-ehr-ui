@@ -57,6 +57,7 @@ export default function AllergiesFlat({ patientId, orgId }: Props) {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [info, setInfo] = useState<string | null>(null);
+    const [modalError, setModalError] = useState<string | null>(null);
 
     // modal state
     const [modalOpen, setModalOpen] = useState(false);
@@ -171,6 +172,7 @@ export default function AllergiesFlat({ patientId, orgId }: Props) {
         if (saving) return; // prevent closing while saving
         setModalOpen(false);
         setEditingId(null);
+        setModalError(null);
         setForm({
             allergyName: "",
             reaction: "",
@@ -185,17 +187,20 @@ export default function AllergiesFlat({ patientId, orgId }: Props) {
     /** ---------- Save / Delete ---------- */
     async function handleSave() {
         if (!form.allergyName || !form.allergyName.trim()) {
-            setError("Allergy name is required");
-            resetMessagesSoon();
+            setModalError("Please fill out this field");
+            return;
+        }
+        if (!form.reaction || !form.reaction.trim()) {
+            setModalError("Please fill out this field");
             return;
         }
         if (form.startDate && form.endDate && form.endDate < form.startDate) {
-            setError("End date cannot be before start date");
-            resetMessagesSoon();
+            setModalError("End date cannot be before start date");
             return;
         }
 
         setSaving(true);
+        setModalError(null);
         setError(null);
         setInfo(null);
         try {
@@ -246,10 +251,9 @@ export default function AllergiesFlat({ patientId, orgId }: Props) {
             closeModal();
         } catch (e: unknown) {
                 const message = e instanceof Error ? e.message : String(e);
-                setError(message || "Save failed");
+                setModalError(message || "Save failed");
         } finally {
             setSaving(false);
-            resetMessagesSoon();
         }
     }
 
@@ -387,6 +391,12 @@ export default function AllergiesFlat({ patientId, orgId }: Props) {
                         </DialogDescription>
                     </DialogHeader>
 
+                    {modalError && (
+                        <div className="mb-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">
+                            {modalError}
+                        </div>
+                    )}
+
                     <form
                         onSubmit={(e) => {
                             e.preventDefault();
@@ -396,22 +406,33 @@ export default function AllergiesFlat({ patientId, orgId }: Props) {
                     >
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="md:col-span-2">
-                                <label className="block text-xs text-gray-600 mb-1">Allergy *</label>
+                                <label className="block text-xs text-gray-600 mb-1">
+                                    Allergy <span className="text-red-500">*</span>
+                                </label>
                                 <input
                                     value={form.allergyName || ""}
-                                    onChange={(e) => setForm((f) => ({ ...f, allergyName: e.target.value }))}
+                                    onChange={(e) => {
+                                        setForm((f) => ({ ...f, allergyName: e.target.value }));
+                                        if (modalError) setModalError(null);
+                                    }}
                                     className="w-full px-3 py-2 border rounded-md"
                                     placeholder="e.g., Penicillin"
                                     required
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-600 mb-1">Reaction</label>
+                                <label className="block text-xs text-gray-600 mb-1">
+                                    Reaction <span className="text-red-500">*</span>
+                                </label>
                                 <input
                                     value={form.reaction || ""}
-                                    onChange={(e) => setForm((f) => ({ ...f, reaction: e.target.value }))}
+                                    onChange={(e) => {
+                                        setForm((f) => ({ ...f, reaction: e.target.value }));
+                                        if (modalError) setModalError(null);
+                                    }}
                                     className="w-full px-3 py-2 border rounded-md"
                                     placeholder="e.g., Rash"
+                                    required
                                 />
                             </div>
                             <div>
