@@ -28,6 +28,7 @@ export default function HealthcareServicesFlat({ patientId }: Props) {
     const [items, setItems] = useState<HealthcareServiceItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     const [form, setForm] = useState<HealthcareServiceItem>({
         name: "",
@@ -81,20 +82,46 @@ export default function HealthcareServicesFlat({ patientId }: Props) {
             type: "",
             hoursOfOperation: "",
         });
+        setError(null);
+        setSuccessMessage(null);
         setShowForm(true);
     }
 
     function openEdit(row: HealthcareServiceItem) {
         setEditingId(row.id ?? null);
         setForm(row);
+        setError(null);
+        setSuccessMessage(null);
         setShowForm(true);
     }
 
     async function onSubmit(e: React.FormEvent) {
         e.preventDefault();
         if (submitting) return;
-        setSubmitting(true);
+        
+        // Clear any previous messages
         setError(null);
+        setSuccessMessage(null);
+        
+        // Validate required fields
+        if (!form.name?.trim()) {
+            setError("Please fill out the Name field");
+            return;
+        }
+        if (!form.type?.trim()) {
+            setError("Please fill out the Type field");
+            return;
+        }
+        if (!form.location?.trim()) {
+            setError("Please fill out the Location field");
+            return;
+        }
+        if (!form.hoursOfOperation?.trim()) {
+            setError("Please fill out the Hours of Operation field");
+            return;
+        }
+        
+        setSubmitting(true);
         try {
             const url =
                 editingId == null
@@ -111,8 +138,17 @@ export default function HealthcareServicesFlat({ patientId }: Props) {
                 const txt = await res.text();
                 throw new Error(txt || "Request failed");
             }
+            
+            const successMsg = editingId == null ? "Created successfully" : "Updated successfully";
+            setSuccessMessage(successMsg);
+            
             await load();
-            setShowForm(false);
+            
+            // Close form after a brief delay to show success message
+            setTimeout(() => {
+                setShowForm(false);
+                setSuccessMessage(null);
+            }, 1500);
         } catch (e: any) {
             setError(e?.message ?? "Save failed");
         } finally {
@@ -215,41 +251,67 @@ export default function HealthcareServicesFlat({ patientId }: Props) {
                         </div>
 
                         <form onSubmit={onSubmit} className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {error && (
+                                <div className="sm:col-span-2 p-3 bg-red-50 border border-red-200 rounded-md">
+                                    <p className="text-sm text-red-600">{error}</p>
+                                </div>
+                            )}
+                            {successMessage && (
+                                <div className="sm:col-span-2 p-3 bg-green-50 border border-green-200 rounded-md">
+                                    <p className="text-sm text-green-600">{successMessage}</p>
+                                </div>
+                            )}
+                            
                             <div className="space-y-3">
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                        Name <span className="text-red-500">*</span>
+                                    </label>
                                     <input
                                         value={form.name || ""}
                                         onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                                        className="w-full px-3 py-2 border rounded-md"
+                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                         required
+                                        title="Please fill out this field"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                        Type <span className="text-red-500">*</span>
+                                    </label>
                                     <input
                                         value={form.type || ""}
                                         onChange={(e) => setForm((p) => ({ ...p, type: e.target.value }))}
-                                        className="w-full px-3 py-2 border rounded-md"
+                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        required
+                                        title="Please fill out this field"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Location</label>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                        Location <span className="text-red-500">*</span>
+                                    </label>
                                     <input
                                         value={form.location || ""}
                                         onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
-                                        className="w-full px-3 py-2 border rounded-md"
+                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        required
+                                        title="Please fill out this field"
                                     />
                                 </div>
                             </div>
 
                             <div className="space-y-3">
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Hours of Operation</label>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                        Hours of Operation <span className="text-red-500">*</span>
+                                    </label>
                                     <input
                                         value={form.hoursOfOperation || ""}
                                         onChange={(e) => setForm((p) => ({ ...p, hoursOfOperation: e.target.value }))}
-                                        className="w-full px-3 py-2 border rounded-md"
+                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        required
+                                        title="Please fill out this field"
                                     />
                                 </div>
                                 <div>
@@ -257,19 +319,20 @@ export default function HealthcareServicesFlat({ patientId }: Props) {
                                     <textarea
                                         value={form.description || ""}
                                         onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-                                        className="w-full px-3 py-2 border rounded-md"
+                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        rows={3}
                                     />
                                 </div>
                             </div>
 
                             {/* Footer */}
                             <div className="sm:col-span-2 flex items-center justify-end gap-2 pt-2">
-                                <button type="button" onClick={() => setShowForm(false)} className="px-3 py-1.5 rounded border">
+                                <button type="button" onClick={() => setShowForm(false)} className="px-3 py-1.5 rounded border hover:bg-gray-50">
                                     Cancel
                                 </button>
                                 <button
                                     disabled={submitting}
-                                    className="px-3 py-1.5 rounded bg-blue-600 text-white disabled:opacity-50"
+                                    className="px-3 py-1.5 rounded bg-blue-600 text-white disabled:opacity-50 hover:bg-blue-700"
                                 >
                                     {submitting ? "Saving…" : "Save"}
                                 </button>

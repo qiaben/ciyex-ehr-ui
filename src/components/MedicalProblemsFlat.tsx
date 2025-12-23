@@ -54,6 +54,8 @@ export default function MedicalProblemsFlat({ patientId }: Props) {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [validationErrors, setValidationErrors] = useState<string[]>([]);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     // dropdowns
     const [titleOptions, setTitleOptions] = useState<any[]>([]);
@@ -142,12 +144,18 @@ export default function MedicalProblemsFlat({ patientId }: Props) {
     function openCreate() {
         setEditingId(null);
         setForm(emptyForm);
+        setValidationErrors([]);
+        setError(null);
+        setSuccessMessage(null);
         setShowForm(true);
     }
 
     function openEdit(row: MedicalProblemItem) {
         setEditingId(row.id ?? null);
         setForm({ ...row, patientId: row.patientId ?? patientId });
+        setValidationErrors([]);
+        setError(null);
+        setSuccessMessage(null);
         setShowForm(true);
     }
 
@@ -155,8 +163,25 @@ export default function MedicalProblemsFlat({ patientId }: Props) {
     async function onSubmit(e: React.FormEvent) {
         e.preventDefault();
         if (submitting) return;
-        setSubmitting(true);
+        
+        // Clear previous messages
         setError(null);
+        setValidationErrors([]);
+        setSuccessMessage(null);
+        
+        // Validate mandatory fields (all except note)
+        const errors: string[] = [];
+        if (!form.title?.trim()) errors.push("Please fill out Title field");
+        if (!form.outcome?.trim()) errors.push("Please fill out Outcome field");
+        if (!form.verificationStatus?.trim()) errors.push("Please fill out Verification Status field");
+        if (!form.occurrence?.trim()) errors.push("Please fill out Occurrence field");
+        
+        if (errors.length > 0) {
+            setValidationErrors(errors);
+            return;
+        }
+        
+        setSubmitting(true);
         try {
             const payloadCreate = {
                 patientId,
@@ -193,8 +218,17 @@ export default function MedicalProblemsFlat({ patientId }: Props) {
                 const txt = await res.text();
                 throw new Error(txt || "Request failed");
             }
+            
+            const successMsg = editingId == null ? "Created successfully" : "Updated successfully";
+            setSuccessMessage(successMsg);
+            
             await load();
-            setShowForm(false);
+            
+            // Close form after showing success message
+            setTimeout(() => {
+                setShowForm(false);
+                setSuccessMessage(null);
+            }, 1500);
         } catch (e: any) {
             setError(e?.message ?? "Save failed");
         } finally {
@@ -307,6 +341,31 @@ export default function MedicalProblemsFlat({ patientId }: Props) {
                             </button>
                         </div>
 
+                        {/* Success Message */}
+                        {successMessage && (
+                            <div className="mx-4 mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                                <div className="text-sm text-green-800">{successMessage}</div>
+                            </div>
+                        )}
+
+                        {/* Validation Errors */}
+                        {validationErrors.length > 0 && (
+                            <div className="mx-4 mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                                <div className="text-sm text-red-800">
+                                    {validationErrors.map((error, index) => (
+                                        <div key={index}>• {error}</div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* API Error */}
+                        {error && (
+                            <div className="mx-4 mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                                <div className="text-sm text-red-800">Error: {error}</div>
+                            </div>
+                        )}
+
                         <form
                             onSubmit={onSubmit}
                             className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4"
@@ -315,12 +374,14 @@ export default function MedicalProblemsFlat({ patientId }: Props) {
                                 {/* Title dropdown */}
                                 <div>
                                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                                        Title
+                                        Title <span className="text-red-500">*</span>
                                     </label>
                                     <select
                                         value={form.title || ""}
                                         onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-                                        className="w-full px-3 py-2 border rounded-md"
+                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        required
+                                        title="Please fill out this field"
                                     >
                                         <option value="">Select a title</option>
                                         {titleOptions.map((o) => (
@@ -334,12 +395,14 @@ export default function MedicalProblemsFlat({ patientId }: Props) {
                                 {/* Outcome dropdown */}
                                 <div>
                                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                                        Outcome
+                                        Outcome <span className="text-red-500">*</span>
                                     </label>
                                     <select
                                         value={form.outcome || ""}
                                         onChange={(e) => setForm((p) => ({ ...p, outcome: e.target.value }))}
-                                        className="w-full px-3 py-2 border rounded-md"
+                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        required
+                                        title="Please fill out this field"
                                     >
                                         <option value="">Select an outcome</option>
                                         {outcomeOptions.map((o) => (
@@ -353,14 +416,16 @@ export default function MedicalProblemsFlat({ patientId }: Props) {
                                 {/* Verification Status dropdown */}
                                 <div>
                                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                                        Verification Status
+                                        Verification Status <span className="text-red-500">*</span>
                                     </label>
                                     <select
                                         value={form.verificationStatus || ""}
                                         onChange={(e) =>
                                             setForm((p) => ({ ...p, verificationStatus: e.target.value }))
                                         }
-                                        className="w-full px-3 py-2 border rounded-md"
+                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        required
+                                        title="Please fill out this field"
                                     >
                                         <option value="">Select a status</option>
                                         {verificationOptions.map((o) => (
@@ -376,14 +441,16 @@ export default function MedicalProblemsFlat({ patientId }: Props) {
                                 {/* Occurrence dropdown */}
                                 <div>
                                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                                        Occurrence
+                                        Occurrence <span className="text-red-500">*</span>
                                     </label>
                                     <select
                                         value={form.occurrence || ""}
                                         onChange={(e) =>
                                             setForm((p) => ({ ...p, occurrence: e.target.value }))
                                         }
-                                        className="w-full px-3 py-2 border rounded-md"
+                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        required
+                                        title="Please fill out this field"
                                     >
                                         <option value="">Select an occurrence</option>
                                         {occurrenceOptions.map((o) => (
@@ -402,8 +469,9 @@ export default function MedicalProblemsFlat({ patientId }: Props) {
                                     <textarea
                                         value={form.note || ""}
                                         onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))}
-                                        className="w-full px-3 py-2 border rounded-md"
+                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                         placeholder="Free text note"
+                                        rows={3}
                                     />
                                 </div>
                             </div>
@@ -413,13 +481,13 @@ export default function MedicalProblemsFlat({ patientId }: Props) {
                                 <button
                                     type="button"
                                     onClick={() => setShowForm(false)}
-                                    className="px-3 py-1.5 rounded border"
+                                    className="px-3 py-1.5 rounded border hover:bg-gray-50"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     disabled={submitting}
-                                    className="px-3 py-1.5 rounded bg-blue-600 text-white disabled:opacity-50"
+                                    className="px-3 py-1.5 rounded bg-blue-600 text-white disabled:opacity-50 hover:bg-blue-700"
                                 >
                                     {submitting ? "Saving…" : "Save"}
                                 </button>
