@@ -68,6 +68,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         "/reports": "Reports",
         "/reports/patient": "Patient Reports",
         "/reports/appointment": "Appointment Reports",
+        "/reports/encounter": "Encounters Reports",
         "/reports/payment": "payment Reports",
         "/inventory-management": "Inventory Dashboard",
         "/inventory-management/inventory": "Inventory Management",

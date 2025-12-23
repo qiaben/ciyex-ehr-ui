@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import AdminLayout from '@/app/(admin)/layout';
 import { fetchWithAuth } from '@/utils/fetchWithAuth';
 import flatpickr from 'flatpickr';
@@ -22,6 +22,17 @@ interface Encounter {
   visitCategory: string;
 }
 
+const fetchPatientName = async (id: number): Promise<string> => {
+  try {
+    const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patients/${id}`);
+    if (!res.ok) return `Patient ${id}`;
+    const data = await res.json();
+    return `${data.data.firstName} ${data.data.lastName}`;
+  } catch {
+    return `Patient ${id}`;
+  }
+};
+
 export default function EncounterReportPage() {
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -36,6 +47,11 @@ export default function EncounterReportPage() {
   const [selectAll, setSelectAll] = useState(false);
   const [encounters, setEncounters] = useState<Encounter[]>([]);
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [patientNames, setPatientNames] = useState<Map<number, string>>(new Map());
   const startDateRef = useRef<HTMLInputElement>(null);
   const endDateRef = useRef<HTMLInputElement>(null);
 
@@ -53,6 +69,16 @@ export default function EncounterReportPage() {
       } catch { setProviders([]); }
     };
     fetchProviders();
+  }, []);
+
+  // Default date range
+  useEffect(() => {
+    const today = new Date();
+    const lastMonth = new Date(today);
+    lastMonth.setMonth(today.getMonth() - 1);
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    setStartDate(fmt(lastMonth));
+    setEndDate(fmt(today));
   }, []);
 
   useEffect(() => {
@@ -76,73 +102,72 @@ export default function EncounterReportPage() {
     }
   }, []);
 
-  const fetchEncounters = async () => {
+  const fetchEncounters = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        size: pageSize.toString()
+      });
       if (search) params.append('search', search);
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
+      if (provider !== 'All Providers') params.append('provider', provider);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
 
       const response = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/encounters/report/encounterAll?${params}`);
       if (!response.ok) throw new Error('Failed to fetch encounters');
       const result = await response.json();
-      const encounterList = Array.isArray(result.data) ? result.data : [];
       
-      const enriched = await Promise.all(
-        encounterList.map(async (enc: Encounter) => {
-          try {
-            const patRes = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patients/${enc.patientId}`);
-            if (patRes.ok) {
-              const patData = await patRes.json();
-              const patient = patData.data;
-              return {
-                ...enc,
-                patientName: `${patient.firstName} ${patient.lastName}`,
-                primaryInsurance: patient.primaryInsurance || 'N/A',
-                secondaryInsurance: patient.secondaryInsurance || 'N/A'
-              };
+      const payload = result?.data ?? {};
+      const encounterList = payload.content ?? result.data ?? [];
+      
+      setEncounters(Array.isArray(encounterList) ? encounterList : []);
+      setTotalElements(payload.totalElements || encounterList.length || 0);
+      setTotalPages(payload.totalPages || Math.ceil((encounterList.length || 0) / pageSize));
+      
+      // Load patient names for current page only
+      if (Array.isArray(encounterList)) {
+        const uniquePatientIds = [...new Set(encounterList.map((e: Encounter) => e.patientId))];
+        
+        setPatientNames(prevNames => {
+          const newNames = new Map(prevNames);
+          uniquePatientIds.forEach(async (id) => {
+            if (!newNames.has(id)) {
+              const name = await fetchPatientName(id);
+              setPatientNames(current => new Map(current.set(id, name)));
             }
-          } catch {}
-          return { ...enc, patientName: `Patient ${enc.patientId}`, primaryInsurance: 'N/A', secondaryInsurance: 'N/A' };
-        })
-      );
-      setEncounters(enriched);
+          });
+          return newNames;
+        });
+      }
     } catch (error) {
       console.error('Failed to fetch encounters:', error);
       setEncounters([]);
+      setTotalElements(0);
+      setTotalPages(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, pageSize, search, startDate, endDate, provider, statusFilter]);
 
   useEffect(() => {
     fetchEncounters();
-  }, [search, startDate, endDate]);
+  }, [currentPage, pageSize]);
 
-  const filteredEncounters = encounters.filter(enc => {
-    if (provider !== 'All Providers') {
-      const encProvider = (enc.encounterProvider || '').toLowerCase();
-      const selectedProvider = provider.toLowerCase();
-      if (!selectedProvider.includes(encProvider) && !encProvider.includes(selectedProvider)) return false;
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [search, startDate, endDate, provider, statusFilter]);
+
+  // Trigger fetch when filters change and page is reset
+  useEffect(() => {
+    if (currentPage === 0) {
+      fetchEncounters();
     }
-    if (startDate || endDate) {
-      const encDate = new Date(enc.encounterDate).setHours(0, 0, 0, 0);
-      if (startDate) {
-        const start = new Date(startDate).setHours(0, 0, 0, 0);
-        if (encDate < start) return false;
-      }
-      if (endDate) {
-        const end = new Date(endDate).setHours(23, 59, 59, 999);
-        if (encDate > end) return false;
-      }
-    }
-    if (statusFilter === 'all') return true;
-    const status = (enc.status || '').toLowerCase();
-    if (statusFilter === 'signed') return status === 'signed';
-    if (statusFilter === 'unsigned') return !status || status === 'unsigned';
-    return true;
-  });
+  }, [search, startDate, endDate, provider, statusFilter]);
+
+  const filteredEncounters = encounters;
 
   const toggleSelectAll = () => {
     if (selectAll) {
@@ -158,6 +183,19 @@ export default function EncounterReportPage() {
     next.has(id) ? next.delete(id) : next.add(id);
     setSelected(next);
     setSelectAll(next.size === filteredEncounters.length);
+  };
+
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+    setSelected(new Set());
+    setSelectAll(false);
+  };
+
+  const changePageSize = (size: number) => {
+    setPageSize(size);
+    setCurrentPage(0);
+    setSelected(new Set());
+    setSelectAll(false);
   };
 
   const applyFilters = () => {
@@ -179,7 +217,7 @@ export default function EncounterReportPage() {
     
     const rows = dataToExport.map(e => {
       const row = [e.id];
-      if (visibleColumns.includes('patientName')) row.push(e.patientName || e.patientId);
+      if (visibleColumns.includes('patientName')) row.push(patientNames.get(e.patientId) || e.patientId);
       if (visibleColumns.includes('date')) row.push(e.encounterDate);
       if (visibleColumns.includes('provider')) row.push(e.encounterProvider);
       if (visibleColumns.includes('type')) row.push(e.type);
@@ -217,7 +255,7 @@ export default function EncounterReportPage() {
     const tableRows = dataToExport.map(e => `
       <tr>
         <td>${e.id}</td>
-        ${visibleColumns.includes('patientName') ? `<td>${e.patientName || `Patient ${e.patientId}`}</td>` : ''}
+        ${visibleColumns.includes('patientName') ? `<td>${patientNames.get(e.patientId) || `Patient ${e.patientId}`}</td>` : ''}
         ${visibleColumns.includes('date') ? `<td>${new Date(e.encounterDate).toLocaleString()}</td>` : ''}
         ${visibleColumns.includes('provider') ? `<td>${e.encounterProvider}</td>` : ''}
         ${visibleColumns.includes('type') ? `<td>${e.type}</td>` : ''}
@@ -396,7 +434,7 @@ export default function EncounterReportPage() {
                         <input type="checkbox" checked={selected.has(encounter.id)} onChange={() => toggleRow(encounter.id)} className="w-4 h-4 text-blue-600 rounded" />
                       </td>
                       <td className="p-3 font-semibold text-blue-600">{encounter.id}</td>
-                      {visibleColumns.includes('patientName') && <td className="p-3 font-medium text-gray-900">{encounter.patientName || `Patient ${encounter.patientId}`}</td>}
+                      {visibleColumns.includes('patientName') && <td className="p-3 font-medium text-gray-900">{patientNames.get(encounter.patientId) || `Patient ${encounter.patientId}`}</td>}
                       {visibleColumns.includes('date') && <td className="p-3 text-gray-600">{new Date(encounter.encounterDate).toLocaleString()}</td>}
                       {visibleColumns.includes('provider') && <td className="p-3 text-gray-600">{encounter.encounterProvider}</td>}
                       {visibleColumns.includes('type') && <td className="p-3 text-gray-600">{encounter.type}</td>}
@@ -416,9 +454,89 @@ export default function EncounterReportPage() {
               </tbody>
             </table>
           </div>
-          <div className="border-t px-4 py-3 flex justify-between text-sm">
-            <span>{filteredEncounters.length} records found</span>
-            {selected.size > 0 && <span className="text-blue-600">{selected.size} selected</span>}
+          
+          {/* PAGINATION */}
+          <div className="border-t px-4 py-3 flex items-center justify-between text-sm">
+            <div className="flex items-center gap-4">
+              <span>{totalElements} total records</span>
+              {selected.size > 0 && <span className="text-blue-600">{selected.size} selected</span>}
+              <div className="flex items-center gap-2">
+                <span>Show:</span>
+                <select 
+                  value={pageSize} 
+                  onChange={(e) => changePageSize(Number(e.target.value))}
+                  className="border rounded px-2 py-1"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+            
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => goToPage(0)}
+                  disabled={currentPage === 0}
+                  className="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  First
+                </button>
+                <button 
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 0}
+                  className="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+                
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i;
+                    } else if (currentPage < 3) {
+                      pageNum = i;
+                    } else if (currentPage > totalPages - 4) {
+                      pageNum = totalPages - 5 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => goToPage(pageNum)}
+                        className={`px-3 py-1 border rounded ${
+                          currentPage === pageNum 
+                            ? 'bg-blue-600 text-white border-blue-600' 
+                            : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        {pageNum + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+                
+                <button 
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage >= totalPages - 1}
+                  className="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Next
+                </button>
+                <button 
+                  onClick={() => goToPage(totalPages - 1)}
+                  disabled={currentPage >= totalPages - 1}
+                  className="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Last
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
