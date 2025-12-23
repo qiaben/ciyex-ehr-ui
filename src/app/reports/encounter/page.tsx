@@ -106,14 +106,10 @@ export default function EncounterReportPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        page: currentPage.toString(),
-        size: pageSize.toString()
+        page: '0',
+        size: '1000'
       });
-      if (search) params.append('search', search);
-      if (startDate) params.append('startDate', startDate);
-      if (endDate) params.append('endDate', endDate);
-      if (provider !== 'All Providers') params.append('provider', provider);
-      if (statusFilter !== 'all') params.append('status', statusFilter);
+      // Load all data for client-side filtering
 
       const response = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/encounters/report/encounterAll?${params}`);
       if (!response.ok) throw new Error('Failed to fetch encounters');
@@ -123,10 +119,8 @@ export default function EncounterReportPage() {
       const encounterList = payload.content ?? result.data ?? [];
       
       setEncounters(Array.isArray(encounterList) ? encounterList : []);
-      setTotalElements(payload.totalElements || encounterList.length || 0);
-      setTotalPages(payload.totalPages || Math.ceil((encounterList.length || 0) / pageSize));
       
-      // Load patient names for current page only
+      // Load patient names for all encounters
       if (Array.isArray(encounterList)) {
         const uniquePatientIds = [...new Set(encounterList.map((e: Encounter) => e.patientId))];
         
@@ -144,36 +138,63 @@ export default function EncounterReportPage() {
     } catch (error) {
       console.error('Failed to fetch encounters:', error);
       setEncounters([]);
-      setTotalElements(0);
-      setTotalPages(0);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, pageSize, search, startDate, endDate, provider, statusFilter]);
+  }, []);
 
   useEffect(() => {
     fetchEncounters();
-  }, [currentPage, pageSize]);
+  }, [fetchEncounters]);
+
+  // Client-side filtering
+  const filteredEncounters = encounters.filter(e => {
+    // Search filter
+    const searchMatch = !search || 
+      (patientNames.get(e.patientId) || '').toLowerCase().includes(search.toLowerCase()) ||
+      String(e.id).includes(search) ||
+      String(e.patientId).includes(search) ||
+      e.encounterProvider.toLowerCase().includes(search.toLowerCase());
+
+    // Date range filter
+    const encounterDate = new Date(e.encounterDate);
+    const fromDate = startDate ? new Date(startDate) : null;
+    const toDate = endDate ? new Date(endDate + 'T23:59:59') : null;
+    const dateMatch = (!fromDate || encounterDate >= fromDate) && 
+                     (!toDate || encounterDate <= toDate);
+
+    // Provider filter
+    const selectedProvider = providers.find(p => p.name === provider);
+    const providerMatch = provider === 'All Providers' || 
+                         (selectedProvider && e.encounterProvider.toLowerCase().includes(selectedProvider.name.toLowerCase())) ||
+                         e.encounterProvider.toLowerCase().includes(provider.toLowerCase());
+
+    // Status filter
+    const status = (e.status || '').toLowerCase();
+    const statusMatch = statusFilter === 'all' || 
+                       (statusFilter === 'signed' && status === 'signed') ||
+                       (statusFilter === 'unsigned' && (!status || status === 'unsigned'));
+
+    return searchMatch && dateMatch && providerMatch && statusMatch;
+  }).sort((a, b) => a.id - b.id);
+
+  // Client-side pagination
+  const startIndex = currentPage * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedEncounters = filteredEncounters.slice(startIndex, endIndex);
+  const totalFilteredElements = filteredEncounters.length;
+  const totalFilteredPages = Math.ceil(totalFilteredElements / pageSize);
 
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(0);
   }, [search, startDate, endDate, provider, statusFilter]);
 
-  // Trigger fetch when filters change and page is reset
-  useEffect(() => {
-    if (currentPage === 0) {
-      fetchEncounters();
-    }
-  }, [search, startDate, endDate, provider, statusFilter]);
-
-  const filteredEncounters = encounters;
-
   const toggleSelectAll = () => {
     if (selectAll) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(filteredEncounters.map(e => e.id)));
+      setSelected(new Set(paginatedEncounters.map(e => e.id)));
     }
     setSelectAll(!selectAll);
   };
@@ -182,7 +203,7 @@ export default function EncounterReportPage() {
     const next = new Set(selected);
     next.has(id) ? next.delete(id) : next.add(id);
     setSelected(next);
-    setSelectAll(next.size === filteredEncounters.length);
+    setSelectAll(next.size === paginatedEncounters.length);
   };
 
   const goToPage = (page: number) => {
@@ -223,8 +244,8 @@ export default function EncounterReportPage() {
       if (visibleColumns.includes('type')) row.push(e.type);
       if (visibleColumns.includes('status')) row.push(e.status || 'Unsigned');
       if (visibleColumns.includes('diagnosis')) row.push(e.diagnosis || 'N/A');
-      if (visibleColumns.includes('primaryInsurance')) row.push(e.primaryInsurance || 'N/A');
-      if (visibleColumns.includes('secondaryInsurance')) row.push(e.secondaryInsurance || 'N/A');
+      if (visibleColumns.includes('primaryInsurance')) row.push(e.primaryInsurance || '-');
+      if (visibleColumns.includes('secondaryInsurance')) row.push(e.secondaryInsurance || '-');
       return row.join(',');
     });
     const csv = [headers.join(','), ...rows].join('\n');
@@ -261,8 +282,8 @@ export default function EncounterReportPage() {
         ${visibleColumns.includes('type') ? `<td>${e.type}</td>` : ''}
         ${visibleColumns.includes('status') ? `<td>${getStatusText(e.status)}</td>` : ''}
         ${visibleColumns.includes('diagnosis') ? `<td>${e.diagnosis || 'N/A'}</td>` : ''}
-        ${visibleColumns.includes('primaryInsurance') ? `<td>${e.primaryInsurance}</td>` : ''}
-        ${visibleColumns.includes('secondaryInsurance') ? `<td>${e.secondaryInsurance}</td>` : ''}
+        ${visibleColumns.includes('primaryInsurance') ? `<td>${e.primaryInsurance || '-'}</td>` : ''}
+        ${visibleColumns.includes('secondaryInsurance') ? `<td>${e.secondaryInsurance || '-'}</td>` : ''}
       </tr>
     `).join('');
     
@@ -428,7 +449,7 @@ export default function EncounterReportPage() {
                 ) : filteredEncounters.length === 0 ? (
                   <tr><td colSpan={11} className="p-8 text-center text-gray-500">No encounters found</td></tr>
                 ) : (
-                  filteredEncounters.map((encounter, idx) => (
+                  paginatedEncounters.map((encounter, idx) => (
                     <tr key={encounter.id} className={`border-t hover:bg-blue-50 transition ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                       <td className="p-3 w-12">
                         <input type="checkbox" checked={selected.has(encounter.id)} onChange={() => toggleRow(encounter.id)} className="w-4 h-4 text-blue-600 rounded" />
@@ -446,8 +467,8 @@ export default function EncounterReportPage() {
                         </td>
                       )}
                       {visibleColumns.includes('diagnosis') && <td className="p-3 text-gray-600">{encounter.diagnosis || 'N/A'}</td>}
-                      {visibleColumns.includes('primaryInsurance') && <td className="p-3 text-gray-600">{encounter.primaryInsurance}</td>}
-                      {visibleColumns.includes('secondaryInsurance') && <td className="p-3 text-gray-600">{encounter.secondaryInsurance}</td>}
+                      {visibleColumns.includes('primaryInsurance') && <td className="p-3 text-gray-600">{encounter.primaryInsurance || '-'}</td>}
+                      {visibleColumns.includes('secondaryInsurance') && <td className="p-3 text-gray-600">{encounter.secondaryInsurance || '-'}</td>}
                     </tr>
                   ))
                 )}
@@ -458,7 +479,7 @@ export default function EncounterReportPage() {
           {/* PAGINATION */}
           <div className="border-t px-4 py-3 flex items-center justify-between text-sm">
             <div className="flex items-center gap-4">
-              <span>{totalElements} total records</span>
+              <span>{totalFilteredElements} total records</span>
               {selected.size > 0 && <span className="text-blue-600">{selected.size} selected</span>}
               <div className="flex items-center gap-2">
                 <span>Show:</span>
@@ -475,7 +496,7 @@ export default function EncounterReportPage() {
               </div>
             </div>
             
-            {totalPages > 1 && (
+            {totalFilteredPages > 1 && (
               <div className="flex items-center gap-2">
                 <button 
                   onClick={() => goToPage(0)}
@@ -493,14 +514,14 @@ export default function EncounterReportPage() {
                 </button>
                 
                 <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  {Array.from({ length: Math.min(5, totalFilteredPages) }, (_, i) => {
                     let pageNum;
-                    if (totalPages <= 5) {
+                    if (totalFilteredPages <= 5) {
                       pageNum = i;
                     } else if (currentPage < 3) {
                       pageNum = i;
-                    } else if (currentPage > totalPages - 4) {
-                      pageNum = totalPages - 5 + i;
+                    } else if (currentPage > totalFilteredPages - 4) {
+                      pageNum = totalFilteredPages - 5 + i;
                     } else {
                       pageNum = currentPage - 2 + i;
                     }
@@ -523,14 +544,14 @@ export default function EncounterReportPage() {
                 
                 <button 
                   onClick={() => goToPage(currentPage + 1)}
-                  disabled={currentPage >= totalPages - 1}
+                  disabled={currentPage >= totalFilteredPages - 1}
                   className="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                 >
                   Next
                 </button>
                 <button 
-                  onClick={() => goToPage(totalPages - 1)}
-                  disabled={currentPage >= totalPages - 1}
+                  onClick={() => goToPage(totalFilteredPages - 1)}
+                  disabled={currentPage >= totalFilteredPages - 1}
                   className="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                 >
                   Last
