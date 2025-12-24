@@ -18,7 +18,11 @@ export const metadata: Metadata = {
     },
     description: "Ciyex Admin Dashboard",
     icons: {
-        icon: [{ url: '/favicon.ico', sizes: '32x32' }],
+        icon: [
+            { url: '/favicon.ico', sizes: '32x32' },
+            { url: '/images/ciyex-favicon-new.png', sizes: '16x16' },
+            { url: '/images/ciyex-favicon-new.png', sizes: '32x32' }
+        ],
         shortcut: '/favicon.ico',
         apple: [{ url: '/images/ciyex-favicon-new.png', sizes: '180x180' }],
     },
