@@ -17,6 +17,11 @@ export const metadata: Metadata = {
         template: "Ciyex | %s",
     },
     description: "Ciyex Admin Dashboard",
+    icons: {
+        icon: [{ url: '/favicon.ico', sizes: '32x32' }],
+        shortcut: '/favicon.ico',
+        apple: [{ url: '/images/ciyex-favicon-new.png', sizes: '180x180' }],
+    },
 };
 
 export default function RootLayout({

@@ -7,8 +7,6 @@ import { Input } from "@/components/ui/input";
 import Alert from "@/components/ui/alert/Alert";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 
-
-
 function Panel({ title, children }: { title?: string; children: React.ReactNode }) {
     return (
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:shadow-none">
@@ -54,19 +52,17 @@ function Switch({
 }
 
 export default function Settings() {
-    const [lowStockAlerts, setLowStockAlerts] = useState(false);
+    const [lowStockAlerts, setLowStockAlerts] = useState(true);
     const [threshold, setThreshold] = useState(10);
     const [savedThreshold, setSavedThreshold] = useState(10);
     const [loading, setLoading] = useState(false);
 
-    // ✅ Alert state
     const [alertData, setAlertData] = useState<{
         variant: "success" | "error" | "warning" | "info";
         title: string;
         message: string;
     } | null>(null);
 
-    // ✅ Auto-dismiss after 4s
     useEffect(() => {
         if (alertData) {
             const timer = setTimeout(() => setAlertData(null), 4000);
@@ -74,50 +70,49 @@ export default function Settings() {
         }
     }, [alertData]);
 
-    const orgId =
-        typeof window !== "undefined" ? localStorage.getItem("orgId") : null;
-
-    // ✅ Load settings
     useEffect(() => {
-        if (!orgId) return;
         (async () => {
             setLoading(true);
             try {
                 const res = await fetchWithAuth(
-                    `${process.env.NEXT_PUBLIC_API_URL}/api/inventory-settings/${orgId}`
+                    `${process.env.NEXT_PUBLIC_API_URL}/api/inventory-settings`
                 );
                 const text = await res.text();
-                if (!text) return; // backend returned no body
+                if (!text) {
+                    setLowStockAlerts(true);
+                    setThreshold(10);
+                    setSavedThreshold(10);
+                    return;
+                }
                 const json = JSON.parse(text);
 
                 if (res.ok && json.success) {
                     const data = json.data;
-                    setLowStockAlerts(data.lowStockAlerts);
-                    setThreshold(data.criticalLowPercentage);
-                    setSavedThreshold(data.criticalLowPercentage);
+                    setLowStockAlerts(data.lowStockAlerts ?? true);
+                    setThreshold(data.criticalLowPercentage ?? 10);
+                    setSavedThreshold(data.criticalLowPercentage ?? 10);
+                } else {
+                    setLowStockAlerts(true);
+                    setThreshold(10);
+                    setSavedThreshold(10);
                 }
             } catch (err) {
                 console.error("Failed to fetch settings:", err);
-                setAlertData({
-                    variant: "error",
-                    title: "Error",
-                    message: "Failed to load inventory settings.",
-                });
+                setLowStockAlerts(true);
+                setThreshold(10);
+                setSavedThreshold(10);
             } finally {
                 setLoading(false);
             }
         })();
-    }, [orgId]);
+    }, []);
 
-
-    // ✅ Save settings
     async function saveSettings(
         updates: Partial<{
             lowStockAlerts: boolean;
             criticalLowPercentage: number;
         }>
     ) {
-        if (!orgId) return;
         try {
             const body = {
                 lowStockAlerts,
@@ -126,7 +121,7 @@ export default function Settings() {
             };
 
             const res = await fetchWithAuth(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/inventory-settings/${orgId}`,
+                `${process.env.NEXT_PUBLIC_API_URL}/api/inventory-settings`,
                 {
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },
@@ -162,78 +157,74 @@ export default function Settings() {
         }
     }
 
-
     if (loading) return <div className="p-6">Loading...</div>;
 
     return (
         <AdminLayout>
-                {/* ✅ Alert */}
-                {alertData && (
-                    <div className="mb-4">
-                        <Alert
-                            variant={alertData.variant}
-                            title={alertData.title}
-                            message={alertData.message}
-                        />
-                    </div>
-                )}
-                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                    Configure inventory thresholds and alerts.
-                </p>
-
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 mt-6">
-                    <Panel title="Alerts & Notifications">
-                        <div className="space-y-4">
-                            {/* Low Stock Alerts */}
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="font-medium text-slate-900 dark:text-slate-100">
-                                        Low Stock Alerts
-                                    </div>
-                                    <div className="text-sm text-slate-500 dark:text-slate-400">
-                                        Notify when stock dips below minimum
-                                    </div>
-                                </div>
-                                <Switch
-                                    checked={lowStockAlerts}
-                                    onChange={() => {
-                                        const newVal = !lowStockAlerts;
-                                        setLowStockAlerts(newVal);
-                                        saveSettings({ lowStockAlerts: newVal });
-                                    }}
-                                    label="Low Stock Alerts"
-                                />
-                            </div>
-                        </div>
-                    </Panel>
-
-                    <Panel title="Thresholds">
-                        <div className="space-y-2">
-                            <Label className="dark:text-slate-300">Critical Low (%)</Label>
-                            <Input
-                                type="number"
-                                min={1}
-                                max={50}
-                                value={threshold}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                                    setThreshold(Number(e.target.value))
-                                }
-                                onBlur={() => {
-                                    if (threshold !== savedThreshold) {
-                                        saveSettings({ criticalLowPercentage: threshold }).then(() => {
-                                            setSavedThreshold(threshold);
-                                        });
-                                    }
-                                }}
-                                className="dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                            />
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                                Items below this percentage of minimum stock are marked
-                                “Critical”.
-                            </div>
-                        </div>
-                    </Panel>
+            {alertData && (
+                <div className="mb-4">
+                    <Alert
+                        variant={alertData.variant}
+                        title={alertData.title}
+                        message={alertData.message}
+                    />
                 </div>
+            )}
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                Configure inventory thresholds and alerts.
+            </p>
+
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 mt-6">
+                <Panel title="Alerts & Notifications">
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="font-medium text-slate-900 dark:text-slate-100">
+                                    Low Stock Alerts
+                                </div>
+                                <div className="text-sm text-slate-500 dark:text-slate-400">
+                                    Notify when stock dips below minimum
+                                </div>
+                            </div>
+                            <Switch
+                                checked={lowStockAlerts}
+                                onChange={() => {
+                                    const newVal = !lowStockAlerts;
+                                    setLowStockAlerts(newVal);
+                                    saveSettings({ lowStockAlerts: newVal });
+                                }}
+                                label="Low Stock Alerts"
+                            />
+                        </div>
+                    </div>
+                </Panel>
+
+                <Panel title="Thresholds">
+                    <div className="space-y-2">
+                        <Label className="dark:text-slate-300">Critical Low (%)</Label>
+                        <Input
+                            type="number"
+                            min={1}
+                            max={50}
+                            value={threshold}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                setThreshold(Number(e.target.value))
+                            }
+                            onBlur={() => {
+                                if (threshold !== savedThreshold) {
+                                    saveSettings({ criticalLowPercentage: threshold }).then(() => {
+                                        setSavedThreshold(threshold);
+                                    });
+                                }
+                            }}
+                            className="dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        />
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                            Items below this percentage of minimum stock are marked "Critical".
+                        </div>
+                    </div>
+                </Panel>
+            </div>
         </AdminLayout>
     );
 }

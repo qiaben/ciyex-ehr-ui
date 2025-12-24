@@ -107,15 +107,24 @@ export default function Dashboard() {
         stockHealth: { adequate: 0, low: 0, critical: 0 },
     });
 
+    const [alertItems, setAlertItems] = useState<{
+        critical: string[];
+        low: string[];
+    }>({ critical: [], low: [] });
+
+    const [criticalLowPercentage, setCriticalLowPercentage] = useState(10);
+
     useEffect(() => {
         (async () => {
             try {
-                const [skuRes, lowRes, pendingRes, suppRes, monthlyRes] = await Promise.all([
+                const [skuRes, lowRes, pendingRes, suppRes, monthlyRes, settingsRes, inventoryRes] = await Promise.all([
                     fetchWithAuth(`${API_URL}/api/inventory/count`),
                     fetchWithAuth(`${API_URL}/api/inventory/low-critical`),
                     fetchWithAuth(`${API_URL}/api/orders/pending/count`),
                     fetchWithAuth(`${API_URL}/api/suppliers/count`),
                     fetchWithAuth(`${API_URL}/api/inventory/records/monthly-orders`),
+                    fetchWithAuth(`${API_URL}/api/inventory-settings`),
+                    fetchWithAuth(`${API_URL}/api/inventory/list`),
                 ]);
 
                 // Safe JSON parsing with text fallback
@@ -129,18 +138,47 @@ export default function Dashboard() {
                     }
                 };
 
-                const [sku, low, pending, supp, monthly] = await Promise.all([
+                const [sku, low, pending, supp, monthly, settings, inventory] = await Promise.all([
                     safeJson(skuRes),
                     safeJson(lowRes),
                     safeJson(pendingRes),
                     safeJson(suppRes),
                     safeJson(monthlyRes),
+                    safeJson(settingsRes),
+                    safeJson(inventoryRes),
                 ]);
 
                 const lowCount = low.data?.low ?? 0;
                 const critical = low.data?.critical ?? 0;
                 const total = sku.data ?? 1;
                 const adequate = Math.max(total - (lowCount + critical), 0);
+
+                // Get critical threshold from settings
+                const threshold = settings.data?.criticalLowPercentage ?? 10;
+                const alertsEnabled = settings.data?.lowStockAlerts ?? true; // Default to TRUE
+                setCriticalLowPercentage(threshold);
+
+                // Process inventory items for alerts
+                const criticalItems: string[] = [];
+                const lowItems: string[] = [];
+
+                if (inventory.success && Array.isArray(inventory.data)) {
+                    inventory.data.forEach((item: any) => {
+                        const stock = item.stock || 0;
+                        const minStock = item.minStock || 0;
+                        const percent = minStock > 0 ? (stock / minStock) * 100 : 100;
+
+                        if (stock === 0) {
+                            criticalItems.push(item.name);
+                        } else if (alertsEnabled && percent <= threshold) {
+                            criticalItems.push(item.name);
+                        } else if (alertsEnabled && stock <= minStock) {
+                            lowItems.push(item.name);
+                        }
+                    });
+                }
+
+                setAlertItems({ critical: criticalItems, low: lowItems });
 
                 setStats({
                     totalSkus: sku.data ?? 0,
@@ -174,9 +212,55 @@ export default function Dashboard() {
             </div>
 
             <div className="space-y-6">
+                {/* Alert Summary Card */}
+                {(alertItems.critical.length > 0 || alertItems.low.length > 0) && (
+                    <Panel className="border-l-4 border-l-red-500">
+                        <div className="flex items-start gap-3">
+                            <div className="text-red-500">
+                                🚨
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="font-semibold text-red-700 dark:text-red-400">
+                                    Inventory Alerts
+                                </h3>
+                                <div className="mt-2 space-y-1 text-sm">
+                                    {alertItems.critical.length > 0 && (
+                                        <div className="text-red-600 dark:text-red-400">
+                                            <strong>{alertItems.critical.length} item{alertItems.critical.length > 1 ? 's' : ''} critically low:</strong>
+                                            <div className="mt-1">
+                                                {alertItems.critical.slice(0, 3).join(", ")}
+                                                {alertItems.critical.length > 3 && ` and ${alertItems.critical.length - 3} more`}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {alertItems.low.length > 0 && (
+                                        <div className="text-amber-600 dark:text-amber-400">
+                                            <strong>{alertItems.low.length} item{alertItems.low.length > 1 ? 's' : ''} need restock:</strong>
+                                            <div className="mt-1">
+                                                {alertItems.low.slice(0, 3).join(", ")}
+                                                {alertItems.low.length > 3 && ` and ${alertItems.low.length - 3} more`}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="mt-3">
+                                    <a 
+                                        href="/inventory-management/inventory" 
+                                        className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                                    >
+                                        View Inventory → 
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </Panel>
+                )}
+
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <MetricCard title="Total SKUs" value={String(stats.totalSkus)} subtext="Tracked items" />
-                    <MetricCard title="Low / Critical" value={String(stats.lowCritical)} subtext="Needs restock" tone="warn" />
+                    <a href="/inventory-management/inventory" className="block hover:opacity-80 transition-opacity">
+                        <MetricCard title="Low / Critical" value={String(stats.lowCritical)} subtext="Needs restock" tone="warn" />
+                    </a>
                     <MetricCard title="Pending Orders" value={String(stats.pendingOrders)} subtext="Awaiting receipt" />
                     <MetricCard title="Suppliers" value={String(stats.suppliers)} subtext="Active partners" />
                 </div>

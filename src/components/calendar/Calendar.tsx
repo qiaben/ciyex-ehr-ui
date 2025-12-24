@@ -384,6 +384,21 @@ type Option<T extends string = string> = { value: T; label: string };
 
 
 
+const FALLBACK_VISIT_TYPES = [
+    { value: 'Consultation', label: 'Consultation' },
+    { value: 'Follow-up', label: 'Follow-up' },
+    { value: 'Initial Visit', label: 'Initial Visit' },
+    { value: 'Telehealth', label: 'Telehealth' },
+    { value: 'Virtual Visit', label: 'Virtual Visit' },
+    { value: 'Video Call', label: 'Video Call' },
+    { value: 'Physical Exam', label: 'Physical Exam' },
+    { value: 'Urgent Care', label: 'Urgent Care' },
+    { value: 'Emergency', label: 'Emergency' },
+    { value: 'Checkup', label: 'Checkup' },
+    { value: 'Wellness Visit', label: 'Wellness Visit' },
+    { value: 'Preventive Care', label: 'Preventive Care' }
+];
+
 const statusOptions: Option<AppointmentStatus>[] = [
     { value: 'Scheduled', label: 'Scheduled' },
     { value: 'Confirmed', label: 'Confirmed' },
@@ -579,7 +594,7 @@ const Calendar: React.FC = () => {
     useEffect(() => {
         (async () => {
             try {
-                const res = await fetchWithAuth(`${apiUrl}/api/list-options/list/VisitType`);
+                const res = await fetchWithAuth(`${apiUrl}/api/list-options/list/${encodeURIComponent('Visit Type')}`);
                 const json = await res.json();
 
                 if (Array.isArray(json)) {
@@ -591,33 +606,18 @@ const Calendar: React.FC = () => {
                             label: item.title,
                         }));
 
-                    // Ensure Telehealth is available as a visit type
-                    const hasTelehealth = opts.some(opt => opt.value.toLowerCase().includes('telehealth') || opt.value.toLowerCase().includes('virtual'));
-                    if (!hasTelehealth) {
-                        opts.push({ value: 'Telehealth', label: 'Telehealth' });
+                    // Ensure we have visit types - add fallback if API returns empty
+                    if (opts.length > 0) {
+                        setVisitTypeOptions(opts);
+                    } else {
+                        setVisitTypeOptions(FALLBACK_VISIT_TYPES);
                     }
-
-                    setVisitTypeOptions(opts);
                 } else {
-                    // Fallback visit types
-                    setVisitTypeOptions([
-                        { value: 'Consultation', label: 'Consultation' },
-                        { value: 'Follow-up', label: 'Follow-up' },
-                        { value: 'Initial Visit', label: 'Initial Visit' },
-                        { value: 'Telehealth', label: 'Telehealth' },
-                        { value: 'Emergency', label: 'Emergency' }
-                    ]);
+                    setVisitTypeOptions(FALLBACK_VISIT_TYPES);
                 }
             } catch (err) {
                 console.error("Failed to fetch visit types", err);
-                // Fallback visit types in case of error
-                setVisitTypeOptions([
-                    { value: 'Consultation', label: 'Consultation' },
-                    { value: 'Follow-up', label: 'Follow-up' },
-                    { value: 'Initial Visit', label: 'Initial Visit' },
-                    { value: 'Telehealth', label: 'Telehealth' },
-                    { value: 'Emergency', label: 'Emergency' }
-                ]);
+                setVisitTypeOptions(FALLBACK_VISIT_TYPES);
             }
         })();
     }, [apiUrl]);
@@ -1238,7 +1238,10 @@ const Calendar: React.FC = () => {
                         e.stopPropagation();
                         const selectInfo = {
                             start: arg.date,
-                            end: new Date(arg.date.getTime() + 15 * 60 * 1000),
+                            end: (() => {
+                                const dateValue = arg.date instanceof Date ? arg.date : new Date(arg.date);
+                                return isNaN(dateValue.getTime()) ? new Date() : new Date(dateValue.getTime() + 15 * 60 * 1000);
+                            })(),
                             allDay: false
                         };
                         handleDateSelect(selectInfo as any);
@@ -1259,7 +1262,8 @@ const Calendar: React.FC = () => {
                                 e.stopPropagation();
                                 changeView('timeGridDay');
                                 if (calendarRef.current) {
-                                    calendarRef.current.getApi().gotoDate(arg.date);
+                                    const dateValue = arg.date instanceof Date ? arg.date : new Date(arg.date);
+                                    calendarRef.current.getApi().gotoDate(dateValue);
                                 }
                             }}
                         >
