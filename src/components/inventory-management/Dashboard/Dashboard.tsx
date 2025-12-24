@@ -293,5 +293,6 @@ export default function Dashboard() {
                 </div>
             </div>
         </AdminLayout>
+        
     );
 }

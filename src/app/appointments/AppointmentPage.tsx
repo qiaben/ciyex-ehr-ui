@@ -1821,6 +1821,7 @@ export default function AppointmentPage() {
               </div>
           )}
         </div>
+      
       </AdminLayout>
   );
 }

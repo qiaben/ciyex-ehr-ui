@@ -206,6 +206,7 @@ export default function TelehealthPage() {
           </div>
         </div>
       </footer>
+      <footer></footer>
     </div>
   );
 }

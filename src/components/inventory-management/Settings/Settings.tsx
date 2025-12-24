@@ -225,6 +225,7 @@ export default function Settings() {
                     </div>
                 </Panel>
             </div>
+        
         </AdminLayout>
     );
 }
