@@ -950,7 +950,7 @@ const RejectedClaims: React.FC = () => {
                     {lineDetails.map((line) => (
                       <tr key={line.lineid} className="hover:bg-gray-50">
                         <td className="p-3 border">
-                          {line.dos && line.dos.length > 0 ? (
+                          {Array.isArray(line.dos) && line.dos.length > 0 ? (
                             <div>
                               {line.dos.map((dateNum, idx) => {
                                 const year = Math.floor(dateNum / 10000);
