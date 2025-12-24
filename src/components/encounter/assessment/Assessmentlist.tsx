@@ -723,7 +723,6 @@ export default function Assessmentlist({ patientId, encounterId }: Props) {
     );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function escapeHtml(s: string) {
     return String(s).replace(/[&<>"']/g, (m) => (
         { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[m]!
