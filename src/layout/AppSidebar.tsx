@@ -474,27 +474,33 @@ const AppSidebar: React.FC = () => {
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={`py-8 flex ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-start"}`}>
+      <div className={`py-6 flex ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-start"}`}>
         <Link href="/dashboard">
           {isExpanded || isHovered || isMobileOpen ? (
             <>
               <Image
                 className="dark:hidden"
-                src="/images/logo/Ciyex.png"
+                src="/images/ciyex-logo.png"
                 alt="Ciyex Dashboard"
-                width={130}
-                height={25}
+                width={140}
+                height={32}
               />
               <Image
                 className="hidden dark:block"
-                src="/images/logo/Ciyex.png"
+                src="/images/ciyex-logo.png"
                 alt="Ciyex Dashboard"
-                width={130}
-                height={25}
+                width={140}
+                height={32}
               />
             </>
           ) : (
-            <Image src="/images/logo/Ciyex.png" alt="Ciyex Dashboard" width={32} height={32} />
+            <Image 
+              src="/images/ciyex-logo-no-text.png" 
+              alt="Ciyex" 
+              width={40} 
+              height={40} 
+              className="rounded-lg"
+            />
           )}
         </Link>
       </div>

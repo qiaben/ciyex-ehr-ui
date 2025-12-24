@@ -31,11 +31,19 @@ interface StartCallResponse {
 }
 
 interface JitsiJoinResponse {
-    token: string;
-    roomName: string;
-    identity: string;
-    meetingUrl: string;
-    expiresIn: number;
+    success?: boolean;
+    data?: {
+        token: string;
+        roomName: string;
+        identity: string;
+        meetingUrl: string;
+        expiresIn: number;
+    };
+    token?: string;
+    roomName?: string;
+    identity?: string;
+    meetingUrl?: string;
+    expiresIn?: number;
 }
 
 /* =========================
@@ -78,37 +86,18 @@ const VideoCallModal: React.FC<VideoCallModalProps> = ({
 
         try {
             const roomName = generateRoomName();
-            
-            // First, start the video call room
-            const startCallResponse = await fetchWithAuth(`${apiUrl}/api/telehealth/rooms`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    providerId,
-                    patientId,
-                    roomName,
-                }),
-            });
-
-            if (!startCallResponse.ok) {
-                throw new Error("Failed to start video call room");
-            }
-
-            const startCallData: StartCallResponse = await startCallResponse.json();
-            
-            // Get join URL for provider
             const providerIdentity = `provider-${providerId}`;
+            
+            // Use only the jitsi/join endpoint
             const joinResponse = await fetchWithAuth(`${apiUrl}/api/telehealth/jitsi/join`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    roomName: startCallData.roomSid,
+                    roomName,
                     identity: providerIdentity,
-                    ttlSeconds: 3600, // 1 hour
+                    ttlSeconds: 3600,
                 }),
             });
 
@@ -118,9 +107,17 @@ const VideoCallModal: React.FC<VideoCallModalProps> = ({
 
             const joinData: JitsiJoinResponse = await joinResponse.json();
             
-            setMeetingUrl(joinData.meetingUrl);
-            setRoomStarted(true);
-            setSuccess(`Video call room created successfully! Room: ${startCallData.roomSid}`);
+            if (joinData.success && joinData.data) {
+                setMeetingUrl(joinData.data.meetingUrl);
+                setRoomStarted(true);
+                setSuccess(`Video call room created successfully!`);
+            } else if (joinData.meetingUrl) {
+                setMeetingUrl(joinData.meetingUrl);
+                setRoomStarted(true);
+                setSuccess(`Video call room created successfully!`);
+            } else {
+                throw new Error('Invalid response format from join API');
+            }
             
         } catch (err) {
             console.error("Failed to start video call:", err);
@@ -131,8 +128,9 @@ const VideoCallModal: React.FC<VideoCallModalProps> = ({
     };
 
     const joinMeeting = () => {
-        if (meetingUrl) {
-            window.open(meetingUrl, "_blank", "width=1200,height=800");
+        if (roomStarted && appointmentId) {
+            // Navigate to dedicated telehealth page
+            window.location.href = `/telehealth/${appointmentId}`;
         }
     };
 
@@ -161,8 +159,15 @@ const VideoCallModal: React.FC<VideoCallModalProps> = ({
 
             const joinData: JitsiJoinResponse = await joinResponse.json();
             
-            await navigator.clipboard.writeText(joinData.meetingUrl);
-            setSuccess("Patient join link copied to clipboard!");
+            if (joinData.success && joinData.data?.meetingUrl) {
+                await navigator.clipboard.writeText(joinData.data.meetingUrl);
+                setSuccess("Patient join link copied to clipboard!");
+            } else if (joinData.meetingUrl) {
+                await navigator.clipboard.writeText(joinData.meetingUrl);
+                setSuccess("Patient join link copied to clipboard!");
+            } else {
+                throw new Error('Invalid response format from join API');
+            }
             
         } catch (err) {
             console.error("Failed to copy patient link:", err);
@@ -257,17 +262,14 @@ const VideoCallModal: React.FC<VideoCallModalProps> = ({
 
                     {/* Instructions */}
                     <div className="bg-blue-50 p-4 rounded-lg">
-  <h4 className="font-medium text-blue-900 mb-2">Instructions</h4>
-  <ul className="text-sm text-blue-800 space-y-1">
-    <li>• Click &quot;Start Video Call&quot; to create the meeting room</li>
-    <li>• Use &quot;Join Meeting as Provider&quot; to enter the call</li>
-    <li>• Copy the patient link and send it to the patient via SMS/email</li>
-    <li>• The meeting room will be available for 1 hour</li>
-    <li>• Click &quot;Start Video Call&quot; to create the meeting room</li>
-    <li>• Use &quot;Join Meeting as Provider&quot; to enter the call</li>
-  </ul>
-</div>
-
+                        <h4 className="font-medium text-blue-900 mb-2">Instructions</h4>
+                        <ul className="text-sm text-blue-800 space-y-1">
+                            <li>• Click &quot;Start Video Call&quot; to create the meeting room</li>
+                            <li>• Use &quot;Join Meeting as Provider&quot; to enter the call</li>
+                            <li>• Copy the patient link and send it to the patient via SMS/email</li>
+                            <li>• The meeting room will be available for 1 hour</li>
+                        </ul>
+                    </div>
 
                     <div className="flex justify-end space-x-2 pt-4">
                         <Button variant="outline" onClick={handleClose}>

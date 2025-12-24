@@ -632,7 +632,8 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import AdminLayout from "@/app/(admin)/layout";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
-import { NotebookPen, Scissors, Activity, X, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { NotebookPen, Scissors, Activity, X, CheckCircle, XCircle, Loader2, Video } from "lucide-react";
+import VideoCallModal from "@/components/telehealth/VideoCallModal";
 
 // drawer content
 import ProviderNoteList from "@/components/encounter/providernote/Providernotelist";
@@ -784,7 +785,9 @@ export default function AppointmentPage() {
   const [verificationProvider, setVerificationProvider] = useState<'sikka' | 'zuub'>('sikka'); // Choose verification API
   const [downloadingPDF, setDownloadingPDF] = useState(false); // PDF download state
 
-  // Multi-insurance verification state
+  // Video call modal state
+  const [videoCallModalOpen, setVideoCallModalOpen] = useState(false);
+  const [selectedAppointmentForVideo, setSelectedAppointmentForVideo] = useState<AppointmentDTO | null>(null);
   type InsuranceLevel = 'primary' | 'secondary' | 'tertiary';
   type CoverageData = {
     id?: number;
@@ -1150,6 +1153,17 @@ export default function AppointmentPage() {
     }
   };
 
+  // Video call functionality
+  const handleVideoCall = (appointment: AppointmentDTO) => {
+    setSelectedAppointmentForVideo(appointment);
+    setVideoCallModalOpen(true);
+  };
+
+  const isVirtualAppointment = (visitType: string) => {
+    const type = visitType.toLowerCase();
+    return type.includes('telehealth') || type.includes('virtual') || type.includes('video');
+  };
+
   // Close verification modal
   const closeVerificationModal = () => {
     setVerificationModalOpen(false);
@@ -1346,9 +1360,21 @@ export default function AppointmentPage() {
                               Encounter
                             </button>
 
+                            {/* Join Video Call button - only for virtual appointments */}
+                            {isVirtualAppointment(r.visitType) && (
+                              <button
+                                  className="px-3 py-1 rounded bg-green-600 text-white hover:bg-green-700 text-xs font-medium flex items-center gap-1"
+                                  onClick={() => handleVideoCall(r)}
+                                  title="Join video call"
+                              >
+                                <Video className="h-3 w-3" />
+                                Join
+                              </button>
+                            )}
+
                             {/* Verification button */}
                             <button
-                                className="px-3 py-1 rounded bg-green-600 text-white hover:bg-green-700 text-xs font-medium"
+                                className="px-3 py-1 rounded bg-purple-600 text-white hover:bg-purple-700 text-xs font-medium"
                                 onClick={() => handleVerification(r)}
                                 title="Verify insurance eligibility"
                             >
@@ -1465,6 +1491,21 @@ export default function AppointmentPage() {
                 </section>
             )}
           </Drawer>
+
+          {/* Video Call Modal */}
+          <VideoCallModal
+            open={videoCallModalOpen}
+            onClose={() => {
+              setVideoCallModalOpen(false);
+              setSelectedAppointmentForVideo(null);
+            }}
+            appointmentId={selectedAppointmentForVideo?.id}
+            patientId={selectedAppointmentForVideo?.patientId}
+            providerId={selectedAppointmentForVideo?.providerId}
+            patientName={selectedAppointmentForVideo?.patientName}
+            providerName={providers.find(p => p.id === selectedAppointmentForVideo?.providerId)?.name}
+            roomName={selectedAppointmentForVideo ? `apt-${selectedAppointmentForVideo.id}` : undefined}
+          />
 
           {/* Insurance Verification Modal */}
           {verificationModalOpen && (
@@ -1780,6 +1821,7 @@ export default function AppointmentPage() {
               </div>
           )}
         </div>
+      
       </AdminLayout>
   );
 }
