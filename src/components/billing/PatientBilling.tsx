@@ -1949,16 +1949,23 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     useEffect(() => {
         if (!selectedInvoice) return;
         setRemits(
-            selectedInvoice.lines.map((l) => ({
-                id: l.id, // Add id property as required by InsuranceRemitLine
-                invoiceLineId: l.id,
-                submitted: Number(l.charge ?? 0),
-                balance: 0,
-                deductible: 0,
-                allowed: Number(l.allowed ?? l.charge ?? 0),
-                insWriteOff: 0,
-                insPay: Number(l.charge ?? 0),
-            }))
+            selectedInvoice.lines.map((l) => {
+                const submitted = Number(l.charge ?? 0);
+                const allowed = Number(l.allowed ?? l.charge ?? 0);
+                const appliedWriteOff = Math.max(0, submitted - allowed);
+                const insPay = Number(l.charge ?? 0);
+                const patientResp = Math.max(0, allowed - insPay);
+                return {
+                    id: l.id,
+                    invoiceLineId: l.id,
+                    submitted,
+                    balance: patientResp,
+                    deductible: 0,
+                    allowed,
+                    insWriteOff: appliedWriteOff,
+                    insPay,
+                };
+            })
         );
     }, [selectedInvoice?.id]); // eslint-disable-line
 
@@ -2958,10 +2965,10 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                             INVOICE #{inv.id} ({first?.dos ?? "—"})
                                         </Badge>
                                         <div className="ml-2 grid flex-1 grid-cols-4 gap-3 md:grid-cols-6">
+                                            <RowStat label="Applied WO" value={currency(Number(inv.insWO ?? inv.lines.reduce((a, l) => a + Math.max(0, Number(l.charge || 0) - Number(l.allowed || 0)), 0)))} />
                                             <RowStat label="Pt Balance" value={currency(Number(inv.ptBalance ?? 0))} tone="red" />
                                             <RowStat label="Ins Balance" value={currency(Number(inv.insBalance ?? 0))} />
                                             <RowStat label="Invoice Balance" value={currency(Number(inv.ptBalance ?? 0) + Number(inv.insBalance ?? 0))} bold />
-                                            <RowStat label="Ins WO" value={currency(Number(inv.insWO ?? inv.lines.reduce((a, l) => a + Math.max(0, Number(l.charge || 0) - Number(l.allowed || 0)), 0)))} />
                                             <RowStat label="Pt Paid" value={currency(ptPaid)} />
                                             <RowStat label="Ins Paid" value={currency(insPaid)} />
                                         </div>
@@ -3813,25 +3820,27 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                 <th className="p-2">Allowed</th>
                                 <th className="p-2">Ins WO</th>
                                 <th className="p-2">Ins Pay</th>
-                                <th className="p-2">Options</th>
+                                <th className="p-2">Pt Resp / Options</th>
                             </tr>
                             </thead>
                             <tbody>
                             {selectedInvoice.lines.map((l, idx) => {
                                 const r = remits[idx];
+                                const submitted = Number(r?.submitted || 0);
+                                const allowed = Number(r?.allowed || 0);
+                                const writeOff = Math.max(0, submitted - allowed);
+                                const insPay = Number(r?.insPay || 0);
+                                const patientResp = Math.max(0, allowed - insPay);
                                 return (
                                     <tr key={l.id} className="border-b">
                                         <td className="p-2 font-mono">{l.code}</td>
                                         <td className="p-2">
                                             <input
                                                 type="number"
-                                                className="input w-28"
+                                                className="input w-28 bg-gray-50"
                                                 value={r?.submitted ?? 0}
-                                                onChange={(e) =>
-                                                    setRemits((arr) =>
-                                                        arr.map((x, i) => (i === idx ? { ...x, submitted: +e.target.value } : x))
-                                                    )
-                                                }
+                                                readOnly
+                                                title="Submitted (read-only)"
                                             />
                                         </td>
                                         <td className="p-2">
@@ -3873,13 +3882,10 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                         <td className="p-2">
                                             <input
                                                 type="number"
-                                                className="input w-24"
-                                                value={r?.insWriteOff ?? 0}
-                                                onChange={(e) =>
-                                                    setRemits((arr) =>
-                                                        arr.map((x, i) => (i === idx ? { ...x, insWriteOff: +e.target.value } : x))
-                                                    )
-                                                }
+                                                className="input w-24 bg-green-50 text-green-700 font-semibold"
+                                                value={writeOff}
+                                                readOnly
+                                                title="Write-off (Auto-calculated: Submitted - Allowed)"
                                             />
                                         </td>
                                         <td className="p-2">
@@ -3895,43 +3901,52 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                             />
                                         </td>
                                         <td className="p-2">
-                                            <div className="flex items-center gap-3 text-xs">
-                                                <label className="flex items-center gap-1">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={r?.updateAllowed ?? false}
-                                                        onChange={(e) =>
-                                                            setRemits((arr) =>
-                                                                arr.map((x, i) => (i === idx ? { ...x, updateAllowed: e.target.checked } : x))
-                                                            )
-                                                        }
-                                                    />
-                                                    Update allowed fee
-                                                </label>
-                                                <label className="flex items-center gap-1">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={r?.updateFlatPortion ?? false}
-                                                        onChange={(e) =>
-                                                            setRemits((arr) =>
-                                                                arr.map((x, i) => (i === idx ? { ...x, updateFlatPortion: e.target.checked } : x))
-                                                            )
-                                                        }
-                                                    />
-                                                    Update Ins. Flat Portion
-                                                </label>
-                                                <label className="flex items-center gap-1">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={r?.applyWriteoff ?? false}
-                                                        onChange={(e) =>
-                                                            setRemits((arr) =>
-                                                                arr.map((x, i) => (i === idx ? { ...x, applyWriteoff: e.target.checked } : x))
-                                                            )
-                                                        }
-                                                    />
-                                                    Apply write-off
-                                                </label>
+                                            <div className="flex flex-col gap-2">
+                                                <input
+                                                    type="number"
+                                                    className="input w-24 bg-gray-50"
+                                                    value={patientResp}
+                                                    readOnly
+                                                    title="Patient Responsibility (Auto-calculated: Allowed - Ins Pay)"
+                                                />
+                                                <div className="flex items-center gap-3 text-xs">
+                                                    <label className="flex items-center gap-1">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={r?.updateAllowed ?? false}
+                                                            onChange={(e) =>
+                                                                setRemits((arr) =>
+                                                                    arr.map((x, i) => (i === idx ? { ...x, updateAllowed: e.target.checked } : x))
+                                                                )
+                                                            }
+                                                        />
+                                                        Update allowed
+                                                    </label>
+                                                    <label className="flex items-center gap-1">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={r?.updateFlatPortion ?? false}
+                                                            onChange={(e) =>
+                                                                setRemits((arr) =>
+                                                                    arr.map((x, i) => (i === idx ? { ...x, updateFlatPortion: e.target.checked } : x))
+                                                                )
+                                                            }
+                                                        />
+                                                        Update Flat
+                                                    </label>
+                                                    <label className="flex items-center gap-1">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={r?.applyWriteoff ?? false}
+                                                            onChange={(e) =>
+                                                                setRemits((arr) =>
+                                                                    arr.map((x, i) => (i === idx ? { ...x, applyWriteoff: e.target.checked } : x))
+                                                                )
+                                                            }
+                                                        />
+                                                        Apply WO
+                                                    </label>
+                                                </div>
                                             </div>
                                         </td>
                                     </tr>
