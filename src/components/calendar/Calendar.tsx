@@ -521,7 +521,7 @@ const Calendar: React.FC = () => {
         }
     };
 
-    const changeView = (v: ViewType) => {
+    const changeView = useCallback((v: ViewType) => {
         setActiveView(v);
 
         if (provider === 'all') {
@@ -534,7 +534,7 @@ const Calendar: React.FC = () => {
                 calendarRef.current.getApi().changeView(v);
             }
         }
-    };
+    }, [provider]);
 
 
     // Fetch ACTIVE providers (header)
@@ -897,7 +897,7 @@ const Calendar: React.FC = () => {
     }, [patientQuery, apiUrl, isOpen]);
 
     // Default 15-minute end when selecting on grid
-    const handleDateSelect = (selectInfo: DateSelectArg, providerId?: string) => {
+    const handleDateSelect = useCallback((selectInfo: DateSelectArg, providerId?: string) => {
         resetModalFields();
 
         const start = selectInfo.start;
@@ -925,7 +925,7 @@ const Calendar: React.FC = () => {
         setAppointmentLocationId(location === 'all' ? '' : location);
 
         openModal();
-    };
+    }, [location, openModal]);
 
     // Click existing event → load into modal
     const handleEventClick = (clickInfo: EventClickArg) => {

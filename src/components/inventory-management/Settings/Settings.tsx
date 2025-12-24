@@ -220,7 +220,7 @@ export default function Settings() {
                             className="dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         />
                         <div className="text-xs text-slate-500 dark:text-slate-400">
-                            Items below this percentage of minimum stock are marked "Critical".
+                            Items below this percentage of minimum stock are marked &quot;Critical&quot;.
                         </div>
                     </div>
                 </Panel>
