@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ciyex-ehr-ui-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - ciyex.apps-dev.in.hinisoft.com
+      secretName: ciyex-ehr-ui-dev-tls
+  rules:
+    - host: ciyex.apps-dev.in.hinisoft.com
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: dev-ciyex-ehr-ui
+                port:
+                  number: 3000

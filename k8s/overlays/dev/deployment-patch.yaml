@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ciyex-ehr-ui
+spec:
+  template:
+    spec:
+      imagePullSecrets:
+        - name: regcred
+      containers:
+        - name: ciyex-ehr-ui
+          image: registry.apps-dev.in.hinisoft.com/ciyex-ehr-ui:dev
+          env:
+            - name: NODE_ENV
+              value: "development"
+            - name: NEXT_PUBLIC_ENV
+              value: "dev"
+            - name: NEXT_PUBLIC_API_URL
+              value: "https://ciyex-api.apps-dev.in.hinisoft.com"
+            - name: NEXT_PUBLIC_KEYCLOAK_URL
+              value: "https://aran.apps-dev.in.hinisoft.com"
+            - name: NEXT_PUBLIC_KEYCLOAK_REALM
+              value: "master"
+            - name: NEXT_PUBLIC_KEYCLOAK_CLIENT_ID
+              value: "ciyex-app"
