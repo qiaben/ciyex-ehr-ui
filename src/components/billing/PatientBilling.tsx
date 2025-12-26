@@ -792,10 +792,12 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                             <div className="mb-6 pb-4 border-b-4 border-blue-900">
                                 <div className="flex items-start justify-between">
                                     <div className="flex items-center gap-4">
-                                        {/* Logo placeholder */}
-                                        <div className="w-20 h-20 bg-blue-900 rounded flex items-center justify-center text-white font-bold text-xs">
-                                            LOGO
-                                        </div>
+                                        {/* Logo */}
+                                        <img 
+                                            src="/images/ciyex-logo.png" 
+                                            alt="Ciyex Logo" 
+                                            className="w-20 h-20 object-contain"
+                                        />
                                         <div>
                                             <h1 className="text-xl font-bold text-blue-900">{data.practice.practiceName}</h1>
                                             <p className="text-sm text-gray-700">{data.practice.address}</p>
