@@ -1,6 +1,9 @@
 # Build stage
 FROM node:24-alpine AS builder
 
+# Build argument for environment (dev, stage, prod)
+ARG ENVIRONMENT=stage
+
 # Install pnpm
 RUN npm install -g pnpm@9
 
@@ -15,8 +18,8 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
-# Copy env file for staging
-RUN cp .env.stage .env.local || true
+# Copy env file based on environment
+RUN if [ -f ".env.${ENVIRONMENT}" ]; then cp .env.${ENVIRONMENT} .env.local; fi
 
 # Build the application (Next.js 16 uses Turbopack by default)
 RUN pnpm run build
