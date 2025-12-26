@@ -66,7 +66,7 @@ export default function SignInForm() {
                 client_id: keycloakClientId,
                 redirect_uri: redirectUri,
                 response_type: "code",
-                scope: "openid profile email",
+                scope: "openid profile email organization",
                 code_challenge: codeChallenge,
                 code_challenge_method: "S256",
             });
