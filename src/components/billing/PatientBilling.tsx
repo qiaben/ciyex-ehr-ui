@@ -545,10 +545,11 @@ const styles = `
     body * {
         visibility: hidden;
     }
-    #print-invoice-content, #print-invoice-content * {
+    #print-invoice-content, #print-invoice-content *,
+    #print-ehr-claim-content, #print-ehr-claim-content * {
         visibility: visible;
     }
-    #print-invoice-content {
+    #print-invoice-content, #print-ehr-claim-content {
         position: absolute;
         left: 0;
         top: 0;
@@ -559,7 +560,7 @@ const styles = `
     .no-print {
         display: none !important;
     }
-    #print-invoice-modal {
+    #print-invoice-modal, #print-ehr-claim-modal {
         position: static;
         background: white;
     }
@@ -589,6 +590,11 @@ export default function PatientBilling({ patientId, patientName }: Props) {
     const [showPrintInvoice, setShowPrintInvoice] = React.useState(false);
     const [printInvoiceData, setPrintInvoiceData] = React.useState<PatientInvoicePrintDto | null>(null);
     const [printInvoiceLoading, setPrintInvoiceLoading] = React.useState(false);
+
+    // Print EHR Claim Form
+    const [showPrintEhrClaim, setShowPrintEhrClaim] = React.useState(false);
+    const [printEhrClaimData, setPrintEhrClaimData] = React.useState<any | null>(null);
+    const [printEhrClaimLoading, setPrintEhrClaimLoading] = React.useState(false);
 
     async function handleLockClaim(claim: Claim) {
         setLockLoading(true);
@@ -1182,6 +1188,26 @@ export default function PatientBilling({ patientId, patientName }: Props) {
             alert("Failed to load invoice statement. Please try again.");
         } finally {
             setPrintInvoiceLoading(false);
+        }
+    }
+
+    // Print EHR Claim Form
+    async function fetchPrintEhrClaim(claimId: number) {
+        setPrintEhrClaimLoading(true);
+        try {
+            const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/patient-billing/${patientId}/claims/${claimId}/ehr-form-data`);
+            const body = await res.json();
+            if (body?.success && body.data) {
+                setPrintEhrClaimData(body.data);
+                setShowPrintEhrClaim(true);
+            } else {
+                alert(body?.message || "Failed to load EHR claim form data");
+            }
+        } catch (error) {
+            console.error("Failed to fetch EHR claim form:", error);
+            alert("Failed to load EHR claim form. Please try again.");
+        } finally {
+            setPrintEhrClaimLoading(false);
         }
     }
 
@@ -3012,7 +3038,7 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                                     </div>
                                                 </div>
                                                 <div className="ml-auto flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                                    <IconBtn title="Print Claim" onClick={() => window.print()}>🖨️</IconBtn>
+                                                    <IconBtn title="Print Claim" onClick={() => void fetchPrintEhrClaim(claim.id)} disabled={printEhrClaimLoading}>🖨️</IconBtn>
                                                     <IconBtn title="Edit" onClick={() => setShowClaimEditFor(inv.id)} disabled={claim.locked}>✏️</IconBtn>
                                                     <IconBtn title="Close Claim" onClick={() => { void closeClaim(inv.id); }} disabled={claim.locked}>✅</IconBtn>
                                                     <IconBtn title="Attachments" onClick={() => setShowAttachmentFor(inv.id)}>📎</IconBtn>
@@ -5094,6 +5120,222 @@ export default function PatientBilling({ patientId, patientName }: Props) {
                                     <button type="submit" className="btn-primary">Update</button>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Print EHR Claim Form Modal */}
+            {showPrintEhrClaim && printEhrClaimData && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" id="print-ehr-claim-modal">
+                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden flex flex-col" id="print-ehr-claim-content">
+                        {/* Header with Close and Print buttons - hidden during print */}
+                        <div className="flex justify-between items-center px-6 py-3 border-b bg-gray-50 no-print">
+                            <h2 className="text-lg font-semibold text-gray-800">EHR Claim Form</h2>
+                            <div className="flex gap-2">
+                                <button className="btn-light text-sm px-4 py-2" onClick={() => setShowPrintEhrClaim(false)}>Close</button>
+                                <button className="btn-primary text-sm px-4 py-2" onClick={() => window.print()}>Print</button>
+                            </div>
+                        </div>
+
+                        {/* Scrollable Content */}
+                        <div className="overflow-y-auto flex-1">
+                            <div className="p-6">
+                                {/* Practice Header with Logo */}
+                                <div className="mb-6 pb-4 border-b-4 border-blue-900">
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex items-center gap-4">
+                                            <img 
+                                                src="/images/ciyex-logo.png" 
+                                                alt="Ciyex Logo" 
+                                                className="w-20 h-20 object-contain"
+                                            />
+                                            <div>
+                                                <h1 className="text-xl font-bold text-blue-900">{printEhrClaimData.providerInfo?.facilityName || 'Medical Facility'}</h1>
+                                                <p className="text-sm text-gray-700">{printEhrClaimData.providerInfo?.address || ''}</p>
+                                                <p className="text-sm text-gray-700">{printEhrClaimData.providerInfo?.city || ''}, {printEhrClaimData.providerInfo?.state || ''} {printEhrClaimData.providerInfo?.zipCode || ''}</p>
+                                                <p className="text-sm text-gray-700">Phone: {printEhrClaimData.providerInfo?.phone || ''}</p>
+                                                <p className="text-sm text-gray-700">Email: {printEhrClaimData.providerInfo?.email || ''}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <h2 className="text-2xl font-bold text-blue-900 mb-2">EHR CLAIM FORM</h2>
+                                            <p className="text-sm text-gray-700">Claim #{printEhrClaimData.claimNumber}</p>
+                                            <p className="text-sm text-gray-700">Status: {printEhrClaimData.claimStatus}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Patient Information */}
+                                <div className="mb-6">
+                                    <h3 className="text-lg font-bold text-blue-900 mb-3 border-b pb-2">PATIENT INFORMATION</h3>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-1">Patient Name</label>
+                                            <p className="text-sm text-gray-900">{printEhrClaimData.patientInfo?.fullName || ''}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-1">Date of Birth</label>
+                                            <p className="text-sm text-gray-900">{printEhrClaimData.patientInfo?.dateOfBirth || ''}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-1">Gender</label>
+                                            <p className="text-sm text-gray-900">{printEhrClaimData.patientInfo?.gender || ''}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-1">Patient Account #</label>
+                                            <p className="text-sm text-gray-900">{printEhrClaimData.patientInfo?.patientAccountNumber || ''}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-1">Phone</label>
+                                            <p className="text-sm text-gray-900">{printEhrClaimData.patientInfo?.phone || ''}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-1">Email</label>
+                                            <p className="text-sm text-gray-900">{printEhrClaimData.patientInfo?.email || ''}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Insurance Information */}
+                                {printEhrClaimData.insuranceInfo && (
+                                    <div className="mb-6">
+                                        <h3 className="text-lg font-bold text-blue-900 mb-3 border-b pb-2">INSURANCE INFORMATION</h3>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 mb-1">Insurance Company</label>
+                                                <p className="text-sm text-gray-900">{printEhrClaimData.insuranceInfo.companyName || ''}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 mb-1">Plan Name</label>
+                                                <p className="text-sm text-gray-900">{printEhrClaimData.insuranceInfo.planName || ''}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 mb-1">Policy Number</label>
+                                                <p className="text-sm text-gray-900">{printEhrClaimData.insuranceInfo.policyNumber || ''}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 mb-1">Group Number</label>
+                                                <p className="text-sm text-gray-900">{printEhrClaimData.insuranceInfo.groupNumber || ''}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Policyholder Information */}
+                                {printEhrClaimData.policyholderInfo && (
+                                    <div className="mb-6">
+                                        <h3 className="text-lg font-bold text-blue-900 mb-3 border-b pb-2">POLICYHOLDER/SUBSCRIBER INFORMATION</h3>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 mb-1">Policyholder Name</label>
+                                                <p className="text-sm text-gray-900">{printEhrClaimData.policyholderInfo.fullName || ''}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 mb-1">Relationship to Patient</label>
+                                                <p className="text-sm text-gray-900">{printEhrClaimData.policyholderInfo.relationshipToPatient || ''}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 mb-1">Subscriber ID</label>
+                                                <p className="text-sm text-gray-900">{printEhrClaimData.policyholderInfo.subscriberId || ''}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 mb-1">Phone</label>
+                                                <p className="text-sm text-gray-900">{printEhrClaimData.policyholderInfo.phone || ''}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Provider Information */}
+                                {printEhrClaimData.providerInfo && (
+                                    <div className="mb-6">
+                                        <h3 className="text-lg font-bold text-blue-900 mb-3 border-b pb-2">PROVIDER INFORMATION</h3>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 mb-1">Provider Name</label>
+                                                <p className="text-sm text-gray-900">{printEhrClaimData.providerInfo.providerName || ''}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 mb-1">NPI</label>
+                                                <p className="text-sm text-gray-900">{printEhrClaimData.providerInfo.npi || ''}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 mb-1">Tax ID</label>
+                                                <p className="text-sm text-gray-900">{printEhrClaimData.providerInfo.taxId || ''}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 mb-1">Phone</label>
+                                                <p className="text-sm text-gray-900">{printEhrClaimData.providerInfo.phone || ''}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Service Records Table */}
+                                {printEhrClaimData.serviceRecords && printEhrClaimData.serviceRecords.length > 0 && (
+                                    <div className="mb-6">
+                                        <h3 className="text-lg font-bold text-blue-900 mb-3 border-b pb-2">SERVICE RECORDS</h3>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-xs border-collapse">
+                                                <thead>
+                                                    <tr className="bg-blue-900 text-white">
+                                                        <th className="border border-gray-400 px-2 py-2 text-left font-semibold">Date of Service</th>
+                                                        <th className="border border-gray-400 px-2 py-2 text-left font-semibold">Procedure Code</th>
+                                                        <th className="border border-gray-400 px-2 py-2 text-left font-semibold">Description</th>
+                                                        <th className="border border-gray-400 px-2 py-2 text-left font-semibold">Provider</th>
+                                                        <th className="border border-gray-400 px-2 py-2 text-right font-semibold">Charge Amount</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {printEhrClaimData.serviceRecords.map((service: any, index: number) => {
+                                                        const isAlternate = index % 2 === 1;
+                                                        return (
+                                                            <tr key={index} className={isAlternate ? 'bg-blue-50' : 'bg-white'}>
+                                                                <td className="border border-gray-300 px-2 py-1 text-gray-900">{service.serviceDate || ''}</td>
+                                                                <td className="border border-gray-300 px-2 py-1 text-gray-900 font-mono">{service.procedureCode || ''}</td>
+                                                                <td className="border border-gray-300 px-2 py-1 text-gray-900">{service.description || ''}</td>
+                                                                <td className="border border-gray-300 px-2 py-1 text-gray-900">{service.providerName || ''}</td>
+                                                                <td className="border border-gray-300 px-2 py-1 text-right text-gray-900">${service.chargeAmount?.toFixed(2) || '0.00'}</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Financial Summary */}
+                                {printEhrClaimData.financialSummary && (
+                                    <div className="mb-6">
+                                        <h3 className="text-lg font-bold text-blue-900 mb-3 border-b pb-2">FINANCIAL SUMMARY</h3>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="flex justify-between border-b pb-2">
+                                                <span className="text-sm font-semibold text-gray-700">Total Charges:</span>
+                                                <span className="text-sm text-gray-900">${printEhrClaimData.financialSummary.totalCharges?.toFixed(2) || '0.00'}</span>
+                                            </div>
+                                            <div className="flex justify-between border-b pb-2">
+                                                <span className="text-sm font-semibold text-gray-700">Total Submitted:</span>
+                                                <span className="text-sm text-gray-900">${printEhrClaimData.financialSummary.totalSubmitted?.toFixed(2) || '0.00'}</span>
+                                            </div>
+                                            <div className="flex justify-between border-b pb-2">
+                                                <span className="text-sm font-semibold text-gray-700">Insurance Balance:</span>
+                                                <span className="text-sm text-gray-900">${printEhrClaimData.financialSummary.insuranceBalance?.toFixed(2) || '0.00'}</span>
+                                            </div>
+                                            <div className="flex justify-between border-b pb-2">
+                                                <span className="text-sm font-semibold text-gray-700">Patient Balance:</span>
+                                                <span className="text-sm font-bold text-red-600">${printEhrClaimData.financialSummary.patientBalance?.toFixed(2) || '0.00'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Claim Date */}
+                                <div className="mt-6 text-right text-sm text-gray-600">
+                                    <p>Claim Date: {printEhrClaimData.claimDate || new Date().toLocaleDateString()}</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
