@@ -240,7 +240,10 @@ export default function TelehealthSessionPage() {
                         <div className="flex-1 overflow-y-auto p-3 space-y-2">
                             {chatMessages.map((msg, i) => (
                                 <div key={i} className={`text-sm ${msg.senderName === displayName ? "text-right" : ""}`}>
-                                    <span className="text-gray-500 text-xs">{msg.senderName}</span>
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                        <span className="text-gray-500 text-xs">{msg.senderName}</span>
+                                        {msg.sentAt && <span className="text-gray-600 text-[10px]">{new Date(msg.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
+                                    </div>
                                     <p className={`px-3 py-1.5 rounded-lg inline-block max-w-[90%] ${
                                         msg.senderName === displayName
                                             ? "bg-green-600 text-white"
@@ -270,7 +273,7 @@ export default function TelehealthSessionPage() {
             <div className="flex items-center justify-center gap-4 py-4 bg-gray-800 border-t border-gray-700">
                 <button
                     onClick={toggleAudio}
-                    className={`p-3 rounded-full transition-colors ${audioEnabled ? "bg-gray-700 text-white hover:bg-gray-600" : "bg-red-600 text-white hover:bg-red-700"}`}
+                    className={`p-3 rounded-full transition-colors ${audioEnabled ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-red-600 text-white hover:bg-red-700"}`}
                     title={audioEnabled ? "Mute" : "Unmute"}
                 >
                     {audioEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
@@ -278,7 +281,7 @@ export default function TelehealthSessionPage() {
 
                 <button
                     onClick={toggleVideo}
-                    className={`p-3 rounded-full transition-colors ${videoEnabled ? "bg-gray-700 text-white hover:bg-gray-600" : "bg-red-600 text-white hover:bg-red-700"}`}
+                    className={`p-3 rounded-full transition-colors ${videoEnabled ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-red-600 text-white hover:bg-red-700"}`}
                     title={videoEnabled ? "Turn off camera" : "Turn on camera"}
                 >
                     {videoEnabled ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
