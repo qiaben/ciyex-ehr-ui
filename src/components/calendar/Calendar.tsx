@@ -1896,10 +1896,10 @@ const Calendar: React.FC = () => {
                 )}
                 {multiColumnDay ? (
                     /* === Multi-provider Day View → side-by-side columns */
-                    <div className="overflow-x-auto overflow-y-visible" style={{ minWidth: 0 }}>
-                        {/* Sticky provider name header row */}
+                    <>
+                        {/* Sticky provider name header row — outside overflow wrapper so sticky works */}
                         <div
-                            className="sticky top-0 z-20 bg-white dark:bg-dark-900 grid gap-px border-b"
+                            className="sticky top-0 z-20 bg-white dark:bg-dark-900 grid gap-px border-b overflow-x-auto no-scrollbar"
                             style={{
                                 gridTemplateColumns: `repeat(${Math.max(visibleProviders.length, 1)}, minmax(${visibleProviders.length > 5 ? '140px' : '180px'}, 1fr))`,
                                 minWidth: visibleProviders.length > 5 ? `${visibleProviders.length * 140}px` : undefined,
@@ -1966,7 +1966,7 @@ const Calendar: React.FC = () => {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </>
                 ) : visibleProviders.length > 1 ? (
                     /* === Multiple Providers in Week/Month View → stacked vertically */
                     <div className="flex flex-col gap-6">

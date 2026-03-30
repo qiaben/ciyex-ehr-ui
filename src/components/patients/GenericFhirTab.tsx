@@ -726,6 +726,14 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
             r.verificationStatus = toTitleCase(r.verificationStatus);
         }
 
+        // Default clinicalStatus for allergy/problem records that lack it
+        if (!r.clinicalStatus && (
+            tabKey === "allergies" || tabKey === "allergy-intolerances" ||
+            tabKey === "medicalproblems" || tabKey === "medical-problems" || tabKey === "conditions" || tabKey === "problems"
+        )) {
+            r.clinicalStatus = "Active";
+        }
+
         // --- Encounter: reasonForVisit from reasonCode/reason ---
         if (r.reasonForVisit == null) {
             if (Array.isArray(r.reasonCode) && r.reasonCode.length > 0) {

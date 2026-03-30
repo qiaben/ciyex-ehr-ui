@@ -79,7 +79,7 @@ export default function ClinicalSidebar({
             fetchWithAuth(`${API_BASE()}/api/medical-problems/${patientId}`).then(r => r.ok ? r.json() : null),
             fetchWithAuth(`${API_BASE()}/api/fhir-resource/medications/patient/${patientId}?size=10`).then(r => r.ok ? r.json() : null),
             fetchWithAuth(`${API_BASE()}/api/fhir-resource/vitals/patient/${patientId}?size=1`).then(r => r.ok ? r.json() : null),
-            fetchWithAuth(`${API_BASE()}/api/fhir-resource/social-history/patient/${patientId}?size=5`).then(r => r.ok ? r.json() : null),
+            fetchWithAuth(`${API_BASE()}/api/fhir-resource/history/patient/${patientId}?size=5`).then(r => r.ok ? r.json() : null),
         ]).then(([aRes, pRes, mRes, vRes, shRes]) => {
             if (aRes.status === "fulfilled" && aRes.value) {
                 const d = aRes.value;
@@ -93,15 +93,17 @@ export default function ClinicalSidebar({
                 setMedications(mRes.value.data?.content || []);
             }
             if (vRes.status === "fulfilled" && vRes.value) {
-                const content = vRes.value.data?.content || [];
+                const vData = vRes.value.data || vRes.value;
+                const content = vData?.content || [];
                 const first = content.length > 0 ? content[0] : null;
                 setVitals(first && typeof first === "object" ? first : null);
-                setVitalsCount(vRes.value.data?.totalElements || content.length || 0);
+                setVitalsCount(vData?.totalElements || content.length || 0);
             }
             {
-                const shData = (shRes.status === "fulfilled" && shRes.value) ? shRes.value : null;
-                const content = shData?.data?.content || [];
-                setHistoryCount(shData?.data?.totalElements || content.length || 0);
+                const shRaw = (shRes.status === "fulfilled" && shRes.value) ? shRes.value : null;
+                const shData = shRaw?.data || shRaw;
+                const content = shData?.content || [];
+                setHistoryCount(shData?.totalElements || content.length || 0);
                 // Helper: extract a plain string from any value shape
                 const extractStr = (v: any): string => {
                     if (v == null) return "";
