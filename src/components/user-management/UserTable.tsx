@@ -1,9 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import ReactDOM from "react-dom";
 import { UserResponse, ROLE_BADGE_COLORS } from "./types";
 import { Edit3, KeyRound, UserX, MoreVertical, Mail, Link2, LinkIcon } from "lucide-react";
+import Pagination from "@/components/tables/Pagination";
+
+const PAGE_SIZE = 10;
 
 interface Props {
   users: UserResponse[];
@@ -17,6 +20,10 @@ interface Props {
 export default function UserTable({ users, onEdit, onResetPassword, onSendResetEmail, onDeactivate, onLinkPractitioner }: Props) {
   const [openMenu, setOpenMenu] = React.useState<string | null>(null);
   const [menuPos, setMenuPos] = React.useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalPages = Math.ceil(users.length / PAGE_SIZE);
+  const paginatedUsers = users.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const primaryRole = (u: UserResponse) => {
     const filtered = u.roles.filter(
@@ -39,7 +46,7 @@ export default function UserTable({ users, onEdit, onResetPassword, onSendResetE
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-          {users.map((u) => {
+          {paginatedUsers.map((u) => {
             const role = primaryRole(u);
             const badgeClass = ROLE_BADGE_COLORS[role] || ROLE_BADGE_COLORS.PATIENT;
             return (
@@ -139,6 +146,12 @@ export default function UserTable({ users, onEdit, onResetPassword, onSendResetE
           })}
         </tbody>
       </table>
+      {totalPages > 1 && (
+        <div className="flex justify-between items-center px-4 py-3 border-t border-gray-100 bg-gray-50/30">
+          <span className="text-xs text-gray-500">Showing {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, users.length)} of {users.length}</span>
+          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+        </div>
+      )}
     </div>
   );
 }

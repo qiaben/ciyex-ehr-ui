@@ -388,7 +388,7 @@ export default function CarePlansPage() {
         </div>
 
         {/* Cards List */}
-        <div className="flex-1 overflow-y-auto min-h-0 space-y-3 pb-2">
+        <div className="flex-1 overflow-hidden min-h-0 space-y-3 pb-2">
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
