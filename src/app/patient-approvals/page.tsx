@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { toast, confirmDialog } from "@/utils/toast";
 import { formatDisplayDateTime } from "@/utils/dateUtils";
+import Pagination from "@/components/tables/Pagination";
+
+const PAGE_SIZE = 10;
 
 interface PendingUser {
   id: number;
@@ -21,6 +24,9 @@ export default function PatientApprovals() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.ceil(pendingUsers.length / PAGE_SIZE);
+  const paginatedUsers = useMemo(() => pendingUsers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE), [pendingUsers, currentPage]);
 
   useEffect(() => {
     fetchPendingUsers();
@@ -220,7 +226,7 @@ export default function PatientApprovals() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {pendingUsers.map((user) => (
+                  {paginatedUsers.map((user) => (
                     <tr key={user.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
@@ -272,6 +278,12 @@ export default function PatientApprovals() {
                 </tbody>
               </table>
             </div>
+            {totalPages > 1 && (
+              <div className="flex justify-between items-center px-4 py-3 border-t border-gray-100 bg-gray-50/30">
+                <span className="text-xs text-gray-500">Showing {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, pendingUsers.length)} of {pendingUsers.length}</span>
+                <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+              </div>
+            )}
           </div>
         </div>
       )}

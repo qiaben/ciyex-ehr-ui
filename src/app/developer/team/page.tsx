@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { getEnv } from "@/utils/env";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import AdminLayout from "@/app/(admin)/layout";
@@ -18,6 +18,9 @@ import {
     CheckCircle2,
 } from "lucide-react";
 import { toast, confirmDialog } from "@/utils/toast";
+import Pagination from "@/components/tables/Pagination";
+
+const PAGE_SIZE = 10;
 
 const MARKETPLACE_BASE = () =>
     (getEnv("NEXT_PUBLIC_MARKETPLACE_URL") || "").replace(/\/$/, "");
@@ -47,6 +50,9 @@ export default function TeamPage() {
     const [inviteRole, setInviteRole] = useState("developer");
     const [inviting, setInviting] = useState(false);
     const [removingId, setRemovingId] = useState<string | null>(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const totalPages = Math.ceil(members.length / PAGE_SIZE);
+    const paginatedMembers = useMemo(() => members.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE), [members, currentPage]);
 
     const loadMembers = async () => {
         try {
@@ -226,7 +232,7 @@ export default function TeamPage() {
                                     </td>
                                 </tr>
                             ) : (
-                                members.map((member) => (
+                                paginatedMembers.map((member) => (
                                     <tr key={member.id}>
                                         <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
                                             {member.email}
@@ -290,6 +296,12 @@ export default function TeamPage() {
                             )}
                         </tbody>
                     </table>
+                    {totalPages > 1 && (
+                        <div className="flex justify-between items-center px-4 py-3 border-t border-gray-100 dark:border-slate-700 bg-gray-50/30 dark:bg-slate-800/30">
+                            <span className="text-xs text-gray-500">Showing {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, members.length)} of {members.length}</span>
+                            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+                        </div>
+                    )}
                 </div>
             </div>
         </AdminLayout>

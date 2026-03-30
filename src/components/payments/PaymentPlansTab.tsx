@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Search,
   Plus,
@@ -18,6 +18,9 @@ import { getEnv } from "@/utils/env";
 import type { PaymentPlan, PlanStatus, PlanFrequency, PatientPaymentMethod } from "./types";
 import { formatCurrency, formatDate } from "./types";
 import DateInput from "@/components/ui/DateInput";
+import Pagination from "@/components/tables/Pagination";
+
+const PLANS_PAGE_SIZE = 10;
 
 const apiUrl = (p: string) => `${getEnv("NEXT_PUBLIC_API_URL")}${p}`;
 
@@ -53,6 +56,11 @@ export default function PaymentPlansTab({ showToast }: Props) {
   /* Plans */
   const [plans, setPlans] = useState<PaymentPlan[]>([]);
   const [loading, setLoading] = useState(false);
+
+  /* Pagination */
+  const [plansPage, setPlansPage] = useState(1);
+  const plansTotalPages = Math.ceil(plans.length / PLANS_PAGE_SIZE);
+  const paginatedPlans = useMemo(() => plans.slice((plansPage - 1) * PLANS_PAGE_SIZE, plansPage * PLANS_PAGE_SIZE), [plans, plansPage]);
 
   /* Patient methods (for plan form) */
   const [patientMethods, setPatientMethods] = useState<PatientPaymentMethod[]>([]);
@@ -296,8 +304,9 @@ export default function PaymentPlansTab({ showToast }: Props) {
                 )}
               </div>
             ) : (
+              <>
               <div className="space-y-4">
-                {plans.map((p) => {
+                {paginatedPlans.map((p) => {
                   const progress = p.installmentsTotal > 0
                     ? Math.round((p.installmentsPaid / p.installmentsTotal) * 100)
                     : 0;
@@ -375,6 +384,13 @@ export default function PaymentPlansTab({ showToast }: Props) {
                   );
                 })}
               </div>
+              {plansTotalPages > 1 && (
+                <div className="flex justify-between items-center px-4 py-3 mt-2 border-t border-gray-100 dark:border-slate-700 bg-gray-50/30 dark:bg-slate-800/30 rounded-b-xl">
+                  <span className="text-xs text-gray-500">Showing {((plansPage - 1) * PLANS_PAGE_SIZE) + 1}–{Math.min(plansPage * PLANS_PAGE_SIZE, plans.length)} of {plans.length}</span>
+                  <Pagination currentPage={plansPage} totalPages={plansTotalPages} onPageChange={setPlansPage} />
+                </div>
+              )}
+              </>
             )}
           </div>
         </>
