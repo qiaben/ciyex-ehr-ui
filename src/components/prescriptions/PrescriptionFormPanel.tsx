@@ -158,11 +158,6 @@ export default function PrescriptionFormPanel({ open, onClose, prescription, onS
     }
   }, [open, prescription]);
 
-  /* Pre-load provider list when form opens so dropdown is instant on first click */
-  useEffect(() => {
-    if (open) runPrescriberSearch("");
-  }, [open, runPrescriberSearch]);
-
   /* Update dropdown position when shown */
   useEffect(() => {
     if (showPatientDropdown && patientInputRef.current) {
@@ -273,6 +268,11 @@ export default function PrescriptionFormPanel({ open, onClose, prescription, onS
       setPrescriberSearching(false);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Pre-load provider list when form opens so dropdown is instant on first click */
+  useEffect(() => {
+    if (open) runPrescriberSearch("");
+  }, [open, runPrescriberSearch]);
 
   /* Debounced prescriber search */
   useEffect(() => {
