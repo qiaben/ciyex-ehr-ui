@@ -3297,9 +3297,15 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
     // Helper: extract plain string status from a record (CodeableConcepts already flattened by normalizeRecord)
     const getRecordStatus = (r: Record<string, any>): string => {
         const v = isStatusTab
-            ? (r.clinicalStatus || r.status || r.verificationStatus || "")
-            : (r.status || r.clinicalStatus || r.verificationStatus || "");
-        return typeof v === "string" ? v : "";
+            ? (r.clinicalStatus || r.status || r.verificationStatus || r.clinical_status || "")
+            : (r.status || r.clinicalStatus || r.verificationStatus || r.clinical_status || "");
+        if (v == null) return "";
+        if (typeof v === "string") return v;
+        // Handle CodeableConcept objects that may not have been normalized
+        if (typeof v === "object") {
+            return (v as any).text || (v as any).coding?.[0]?.display || (v as any).coding?.[0]?.code || "";
+        }
+        return String(v);
     };
 
     // Gather predefined options from the fieldConfig's clinicalStatus / status select field

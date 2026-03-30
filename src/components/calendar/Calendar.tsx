@@ -1652,7 +1652,7 @@ const Calendar: React.FC = () => {
 
             const patientName = xp?.patientName || eventInfo.event.title;
             const startTime = eventInfo.event.start
-                ? eventInfo.event.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                ? eventInfo.event.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })
                 : '';
 
             const textColor = eventInfo.event.textColor || '#ffffff';
@@ -1896,7 +1896,7 @@ const Calendar: React.FC = () => {
                 )}
                 {multiColumnDay ? (
                     /* === Multi-provider Day View → side-by-side columns */
-                    <div className="overflow-x-auto" style={{ minWidth: 0 }}>
+                    <div className="overflow-x-auto overflow-y-visible" style={{ minWidth: 0 }}>
                         {/* Sticky provider name header row */}
                         <div
                             className="sticky top-0 z-20 bg-white dark:bg-dark-900 grid gap-px border-b"
@@ -1943,6 +1943,7 @@ const Calendar: React.FC = () => {
                                         slotMinTime="00:00:00"
                                         slotDuration="00:15:00"
                                         slotLabelInterval="00:30:00"
+                                        slotLabelFormat={{ hour: 'numeric', minute: '2-digit', hour12: true }}
                                         defaultTimedEventDuration="00:15:00"
                                         scrollTime={`${workingHoursStart}:00`}
                                         businessHours={businessHours}
@@ -1992,6 +1993,7 @@ const Calendar: React.FC = () => {
                                         slotMinTime="00:00:00"
                                         slotDuration="00:15:00"
                                         slotLabelInterval="00:30:00"
+                                        slotLabelFormat={{ hour: 'numeric', minute: '2-digit', hour12: true }}
                                         defaultTimedEventDuration="00:15:00"
                                         scrollTime={`${workingHoursStart}:00`}
                                         businessHours={businessHours}
@@ -2059,6 +2061,7 @@ const Calendar: React.FC = () => {
                                     contentHeight="auto"
                                     slotMinTime="00:00:00"
                                     slotDuration="00:15:00"
+                                    slotLabelFormat={{ hour: 'numeric', minute: '2-digit', hour12: true }}
                                     defaultTimedEventDuration="00:15:00"
                                     scrollTime={`${workingHoursStart}:00`}
                                     businessHours={businessHours}

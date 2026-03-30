@@ -429,7 +429,15 @@ const AppointmentModal: React.FC = () => {
                 let list: Patient[] = [];
                 if (Array.isArray(json?.data)) list = json.data;
                 else if (Array.isArray(json?.data?.content)) list = json.data.content;
-                setPatientResults(list);
+                /* Deduplicate by patient id to prevent same patient appearing twice */
+                const seen = new Set<string>();
+                const unique = list.filter((p: Patient) => {
+                    const key = String(p.id);
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+                setPatientResults(unique);
                 setShowPatientDropdown(true);
             } catch (err) {
                 console.error("Patient search failed", err);

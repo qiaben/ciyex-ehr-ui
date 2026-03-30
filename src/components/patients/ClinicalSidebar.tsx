@@ -44,6 +44,8 @@ export default function ClinicalSidebar({
     const [problems, setProblems] = useState<any[]>([]);
     const [medications, setMedications] = useState<any[]>([]);
     const [vitals, setVitals] = useState<Record<string, any> | null>(null);
+    const [vitalsCount, setVitalsCount] = useState(0);
+    const [historyCount, setHistoryCount] = useState(0);
     const [smokingStatus, setSmokingStatus] = useState<string | null>(null);
     const [loaded, setLoaded] = useState(false);
 
@@ -66,7 +68,7 @@ export default function ClinicalSidebar({
     }, [activeTab, tabCategories]);
 
     // Refresh badge counts on mount and whenever switching to/from a clinical tab
-    const BADGE_TABS = new Set(["allergies", "medicalproblems", "medications", "vitals"]);
+    const BADGE_TABS = new Set(["allergies", "medicalproblems", "medications", "vitals", "history"]);
     useEffect(() => {
         if (!patientId) return;
         // Only re-fetch when navigating into a badge tab (to pick up counts after saves)
@@ -94,10 +96,12 @@ export default function ClinicalSidebar({
                 const content = vRes.value.data?.content || [];
                 const first = content.length > 0 ? content[0] : null;
                 setVitals(first && typeof first === "object" ? first : null);
+                setVitalsCount(vRes.value.data?.totalElements || content.length || 0);
             }
             {
                 const shData = (shRes.status === "fulfilled" && shRes.value) ? shRes.value : null;
                 const content = shData?.data?.content || [];
+                setHistoryCount(shData?.data?.totalElements || content.length || 0);
                 // Helper: extract a plain string from any value shape
                 const extractStr = (v: any): string => {
                     if (v == null) return "";
@@ -157,6 +161,8 @@ export default function ClinicalSidebar({
         if (tabKey === "allergies") return allergies.length || undefined;
         if (tabKey === "medicalproblems") return problems.length || undefined;
         if (tabKey === "medications") return medications.length || undefined;
+        if (tabKey === "history") return historyCount || undefined;
+        if (tabKey === "vitals") return vitalsCount || undefined;
         return undefined;
     };
 
@@ -247,6 +253,9 @@ export default function ClinicalSidebar({
                             <span className="font-medium">History: </span>
                             {!loaded ? "..." : smokingStatus || "No records"}
                         </span>
+                        {historyCount > 0 && (
+                            <span className="px-1 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px] font-medium">{historyCount}</span>
+                        )}
                     </button>
 
                     {/* Vitals row */}
@@ -275,6 +284,9 @@ export default function ClinicalSidebar({
                                 return parts.length > 0 ? parts.join(" · ") : "No recorded vitals";
                             })()}</span>
                         </span>
+                        {vitalsCount > 0 && (
+                            <span className="px-1 py-0.5 rounded bg-green-50 text-green-600 text-[10px] font-medium">{vitalsCount}</span>
+                        )}
                     </button>
                 </div>
 
