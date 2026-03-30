@@ -1,0 +1,53 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - alert [ref=e2]
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e9]:
+        - img "Ciyex" [ref=e10]
+        - heading "Ciyex EHR" [level=1] [ref=e11]
+        - paragraph [ref=e12]: Open Source Public Health Infrastructure
+        - generic [ref=e13]:
+          - generic [ref=e14]:
+            - img [ref=e15]
+            - generic [ref=e17]: HIPAA-compliant with enterprise-grade security
+          - generic [ref=e18]:
+            - img [ref=e19]
+            - generic [ref=e21]: FHIR R4 interoperable health data exchange
+          - generic [ref=e22]:
+            - img [ref=e23]
+            - generic [ref=e25]: Patient charting, scheduling & e-prescribing
+          - generic [ref=e26]:
+            - img [ref=e27]
+            - generic [ref=e29]: Cloud-native with self-hosting option
+      - generic [ref=e31]:
+        - generic [ref=e32]:
+          - generic [ref=e33]:
+            - heading "Sign In" [level=2] [ref=e34]
+            - paragraph [ref=e35]: Enter your email to continue
+          - generic [ref=e36]:
+            - generic [ref=e37]:
+              - generic [ref=e38]: Email
+              - textbox "Email" [ref=e39]:
+                - /placeholder: you@example.com
+                - text: kiran@example.com
+            - generic [ref=e40]:
+              - text: Unable to verify your account. Please try again.
+              - paragraph [ref=e41]: Contact your practice administrator to get an account.
+            - button "Continue" [ref=e42] [cursor=pointer]
+        - generic [ref=e43]:
+          - link "Register a new practice" [ref=e44] [cursor=pointer]:
+            - /url: /signup
+          - paragraph [ref=e45]:
+            - text: By signing in, you agree to our
+            - link "Terms" [ref=e46] [cursor=pointer]:
+              - /url: https://ciyex.org/terms
+            - text: "&"
+            - link "Privacy Policy" [ref=e47] [cursor=pointer]:
+              - /url: https://ciyex.org/privacy
+            - text: .
+    - button [ref=e49] [cursor=pointer]:
+      - img [ref=e50]
+```

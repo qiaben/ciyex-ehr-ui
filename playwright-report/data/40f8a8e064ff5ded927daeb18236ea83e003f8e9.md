@@ -1,0 +1,57 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - alert [ref=e2]
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e9]:
+        - img "Ciyex" [ref=e10]
+        - heading "Ciyex EHR" [level=1] [ref=e11]
+        - paragraph [ref=e12]: Open Source Public Health Infrastructure
+        - generic [ref=e13]:
+          - generic [ref=e14]:
+            - img [ref=e15]
+            - generic [ref=e17]: HIPAA-compliant with enterprise-grade security
+          - generic [ref=e18]:
+            - img [ref=e19]
+            - generic [ref=e21]: FHIR R4 interoperable health data exchange
+          - generic [ref=e22]:
+            - img [ref=e23]
+            - generic [ref=e25]: Patient charting, scheduling & e-prescribing
+          - generic [ref=e26]:
+            - img [ref=e27]
+            - generic [ref=e29]: Cloud-native with self-hosting option
+      - generic [ref=e31]:
+        - generic [ref=e32]:
+          - generic [ref=e33]:
+            - button "Back" [ref=e34] [cursor=pointer]:
+              - img [ref=e35]
+              - text: Back
+            - heading "Welcome back" [level=2] [ref=e37]
+            - paragraph [ref=e38]: michael.chen@example.com
+          - generic [ref=e39]:
+            - generic [ref=e40]:
+              - generic [ref=e41]: Password
+              - generic [ref=e42]:
+                - textbox "Password" [ref=e43]:
+                  - /placeholder: Enter your password
+                  - text: Test@123
+                - button [ref=e44] [cursor=pointer]:
+                  - img [ref=e45]
+            - generic [ref=e48]: Invalid username or password
+            - button "Sign in" [ref=e49] [cursor=pointer]
+        - generic [ref=e50]:
+          - link "Register a new practice" [ref=e51] [cursor=pointer]:
+            - /url: /signup
+          - paragraph [ref=e52]:
+            - text: By signing in, you agree to our
+            - link "Terms" [ref=e53] [cursor=pointer]:
+              - /url: https://ciyex.org/terms
+            - text: "&"
+            - link "Privacy Policy" [ref=e54] [cursor=pointer]:
+              - /url: https://ciyex.org/privacy
+            - text: .
+    - button [ref=e56] [cursor=pointer]:
+      - img [ref=e57]
+```

@@ -1,248 +1,284 @@
 import { chromium } from "playwright";
 
-const TEST_PASSWORD = process.env.TEST_USER_PASSWORD || 'Test@123';
-const BASE = "https://app-dev.ciyex.org";
-const EMAIL = "rose@example.com";
-const PASSWORD = TEST_PASSWORD;
+const BASE = "http://localhost:3000";
+const EMAIL = "Kiran@example.com";
+const PASSWORD = "Test@123";
 
 async function main() {
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    ignoreHTTPSErrors: true,
-    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
-  });
-  const page = await context.newPage();
-
-  // Intercept console messages for debugging
-  page.on("console", (msg) => {
-    if (msg.type() === "error" || msg.type() === "warn") {
-      console.log(`  [${msg.type()}] ${msg.text()}`);
-    }
+  const page = await browser.newPage({
+    viewport: { width: 1920, height: 1080 },
   });
 
-  // Track network errors
-  page.on("response", (response) => {
-    if (response.status() >= 400 && response.status() !== 403) {
-      console.log(`  [NET ${response.status()}] ${response.url().substring(0, 100)}`);
-    }
-  });
-
-  console.log("=== Step 1: Login ===");
-  try {
-    await page.goto(`${BASE}/signin`, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await page.waitForTimeout(3000);
-
-    // Check if Cloudflare challenge
-    const bodyText = await page.textContent("body");
-    if (bodyText?.includes("Cloudflare") || bodyText?.includes("security verification")) {
-      console.log("❌ Cloudflare challenge detected - cannot proceed with headless browser");
-      console.log("   The site requires manual Cloudflare verification.");
-      console.log("   Please test the fixes manually in Chrome browser.");
-      await page.screenshot({ path: "test-results/cloudflare-block.png" });
-      await browser.close();
-      process.exit(1);
-    }
-
-    // Step 1: email
-    await page.fill('input[type="email"], input[name="email"]', EMAIL);
-    const continueBtn = page.locator('button:has-text("Continue"), button[type="submit"]');
-    await continueBtn.click();
-    await page.waitForTimeout(2000);
-
-    // Step 2: password
-    const passwordField = page.locator('input[type="password"]');
-    if (await passwordField.isVisible({ timeout: 5000 })) {
-      await passwordField.fill(PASSWORD);
-      const signInBtn = page.locator('button:has-text("Sign In"), button:has-text("Log In"), button[type="submit"]');
-      await signInBtn.click();
-    }
-    await page.waitForURL((url) => !url.pathname.includes("signin"), { timeout: 20000 });
-    console.log("✅ Logged in successfully");
-  } catch (err: any) {
-    console.log("❌ Login failed:", err.message?.substring(0, 200));
-    await page.screenshot({ path: "test-results/login-failed.png" });
-    await browser.close();
-    process.exit(1);
-  }
-
-  // Helper to navigate and screenshot
-  async function testPage(name: string, url: string, checks: (page: any) => Promise<void>) {
-    console.log(`\n=== Testing: ${name} ===`);
-    try {
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-      await page.waitForTimeout(3000);
-      await checks(page);
-      await page.screenshot({ path: `test-results/${name.replace(/[^a-z0-9]/gi, '-')}.png`, fullPage: true });
-      console.log(`✅ ${name} - screenshot saved`);
-    } catch (err: any) {
-      console.log(`❌ ${name} failed:`, err.message?.substring(0, 200));
-      await page.screenshot({ path: `test-results/${name.replace(/[^a-z0-9]/gi, '-')}-error.png`, fullPage: true });
-    }
-  }
-
-  // Test 1: Calendar page
-  await testPage("01-calendar", `${BASE}/calendar`, async (p) => {
-    const providerText = await p.locator("body").textContent();
-    if (providerText?.includes("Providers")) {
-      console.log("  ✅ Provider filter visible on calendar");
-    }
-  });
-
-  // Test 2: Navigate to patients list
-  await testPage("02-patients-list", `${BASE}/patients`, async (p) => {
-    const rows = await p.locator("table tbody tr").count();
-    console.log(`  Found ${rows} patient rows`);
-  });
-
-  // Test 3-10: Navigate to a patient and check each tab
-  // First find a patient ID
-  await page.goto(`${BASE}/patients`, { waitUntil: "domcontentloaded", timeout: 30000 });
+  // Login
+  console.log("=== Login ===");
+  await page.goto(`${BASE}/signin`, { waitUntil: "networkidle", timeout: 30000 });
   await page.waitForTimeout(3000);
+  await page.fill('input[type="email"], input[name="email"]', EMAIL);
+  await page.locator('button[type="submit"]').first().click();
+  await page.waitForTimeout(3000);
+  const pw = page.locator('input[type="password"]');
+  if (await pw.isVisible({ timeout: 5000 })) {
+    await pw.fill(PASSWORD);
+    await page.locator('button[type="submit"]').first().click();
+    await page.waitForTimeout(5000);
+  }
+  console.log("✅ Logged in, URL:", page.url());
 
-  // Click first patient row
-  const firstPatientRow = page.locator("table tbody tr").first();
-  if (await firstPatientRow.isVisible({ timeout: 5000 })) {
-    await firstPatientRow.click();
-    await page.waitForTimeout(3000);
+  // ======= ISSUE 9: Edit Patient Form =======
+  console.log("\n=== ISSUE 9: Edit Patient - Email asterisk + phone validation ===");
+  try {
+    // Go to first patient
+    await page.goto(`${BASE}/patients`, { waitUntil: "networkidle", timeout: 30000 });
+    await page.waitForTimeout(5000);
+    await page.locator('button[title="View Chart"]').first().click();
+    await page.waitForTimeout(5000);
+
+    // Get patient ID from URL
     const patientUrl = page.url();
-    console.log(`\nNavigated to patient: ${patientUrl}`);
+    const match = patientUrl.match(/patients\/(\d+)/);
+    if (match) {
+      const pid = match[1];
+      await page.goto(`${BASE}/patients/${pid}/edit`, { waitUntil: "networkidle", timeout: 30000 });
+      await page.waitForTimeout(4000);
+      await page.screenshot({ path: "/tmp/09-edit-patient.png" });
 
-    // Helper to click a tab and check
-    async function testTab(tabName: string, tabSelector: string, checks?: (p: any) => Promise<void>) {
-      console.log(`\n=== Testing: ${tabName} Tab ===`);
-      try {
-        const tab = page.locator(tabSelector).first();
-        if (await tab.isVisible({ timeout: 5000 })) {
-          await tab.click();
-          await page.waitForTimeout(2000);
-          console.log(`  ✅ ${tabName} tab loaded`);
+      // Check email label has asterisk
+      const emailLabel = page.locator('label[for="email"]');
+      if (await emailLabel.isVisible()) {
+        const html = await emailLabel.innerHTML();
+        console.log(`  Email label HTML: ${html}`);
+        console.log(`  ✅ Email has mandatory asterisk: ${html.includes("*") || html.includes("text-red")}`);
+      }
 
-          if (checks) await checks(page);
+      // Test phone field strips non-digits and max 10
+      const phoneInput = page.locator('#phoneNumber');
+      if (await phoneInput.isVisible()) {
+        await phoneInput.fill("");
+        await phoneInput.pressSequentially("abc12345def67890extra");
+        const val = await phoneInput.inputValue();
+        console.log(`  Phone value after mixed input: "${val}"`);
+        console.log(`  ✅ Only digits: ${/^\d*$/.test(val)}`);
+        console.log(`  ✅ Max 10 chars: ${val.length <= 10}`);
+      }
 
-          await page.screenshot({
-            path: `test-results/tab-${tabName.replace(/[^a-z0-9]/gi, '-')}.png`,
-            fullPage: true,
-          });
-        } else {
-          console.log(`  ⚠️ ${tabName} tab not found with selector: ${tabSelector}`);
-          // Try to find it by listing all tab-like elements
-          const buttons = await page.locator('button, [role="tab"]').allTextContents();
-          console.log(`  Available tabs/buttons: ${buttons.filter(b => b.trim()).join(", ")}`);
-        }
-      } catch (err: any) {
-        console.log(`  ❌ ${tabName} failed:`, err.message?.substring(0, 150));
+      // Test email required validation
+      const emailInput = page.locator('#email');
+      if (await emailInput.isVisible()) {
+        await emailInput.fill("");
+        await page.locator('button[type="submit"]').first().click();
+        await page.waitForTimeout(1000);
+        const errors = await page.locator('.text-xs.text-red-500').allTextContents();
+        console.log(`  Validation errors: ${errors.join(", ")}`);
+        console.log(`  ✅ Email required error shown: ${errors.some(e => e.toLowerCase().includes("email"))}`);
+        await page.screenshot({ path: "/tmp/09-validation.png" });
       }
     }
-
-    // Test Appointments tab
-    await testTab("Appointments", 'button:has-text("Appointments"), [role="tab"]:has-text("Appointments")', async (p) => {
-      // Try clicking Add
-      const addBtn = p.locator('button:has-text("Add")').first();
-      if (await addBtn.isVisible({ timeout: 3000 })) {
-        await addBtn.click();
-        await p.waitForTimeout(1500);
-
-        // Check for provider lookup field
-        const body = await p.locator("body").textContent();
-        if (body?.toLowerCase().includes("provider")) {
-          console.log("  ✅ Provider field visible in appointment form");
-        }
-        if (body?.toLowerCase().includes("location")) {
-          console.log("  ✅ Location field visible in appointment form");
-        }
-
-        // Cancel
-        const cancelBtn = p.locator('button:has-text("Cancel")').first();
-        if (await cancelBtn.isVisible()) await cancelBtn.click();
-        await p.waitForTimeout(500);
-      }
-    });
-
-    // Test Visit Notes tab
-    await testTab("Visit-Notes", 'button:has-text("Visit Notes"), button:has-text("Visit"), [role="tab"]:has-text("Visit")');
-
-    // Test Insurance tab
-    await testTab("Insurance", 'button:has-text("Insurance"), [role="tab"]:has-text("Insurance")', async (p) => {
-      const body = await p.locator("body").textContent();
-      if (body?.includes("Self Pay") || body?.includes("records")) {
-        console.log("  ✅ Insurance tab shows data or Self Pay");
-      }
-    });
-
-    // Test Documents tab
-    await testTab("Documents", 'button:has-text("Documents"), [role="tab"]:has-text("Document")');
-
-    // Test Messaging tab
-    await testTab("Messaging", 'button:has-text("Messaging"), button:has-text("Messages"), [role="tab"]:has-text("Messag")');
-
-    // Test Relationships tab
-    await testTab("Relationships", 'button:has-text("Relationship"), [role="tab"]:has-text("Relation")');
-
-    // Test Issues tab
-    await testTab("Issues", 'button:has-text("Issues"), button:has-text("Conditions"), button:has-text("Problems"), [role="tab"]:has-text("Issue"), [role="tab"]:has-text("Condition"), [role="tab"]:has-text("Problem")');
-
-    // Test Allergies tab
-    await testTab("Allergies", 'button:has-text("Allergies"), [role="tab"]:has-text("Allerg")', async (p) => {
-      const body = await p.locator("body").textContent();
-      const hasSeverity = /mild|moderate|severe/i.test(body || "");
-      console.log(`  Severity data visible: ${hasSeverity}`);
-    });
+  } catch (err: any) {
+    console.log(`  ❌ Error: ${err.message?.substring(0, 200)}`);
+    await page.screenshot({ path: "/tmp/09-error.png" });
   }
 
-  // Test Settings - User Management
-  await testPage("09-user-management", `${BASE}/settings/user-management`, async (p) => {
-    const addBtn = p.locator('button:has-text("Add User")').first();
-    if (await addBtn.isVisible({ timeout: 5000 })) {
-      await addBtn.click();
-      await p.waitForTimeout(1000);
+  // ======= ISSUE 6: Appointment Pagination =======
+  console.log("\n=== ISSUE 6: Appointment Pagination ===");
+  try {
+    await page.goto(`${BASE}/appointments`, { waitUntil: "networkidle", timeout: 30000 });
+    await page.waitForTimeout(5000);
+    await page.screenshot({ path: "/tmp/06-appointments.png" });
 
-      // Search for a test user
-      const searchInput = p.locator('input[placeholder*="search" i], input[placeholder*="name" i]').last();
-      if (await searchInput.isVisible()) {
-        await searchInput.fill("Rose");
-        await p.waitForTimeout(1500);
+    const text = await page.evaluate(() => document.body.innerText);
+    // Check pagination text
+    const pageMatch = text.match(/Page (\d+) of (\d+)/);
+    if (pageMatch) {
+      console.log(`  Pagination: Page ${pageMatch[1]} of ${pageMatch[2]}`);
+    }
 
-        // Try to select first result
-        const results = p.locator('button').filter({ hasText: /rose/i });
-        const count = await results.count();
-        console.log(`  Found ${count} search results for "Rose"`);
+    // Find Next/Prev buttons (they contain chevron icons)
+    const nextBtn = page.locator('button:has-text("Next")').first();
+    if (await nextBtn.isVisible({ timeout: 3000 })) {
+      const nextDisabled = await nextBtn.isDisabled();
+      console.log(`  Next button disabled: ${nextDisabled}`);
 
-        if (count > 0) {
-          const first = results.first();
-          const isDisabled = await first.isDisabled();
-          if (!isDisabled) {
-            await first.click();
-            await p.waitForTimeout(500);
+      if (!nextDisabled) {
+        await nextBtn.click();
+        await page.waitForTimeout(3000);
+        const text2 = await page.evaluate(() => document.body.innerText);
+        const pageMatch2 = text2.match(/Page (\d+) of (\d+)/);
+        console.log(`  After click: Page ${pageMatch2?.[1]} of ${pageMatch2?.[2]}`);
+        console.log(`  ✅ Pagination Next works`);
+        await page.screenshot({ path: "/tmp/06-page2.png" });
 
-            // Check role dropdown
-            const selects = p.locator('select');
-            const selectCount = await selects.count();
-            for (let i = 0; i < selectCount; i++) {
-              const options = await selects.nth(i).locator('option').allTextContents();
-              if (options.some(o => o.includes("Patient"))) {
-                console.log(`  ✅ Patient role found in dropdown: ${options.join(", ")}`);
-                break;
-              }
-            }
-
-            // Check welcome email checkbox
-            const welcomeLabel = p.locator('label:has-text("welcome email")');
-            if (await welcomeLabel.isVisible({ timeout: 2000 })) {
-              console.log("  ✅ Welcome email checkbox visible");
-            }
-          } else {
-            console.log("  ⚠️ First result disabled (may already have account)");
-          }
+        const prevBtn = page.locator('button:has-text("Previous"), button:has-text("Prev")').first();
+        if (await prevBtn.isVisible({ timeout: 3000 })) {
+          const prevDisabled = await prevBtn.isDisabled();
+          console.log(`  ✅ Prev button enabled: ${!prevDisabled}`);
         }
       }
+    } else {
+      console.log("  ⚠️ No Next button visible - checking for other pagination controls");
     }
-  });
+  } catch (err: any) {
+    console.log(`  ❌ Error: ${err.message?.substring(0, 200)}`);
+    await page.screenshot({ path: "/tmp/06-error.png" });
+  }
+
+  // ======= ISSUE 7: Authorization Patient Search =======
+  console.log("\n=== ISSUE 7: Authorization Patient Name Search ===");
+  try {
+    await page.goto(`${BASE}/authorizations`, { waitUntil: "networkidle", timeout: 30000 });
+    await page.waitForTimeout(5000);
+    await page.screenshot({ path: "/tmp/07-authorizations.png" });
+
+    const text = await page.evaluate(() => document.body.innerText);
+    console.log(`  Page contains: ${text.substring(0, 300)}`);
+
+    // Click New Prior Authorization
+    const newBtn = page.locator('button:has-text("New Prior Authorization"), button:has-text("New Authorization"), button:has-text("New")').first();
+    if (await newBtn.isVisible({ timeout: 5000 })) {
+      await newBtn.click();
+      await page.waitForTimeout(3000);
+      await page.screenshot({ path: "/tmp/07-new-auth.png" });
+
+      // Find patient search field
+      const inputs = await page.locator('input').all();
+      for (const input of inputs) {
+        const placeholder = await input.getAttribute("placeholder");
+        const name = await input.getAttribute("name");
+        if (placeholder) console.log(`  Input: placeholder="${placeholder}" name="${name}"`);
+      }
+
+      const patientInput = page.locator('input[placeholder*="patient" i], input[placeholder*="search" i], input[name*="patient" i]').first();
+      if (await patientInput.isVisible({ timeout: 3000 })) {
+        await patientInput.fill("kiran");
+        await page.waitForTimeout(3000);
+        await page.screenshot({ path: "/tmp/07-search-results.png" });
+
+        // Check for results
+        const results = page.locator('ul li, [role="option"], div[class*="cursor-pointer"]');
+        const count = await results.count();
+        if (count > 0) {
+          const firstText = await results.first().textContent();
+          console.log(`  ✅ Patient search results: ${count} items`);
+          console.log(`  First result: "${firstText?.trim().substring(0, 80)}"`);
+        }
+      }
+    } else {
+      console.log("  ⚠️ No New Authorization button");
+    }
+  } catch (err: any) {
+    console.log(`  ❌ Error: ${err.message?.substring(0, 200)}`);
+    await page.screenshot({ path: "/tmp/07-error.png" });
+  }
+
+  // ======= ISSUE 8: Care Plans Interventions =======
+  console.log("\n=== ISSUE 8: Care Plans Interventions ===");
+  try {
+    await page.goto(`${BASE}/care-plans`, { waitUntil: "networkidle", timeout: 30000 });
+    await page.waitForTimeout(5000);
+    await page.screenshot({ path: "/tmp/08-care-plans.png" });
+
+    const text = await page.evaluate(() => document.body.innerText);
+    const hasInterventions = text.toLowerCase().includes("intervention");
+    console.log(`  Page mentions interventions: ${hasInterventions}`);
+    console.log(`  Page text preview: ${text.substring(0, 500)}`);
+  } catch (err: any) {
+    console.log(`  ❌ Error: ${err.message?.substring(0, 200)}`);
+  }
+
+  // ======= ISSUE 1: Encounter Reason for Visit =======
+  console.log("\n=== ISSUE 1: Encounter Reason for Visit Negative Cases ===");
+  try {
+    await page.goto(`${BASE}/patients`, { waitUntil: "networkidle", timeout: 30000 });
+    await page.waitForTimeout(5000);
+    await page.locator('button[title="View Chart"]').first().click();
+    await page.waitForTimeout(5000);
+
+    // Click ENCOUNTERS tab
+    const encTab = page.locator('button:has-text("ENCOUNTERS"), button:has-text("Encounters")').first();
+    if (await encTab.isVisible({ timeout: 5000 })) {
+      await encTab.click();
+      await page.waitForTimeout(3000);
+      await page.screenshot({ path: "/tmp/01-encounters.png" });
+
+      const text = await page.evaluate(() => document.body.innerText);
+      console.log(`  Encounters tab text: ${text.substring(0, 500)}`);
+
+      // Click Add/New button
+      const addBtn = page.locator('button:has-text("Add"), button:has-text("New Encounter"), button:has-text("+")').first();
+      if (await addBtn.isVisible({ timeout: 5000 })) {
+        await addBtn.click();
+        await page.waitForTimeout(3000);
+        await page.screenshot({ path: "/tmp/01-new-encounter.png" });
+
+        const formText = await page.evaluate(() => document.body.innerText);
+        console.log(`  New encounter form: ${formText.substring(0, 500)}`);
+      } else {
+        console.log("  ⚠️ No Add button for encounters");
+      }
+    } else {
+      console.log("  ⚠️ Encounters tab not found");
+      const allBtns = await page.locator('button').allTextContents();
+      console.log("  Available buttons:", allBtns.filter(b => b.trim() && b.length < 30).join(", "));
+    }
+  } catch (err: any) {
+    console.log(`  ❌ Error: ${err.message?.substring(0, 200)}`);
+    await page.screenshot({ path: "/tmp/01-error.png" });
+  }
+
+  // ======= ISSUE 2: Immunization Lot/Dose Validation =======
+  console.log("\n=== ISSUE 2: Immunization Lot/Dose Validation ===");
+  try {
+    await page.goto(`${BASE}/immunizations`, { waitUntil: "networkidle", timeout: 30000 });
+    await page.waitForTimeout(5000);
+    await page.screenshot({ path: "/tmp/02-immunizations.png" });
+
+    const text = await page.evaluate(() => document.body.innerText);
+    console.log(`  Immunizations page text: ${text.substring(0, 300)}`);
+  } catch (err: any) {
+    console.log(`  ❌ Error: ${err.message?.substring(0, 200)}`);
+  }
+
+  // ======= ISSUE 3: Demographics non-primary phone =======
+  console.log("\n=== ISSUE 3: Demographics Non-Primary Phone Not Mandatory ===");
+  try {
+    await page.goto(`${BASE}/patients`, { waitUntil: "networkidle", timeout: 30000 });
+    await page.waitForTimeout(5000);
+    await page.locator('button[title="View Chart"]').first().click();
+    await page.waitForTimeout(5000);
+
+    // Click Demographics
+    const demoTab = page.locator('button:has-text("Demographics")').first();
+    if (await demoTab.isVisible({ timeout: 5000 })) {
+      await demoTab.click();
+      await page.waitForTimeout(3000);
+      await page.screenshot({ path: "/tmp/03-demographics.png" });
+
+      const text = await page.evaluate(() => document.body.innerText);
+      console.log(`  Demographics text: ${text.substring(0, 800)}`);
+
+      // Look for phone fields with asterisks
+      const labels = await page.locator('label').all();
+      for (const label of labels) {
+        const text = await label.textContent();
+        if (text && text.toLowerCase().includes("phone")) {
+          const html = await label.innerHTML();
+          const mandatory = html.includes("*") || html.includes("text-red");
+          console.log(`  Phone field: "${text.trim()}" mandatory=${mandatory}`);
+        }
+      }
+    } else {
+      console.log("  ⚠️ Demographics tab not found");
+    }
+  } catch (err: any) {
+    console.log(`  ❌ Error: ${err.message?.substring(0, 200)}`);
+    await page.screenshot({ path: "/tmp/03-error.png" });
+  }
 
   console.log("\n=== All tests complete ===");
   await browser.close();
 }
 
 main().catch((err) => {
-  console.error("Fatal error:", err.message);
+  console.error("Fatal:", err.message);
   process.exit(1);
 });
