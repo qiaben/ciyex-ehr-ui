@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Search,
   Plus,
@@ -13,11 +13,8 @@ import {
 } from "lucide-react";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { getEnv } from "@/utils/env";
-import Pagination from "@/components/tables/Pagination";
 import type { PatientLedger, LedgerEntryType } from "./types";
 import { formatCurrency, formatDate } from "./types";
-
-const LEDGER_PAGE_SIZE = 10;
 
 const apiUrl = (p: string) => `${getEnv("NEXT_PUBLIC_API_URL")}${p}`;
 
@@ -47,11 +44,6 @@ export default function LedgerTab({ showToast }: Props) {
   const [entries, setEntries] = useState<PatientLedger[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-
-  /* Pagination */
-  const [currentPage, setCurrentPage] = useState(1);
-  const totalPages = Math.ceil(entries.length / LEDGER_PAGE_SIZE);
-  const paginatedEntries = useMemo(() => entries.slice((currentPage - 1) * LEDGER_PAGE_SIZE, currentPage * LEDGER_PAGE_SIZE), [entries, currentPage]);
 
   /* Post charge modal */
   const [chargeOpen, setChargeOpen] = useState(false);
@@ -83,7 +75,6 @@ export default function LedgerTab({ showToast }: Props) {
     setSelectedPatient({ id: p.id, name });
     setPatientQuery(name);
     setShowDropdown(false);
-    setCurrentPage(1);
   };
 
   /* Fetch ledger + balance */
@@ -246,7 +237,7 @@ export default function LedgerTab({ showToast }: Props) {
                       </td>
                     </tr>
                   ) : (
-                    paginatedEntries.map((e) => (
+                    entries.map((e) => (
                       <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition">
                         <td className="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap">{formatDate(e.createdAt)}</td>
                         <td className="px-4 py-3">
@@ -277,12 +268,6 @@ export default function LedgerTab({ showToast }: Props) {
                 </tbody>
               </table>
             </div>
-            {totalPages > 1 && (
-              <div className="flex justify-between items-center px-4 py-3 border-t border-gray-100 dark:border-slate-700 bg-gray-50/30 dark:bg-slate-800/30">
-                <span className="text-xs text-gray-500">Showing {((currentPage - 1) * LEDGER_PAGE_SIZE) + 1}–{Math.min(currentPage * LEDGER_PAGE_SIZE, entries.length)} of {entries.length}</span>
-                <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
-              </div>
-            )}
           </div>
         </>
       )}

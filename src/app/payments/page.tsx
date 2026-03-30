@@ -107,7 +107,7 @@ export default function PaymentsPage() {
         </div>
 
         {/* Tab content */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-hidden">
           {activeTab === "transactions" && <TransactionsTab showToast={showToast} />}
           {activeTab === "methods" && <PaymentMethodsTab showToast={showToast} />}
           {activeTab === "plans" && <PaymentPlansTab showToast={showToast} />}

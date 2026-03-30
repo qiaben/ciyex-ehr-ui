@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Search,
   Plus,
@@ -17,10 +17,7 @@ import {
 } from "lucide-react";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { getEnv } from "@/utils/env";
-import Pagination from "@/components/tables/Pagination";
 import type { PatientPaymentMethod, MethodType, CardBrand, AccountType } from "./types";
-
-const METHODS_PAGE_SIZE = 9;
 
 const apiUrl = (p: string) => `${getEnv("NEXT_PUBLIC_API_URL")}${p}`;
 
@@ -90,11 +87,6 @@ export default function PaymentMethodsTab({ showToast }: Props) {
   /* Methods */
   const [methods, setMethods] = useState<PatientPaymentMethod[]>([]);
   const [loading, setLoading] = useState(false);
-
-  /* Pagination */
-  const [methodsPage, setMethodsPage] = useState(1);
-  const methodsTotalPages = Math.ceil(methods.length / METHODS_PAGE_SIZE);
-  const paginatedMethods = useMemo(() => methods.slice((methodsPage - 1) * METHODS_PAGE_SIZE, methodsPage * METHODS_PAGE_SIZE), [methods, methodsPage]);
 
   /* Form */
   const [formOpen, setFormOpen] = useState(false);
@@ -311,9 +303,8 @@ export default function PaymentMethodsTab({ showToast }: Props) {
                 )}
               </div>
             ) : (
-              <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {paginatedMethods.map((m) => (
+                {methods.map((m) => (
                   <div
                     key={m.id}
                     className={`relative rounded-xl border p-4 transition ${
@@ -371,13 +362,6 @@ export default function PaymentMethodsTab({ showToast }: Props) {
                   </div>
                 ))}
               </div>
-              {methodsTotalPages > 1 && (
-                <div className="flex justify-between items-center px-4 py-3 mt-4 border-t border-gray-100 dark:border-slate-700 bg-gray-50/30 dark:bg-slate-800/30 rounded-b-xl">
-                  <span className="text-xs text-gray-500">Showing {((methodsPage - 1) * METHODS_PAGE_SIZE) + 1}–{Math.min(methodsPage * METHODS_PAGE_SIZE, methods.length)} of {methods.length}</span>
-                  <Pagination currentPage={methodsPage} totalPages={methodsTotalPages} onPageChange={setMethodsPage} />
-                </div>
-              )}
-              </>
             )}
           </div>
         </>

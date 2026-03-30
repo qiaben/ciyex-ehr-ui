@@ -1,9 +1,6 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
-import Pagination from "@/components/tables/Pagination";
-
-const CLAIMS_PAGE_SIZE = 10;
 import { formatDisplayDate } from "@/utils/dateUtils";
 import DateInput from "@/components/ui/DateInput";
 
@@ -184,12 +181,6 @@ const ClaimManagementDashboard: React.FC = () => {
     }
     return true;
   });
-
-  const [claimPage, setClaimPage] = useState(1);
-  // Reset page when filters change
-  useEffect(() => { setClaimPage(1); }, [filter, searchQuery]);
-  const claimTotalPages = Math.ceil(filtered.length / CLAIMS_PAGE_SIZE);
-  const paginatedClaims = filtered.slice((claimPage - 1) * CLAIMS_PAGE_SIZE, claimPage * CLAIMS_PAGE_SIZE);
 
   const openStatusModal = (claim: Claim) => {
     setModalClaim(claim);
@@ -424,7 +415,7 @@ const ClaimManagementDashboard: React.FC = () => {
             ) : filtered.length === 0 ? (
               <tr><td colSpan={11} className="text-center py-12 text-gray-400">No claims found</td></tr>
             ) : (
-              paginatedClaims.map((c) => (
+              filtered.map((c) => (
                 <tr
                   key={c.id}
                   onClick={() => setSelectedId(selectedId === c.id ? null : c.id)}
@@ -470,14 +461,6 @@ const ClaimManagementDashboard: React.FC = () => {
           </tbody>
         </table>
       </div>
-
-      {/* Pagination */}
-      {claimTotalPages > 1 && (
-        <div className="flex justify-between items-center px-4 py-3 border-t border-gray-100 bg-gray-50/30">
-          <span className="text-xs text-gray-500">Showing {((claimPage - 1) * CLAIMS_PAGE_SIZE) + 1}–{Math.min(claimPage * CLAIMS_PAGE_SIZE, filtered.length)} of {filtered.length}</span>
-          <Pagination currentPage={claimPage} totalPages={claimTotalPages} onPageChange={setClaimPage} />
-        </div>
-      )}
 
       {/* Status Update Modal */}
       {showModal && modalClaim && (

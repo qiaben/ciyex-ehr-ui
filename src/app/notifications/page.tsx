@@ -76,7 +76,7 @@ export default function NotificationsPage() {
         </div>
 
         {/* ---- Tab content ---- */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-hidden">
           {activeTab === "config" && <NotificationConfigPanel />}
           {activeTab === "templates" && <NotificationTemplates />}
           {activeTab === "preferences" && <EventPreferences />}

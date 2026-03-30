@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { getEnv } from "@/utils/env";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import AdminLayout from "@/app/(admin)/layout";
@@ -17,9 +17,6 @@ import {
     FileEdit,
     AlertCircle,
 } from "lucide-react";
-import Pagination from "@/components/tables/Pagination";
-
-const SUB_PAGE_SIZE = 10;
 
 const MARKETPLACE_BASE = () =>
     (getEnv("NEXT_PUBLIC_MARKETPLACE_URL") || "").replace(/\/$/, "");
@@ -52,10 +49,6 @@ export default function SubmissionsPage() {
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState<string | null>(null);
-    const [currentPage, setCurrentPage] = useState(1);
-
-    const subTotalPages = Math.ceil(submissions.length / SUB_PAGE_SIZE);
-    const paginatedSubmissions = submissions.slice((currentPage - 1) * SUB_PAGE_SIZE, currentPage * SUB_PAGE_SIZE);
 
     const loadSubmissions = async () => {
         try {
@@ -148,7 +141,7 @@ export default function SubmissionsPage() {
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        {paginatedSubmissions.map((sub) => {
+                        {submissions.map((sub) => {
                             const statusCfg = STATUS_CONFIG[sub.status] || STATUS_CONFIG.draft;
                             const StatusIcon = statusCfg.icon;
                             return (
@@ -205,12 +198,6 @@ export default function SubmissionsPage() {
                                 </div>
                             );
                         })}
-                    </div>
-                )}
-                {subTotalPages > 1 && (
-                    <div className="flex justify-between items-center px-4 py-3 border-t border-gray-100 bg-gray-50/30 rounded-b-xl">
-                        <span className="text-xs text-gray-500">Showing {((currentPage - 1) * SUB_PAGE_SIZE) + 1}–{Math.min(currentPage * SUB_PAGE_SIZE, submissions.length)} of {submissions.length}</span>
-                        <Pagination currentPage={currentPage} totalPages={subTotalPages} onPageChange={setCurrentPage} />
                     </div>
                 )}
             </div>

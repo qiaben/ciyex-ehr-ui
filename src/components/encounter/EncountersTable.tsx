@@ -187,7 +187,7 @@ export default function EncountersTable() {
 
             {/* Table */}
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">

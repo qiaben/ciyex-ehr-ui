@@ -5,9 +5,6 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { formatDisplayDateTime } from "@/utils/dateUtils";
-import Pagination from "@/components/tables/Pagination";
-
-const RECORDS_PAGE_SIZE = 10;
 
 const API = getEnv("NEXT_PUBLIC_API_URL")!;
 
@@ -65,8 +62,6 @@ export default function Records() {
   const [waste, setWaste] = useState<Waste[]>([]);
   const [loading, setLoading] = useState(true);
   const [recordLoading, setRecordLoading] = useState(false);
-  const [adjPage, setAdjPage] = useState(1);
-  const [wastePage, setWastePage] = useState(1);
 
   useEffect(() => {
     (async () => {
@@ -90,15 +85,8 @@ export default function Records() {
   function selectItem(item: Item) {
     setSelectedItem(item);
     setTab("Adjustments");
-    setAdjPage(1);
-    setWastePage(1);
     loadRecords(item.id);
   }
-
-  const adjTotalPages = Math.ceil(adjustments.length / RECORDS_PAGE_SIZE);
-  const paginatedAdj = adjustments.slice((adjPage - 1) * RECORDS_PAGE_SIZE, adjPage * RECORDS_PAGE_SIZE);
-  const wasteTotalPages = Math.ceil(waste.length / RECORDS_PAGE_SIZE);
-  const paginatedWaste = waste.slice((wastePage - 1) * RECORDS_PAGE_SIZE, wastePage * RECORDS_PAGE_SIZE);
 
   const filtered = items.filter((i) =>
     i.name.toLowerCase().includes(search.toLowerCase()) || i.category?.toLowerCase().includes(search.toLowerCase())
@@ -181,7 +169,6 @@ export default function Records() {
                   adjustments.length === 0 ? (
                     <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No adjustments recorded.</p>
                   ) : (
-                    <>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50 dark:bg-slate-800">
@@ -195,7 +182,7 @@ export default function Records() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {paginatedAdj.map((a) => (
+                          {adjustments.map((a) => (
                             <tr key={a.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                               <td className="px-3 py-2 text-slate-700 dark:text-slate-300 whitespace-nowrap">{formatDate(a.createdAt)}</td>
                               <td className={`px-3 py-2 text-right font-semibold tabular-nums whitespace-nowrap ${
@@ -213,19 +200,11 @@ export default function Records() {
                         </tbody>
                       </table>
                     </div>
-                    {adjTotalPages > 1 && (
-                      <div className="flex justify-between items-center px-4 py-3 border-t border-gray-100 bg-gray-50/30">
-                        <span className="text-xs text-gray-500">Showing {((adjPage - 1) * RECORDS_PAGE_SIZE) + 1}–{Math.min(adjPage * RECORDS_PAGE_SIZE, adjustments.length)} of {adjustments.length}</span>
-                        <Pagination currentPage={adjPage} totalPages={adjTotalPages} onPageChange={setAdjPage} />
-                      </div>
-                    )}
-                    </>
                   )
                 ) : (
                   waste.length === 0 ? (
                     <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No waste entries recorded.</p>
                   ) : (
-                    <>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50 dark:bg-slate-800">
@@ -238,7 +217,7 @@ export default function Records() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {paginatedWaste.map((w) => (
+                          {waste.map((w) => (
                             <tr key={w.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                               <td className="px-3 py-2 text-slate-700 dark:text-slate-300 whitespace-nowrap">{formatDate(w.createdAt)}</td>
                               <td className="px-3 py-2 text-right font-semibold tabular-nums text-red-600 dark:text-red-400">-{w.quantity}</td>
@@ -250,13 +229,6 @@ export default function Records() {
                         </tbody>
                       </table>
                     </div>
-                    {wasteTotalPages > 1 && (
-                      <div className="flex justify-between items-center px-4 py-3 border-t border-gray-100 bg-gray-50/30">
-                        <span className="text-xs text-gray-500">Showing {((wastePage - 1) * RECORDS_PAGE_SIZE) + 1}–{Math.min(wastePage * RECORDS_PAGE_SIZE, waste.length)} of {waste.length}</span>
-                        <Pagination currentPage={wastePage} totalPages={wasteTotalPages} onPageChange={setWastePage} />
-                      </div>
-                    )}
-                    </>
                   )
                 )}
               </div>
