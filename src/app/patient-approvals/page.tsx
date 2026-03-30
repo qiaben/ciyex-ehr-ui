@@ -21,6 +21,8 @@ export default function PatientApprovals() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [page, setPage] = useState(0);
+  const pageSize = 20;
 
   useEffect(() => {
     fetchPendingUsers();
@@ -220,7 +222,7 @@ export default function PatientApprovals() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {pendingUsers.map((user) => (
+                  {pendingUsers.slice(page * pageSize, (page + 1) * pageSize).map((user) => (
                     <tr key={user.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
@@ -272,6 +274,16 @@ export default function PatientApprovals() {
                 </tbody>
               </table>
             </div>
+            {Math.ceil(pendingUsers.length / pageSize) > 1 && (
+              <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
+                <span>{pendingUsers.length} registration{pendingUsers.length !== 1 ? 's' : ''}</span>
+                <div className="flex items-center gap-2">
+                  <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 text-sm">Prev</button>
+                  <span>Page {page + 1} of {Math.ceil(pendingUsers.length / pageSize)}</span>
+                  <button disabled={page + 1 >= Math.ceil(pendingUsers.length / pageSize)} onClick={() => setPage(p => p + 1)} className="px-3 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 text-sm">Next</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

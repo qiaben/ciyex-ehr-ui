@@ -292,6 +292,15 @@
   scrollbar-width: thin;
 }
 
+/* ===== Global scrollbar hiding — user-friendly scroll ===== */
+*::-webkit-scrollbar {
+  display: none;
+}
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 
 
 @layer utilities {

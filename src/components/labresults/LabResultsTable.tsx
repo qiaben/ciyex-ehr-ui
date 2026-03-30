@@ -160,6 +160,8 @@ export const LabResultsTable: React.FC<Props> = ({ patientId, encounterId }) => 
   const [expandedPanels, setExpandedPanels] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<Toast>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(0);
+  const pageSize = 20;
 
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); } }, [toast]);
   const show = useCallback((type: Toast extends null ? never : NonNullable<Toast>["type"], text: string) => setToast({ type, text }), []);
@@ -200,6 +202,12 @@ export const LabResultsTable: React.FC<Props> = ({ patientId, encounterId }) => 
         return sortAsc ? cmp : -cmp;
       });
   }, [results, query, statusFilter, abnFilter, sortKey, sortAsc]);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(0); }, [query, statusFilter, abnFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paged = useMemo(() => filtered.slice(page * pageSize, (page + 1) * pageSize), [filtered, page, pageSize]);
 
   /* ── Panel grouping ── */
   const panelGroups = useMemo(() => {
@@ -365,7 +373,7 @@ export const LabResultsTable: React.FC<Props> = ({ patientId, encounterId }) => 
               </tr>
             </thead>
             <tbody>
-              {filtered.map(r => (
+              {paged.map(r => (
                 <tr key={r.id} className="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                   <td className="px-4 py-3">
                     <button onClick={() => openTrend(r)} className="text-left hover:underline text-blue-700 dark:text-blue-400 font-medium">{r.testName || r.procedureName || "\u2014"}</button>
@@ -394,7 +402,16 @@ export const LabResultsTable: React.FC<Props> = ({ patientId, encounterId }) => 
               )}
             </tbody>
           </table>
-          <div className="px-4 py-2 border-t dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</div>
+          <div className="px-4 py-2 border-t dark:border-gray-700 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+            <span>{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700">Prev</button>
+                <span>Page {page + 1} of {totalPages}</span>
+                <button disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700">Next</button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

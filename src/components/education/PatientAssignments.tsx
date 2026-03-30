@@ -59,6 +59,8 @@ export default function PatientAssignments({ onAssignNew, refreshKey }: Props) {
   const [stats, setStats] = useState<AssignmentStats>({ assigned: 0, viewed: 0, completed: 0, dismissed: 0 });
   const [loading, setLoading] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
+  const [assignPage, setAssignPage] = useState(0);
+  const assignPageSize = 20;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -292,7 +294,7 @@ export default function PatientAssignments({ onAssignNew, refreshKey }: Props) {
           </div>
         ) : (
           <div className="divide-y divide-gray-100 dark:divide-slate-800">
-            {assignments.map((a) => {
+            {assignments.slice(assignPage * assignPageSize, (assignPage + 1) * assignPageSize).map((a) => {
               const isActioning = actionLoadingId === a.id;
               return (
                 <div key={a.id} className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-800/50 transition">
@@ -378,6 +380,16 @@ export default function PatientAssignments({ onAssignNew, refreshKey }: Props) {
                 </div>
               );
             })}
+            {Math.ceil(assignments.length / assignPageSize) > 1 && (
+              <div className="px-4 py-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                <span>{assignments.length} assignment{assignments.length !== 1 ? "s" : ""}</span>
+                <div className="flex items-center gap-2">
+                  <button disabled={assignPage === 0} onClick={() => setAssignPage(p => p - 1)} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700">Prev</button>
+                  <span>Page {assignPage + 1} of {Math.ceil(assignments.length / assignPageSize)}</span>
+                  <button disabled={assignPage + 1 >= Math.ceil(assignments.length / assignPageSize)} onClick={() => setAssignPage(p => p + 1)} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700">Next</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
