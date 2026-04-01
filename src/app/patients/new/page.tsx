@@ -984,13 +984,14 @@ export default function AddPatient() {
                                                 placeholder="(xxx) xxx-xxxx"
                                                 value={formData.contactInfo.cellPhone}
                                                 onChange={(e) => {
-                                                    const digits = e.target.value.replace(/\D/g, "");
-                                                    if (digits.length > 10) {
-                                                        setFormErrors(prev => ({ ...prev, cellPhone: "Phone number cannot exceed 10 digits" }));
-                                                        return;
-                                                    }
-                                                    handleChange("contactInfo", "cellPhone", formatUSPhone(e.target.value));
+                                                    const formatted = formatUSPhone(e.target.value);
+                                                    handleChange("contactInfo", "cellPhone", formatted);
+                                                    const digits = formatted.replace(/\D/g, "");
                                                     if (digits.length === 10) {
+                                                        setFormErrors(prev => { const n = { ...prev }; delete n.cellPhone; return n; });
+                                                    } else if (digits.length > 0 && digits.length < 10) {
+                                                        setFormErrors(prev => ({ ...prev, cellPhone: "Enter a valid 10-digit US phone number" }));
+                                                    } else {
                                                         setFormErrors(prev => { const n = { ...prev }; delete n.cellPhone; return n; });
                                                     }
                                                 }}

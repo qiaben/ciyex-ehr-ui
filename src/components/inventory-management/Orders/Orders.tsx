@@ -364,6 +364,8 @@ export default function Orders() {
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
               <select value={formStatus} onChange={e => setFormStatus(e.target.value)} className={selectCls}>
                 <option value="draft">Draft</option><option value="submitted">Submitted</option>
+                <option value="partial">Partial</option><option value="received">Received</option>
+                <option value="cancelled">Cancelled</option>
               </select>
             </div>
             <div>

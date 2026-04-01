@@ -496,14 +496,14 @@ export default function LabOrdersPage() {
       {/* Filters */}
       <div className="grid md:grid-cols-6 gap-3 items-end">
         <div className="md:col-span-3">
-          <input className="w-full border rounded-lg px-3 py-2 text-sm text-gray-800 bg-white"
+          <input className="w-full border rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             placeholder="Search by order #, test, patient name, MRN..."
             value={searchDraft} onChange={(e) => setSearchDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { setQuery(searchDraft.trim()); } }} />
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Status</label>
-          <select className="border rounded-lg px-3 py-2 text-sm w-full text-gray-800 bg-white" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <select className="border rounded-lg px-3 py-2 text-sm w-full text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="all">All</option>
             <option value="draft">Draft</option><option value="active">Active</option><option value="pending">Pending</option>
             <option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="revoked">Revoked</option>
@@ -511,13 +511,13 @@ export default function LabOrdersPage() {
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Priority</label>
-          <select className="border rounded-lg px-3 py-2 text-sm w-full text-gray-800 bg-white" value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
+          <select className="border rounded-lg px-3 py-2 text-sm w-full text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600" value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
             <option value="all">All</option><option value="routine">Routine</option><option value="urgent">Urgent</option><option value="stat">STAT</option>
           </select>
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Result</label>
-          <select className="border rounded-lg px-3 py-2 text-sm w-full text-gray-800 bg-white" value={resultFilter} onChange={(e) => setResultFilter(e.target.value)}>
+          <select className="border rounded-lg px-3 py-2 text-sm w-full text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600" value={resultFilter} onChange={(e) => setResultFilter(e.target.value)}>
             <option value="all">All</option><option value="Pending">Pending</option><option value="Preliminary">Preliminary</option><option value="Partial">Partial</option><option value="Final">Final</option><option value="Corrected">Corrected</option><option value="Amended">Amended</option>
           </select>
         </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { getEnv } from "@/utils/env";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Button from "@/components/ui/button/Button";
 import Label from "@/components/form/Label";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,8 @@ type Maint = {
 };
 type AlertData = { variant: "success" | "error"; title: string; message: string };
 const API = () => `${getEnv("NEXT_PUBLIC_API_URL")}/api/maintenances`;
+const PROVIDER_API = () => `${getEnv("NEXT_PUBLIC_API_URL")}/api/providers`;
+const FACILITY_API = () => `${getEnv("NEXT_PUBLIC_API_URL")}/api/facilities`;
 
 const emptyForm = {
   equipmentName: "", equipmentId: "", category: "preventive", location: "",
@@ -61,6 +63,59 @@ export default function Maintenance() {
   const [loading, setLoading] = useState(false);
   const [alert, setAlert] = useState<AlertData | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Searchable dropdown state for Location & Assignee
+  const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
+  const [assigneeSuggestions, setAssigneeSuggestions] = useState<{name: string}[]>([]);
+  const [showLocationDrop, setShowLocationDrop] = useState(false);
+  const [showAssigneeDrop, setShowAssigneeDrop] = useState(false);
+  const locationRef = useRef<HTMLDivElement>(null);
+  const assigneeRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (locationRef.current && !locationRef.current.contains(e.target as Node)) setShowLocationDrop(false);
+      if (assigneeRef.current && !assigneeRef.current.contains(e.target as Node)) setShowAssigneeDrop(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Fetch locations from existing maintenance records
+  const fetchLocationSuggestions = useCallback(async (q: string) => {
+    try {
+      const res = await fetchWithAuth(`${FACILITY_API()}`);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        const names = json.data.map((f: any) => f.name || f.facilityName).filter(Boolean);
+        const filtered = q ? names.filter((n: string) => n.toLowerCase().includes(q.toLowerCase())) : names;
+        setLocationSuggestions(filtered.slice(0, 10));
+      }
+    } catch {
+      // Fallback: use existing items' locations
+      const locs = [...new Set(items.map(m => m.location).filter(Boolean))];
+      const filtered = q ? locs.filter(l => l.toLowerCase().includes(q.toLowerCase())) : locs;
+      setLocationSuggestions(filtered.slice(0, 10));
+    }
+  }, [items]);
+
+  // Fetch assignee suggestions from providers
+  const fetchAssigneeSuggestions = useCallback(async (q: string) => {
+    try {
+      const res = await fetchWithAuth(`${PROVIDER_API()}`);
+      const json = await res.json();
+      const providers = Array.isArray(json) ? json : (json.data || json.content || []);
+      const names = providers.map((p: any) => ({ name: `${p.firstName || ""} ${p.lastName || ""}`.trim() || p.name || "" })).filter((p: {name: string}) => p.name);
+      const filtered = q ? names.filter((p: {name: string}) => p.name.toLowerCase().includes(q.toLowerCase())) : names;
+      setAssigneeSuggestions(filtered.slice(0, 10));
+    } catch {
+      // Fallback: use existing items' assignees
+      const assignees = [...new Set(items.map(m => m.assignee).filter(Boolean))].map(n => ({ name: n }));
+      const filtered = q ? assignees.filter(a => a.name.toLowerCase().includes(q.toLowerCase())) : assignees;
+      setAssigneeSuggestions(filtered.slice(0, 10));
+    }
+  }, [items]);
 
   useEffect(() => { if (alert) { const t = setTimeout(() => setAlert(null), 4000); return () => clearTimeout(t); } }, [alert]);
 
@@ -254,8 +309,8 @@ export default function Maintenance() {
                   <option value="medium">Medium</option><option value="low">Low</option>
                 </select>
               </div>
-              <div><Label>Location</Label><Input value={form.location} onChange={e => { F("location", e.target.value); if (formErrors.location) setFormErrors(p => { const n = {...p}; delete n.location; return n; }); }} className={formErrors.location ? "border-red-400" : ""} placeholder="e.g. Room 101, Building A" />{formErrors.location && <p className="text-xs text-red-500 mt-1">{formErrors.location}</p>}</div>
-              <div><Label>Assignee</Label><Input value={form.assignee} onChange={e => { F("assignee", e.target.value); if (formErrors.assignee) setFormErrors(p => { const n = {...p}; delete n.assignee; return n; }); }} className={formErrors.assignee ? "border-red-400" : ""} placeholder="e.g. John Smith" />{formErrors.assignee && <p className="text-xs text-red-500 mt-1">{formErrors.assignee}</p>}</div>
+              <div ref={locationRef} className="relative"><Label>Location</Label><Input value={form.location} onChange={e => { F("location", e.target.value); if (formErrors.location) setFormErrors(p => { const n = {...p}; delete n.location; return n; }); fetchLocationSuggestions(e.target.value); setShowLocationDrop(true); }} onFocus={() => { fetchLocationSuggestions(form.location); setShowLocationDrop(true); }} className={formErrors.location ? "border-red-400" : ""} placeholder="Search location..." autoComplete="off" />{showLocationDrop && locationSuggestions.length > 0 && (<ul className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-40 overflow-y-auto">{locationSuggestions.map((loc, i) => (<li key={i} onClick={() => { F("location", loc); setShowLocationDrop(false); }} className="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-800 dark:text-gray-200">{loc}</li>))}</ul>)}{formErrors.location && <p className="text-xs text-red-500 mt-1">{formErrors.location}</p>}</div>
+              <div ref={assigneeRef} className="relative"><Label>Assignee</Label><Input value={form.assignee} onChange={e => { F("assignee", e.target.value); if (formErrors.assignee) setFormErrors(p => { const n = {...p}; delete n.assignee; return n; }); fetchAssigneeSuggestions(e.target.value); setShowAssigneeDrop(true); }} onFocus={() => { fetchAssigneeSuggestions(form.assignee); setShowAssigneeDrop(true); }} className={formErrors.assignee ? "border-red-400" : ""} placeholder="Search assignee..." autoComplete="off" />{showAssigneeDrop && assigneeSuggestions.length > 0 && (<ul className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-40 overflow-y-auto">{assigneeSuggestions.map((a, i) => (<li key={i} onClick={() => { F("assignee", a.name); setShowAssigneeDrop(false); }} className="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-800 dark:text-gray-200">{a.name}</li>))}</ul>)}{formErrors.assignee && <p className="text-xs text-red-500 mt-1">{formErrors.assignee}</p>}</div>
               <div><Label>Due Date</Label><DateInput value={form.dueDate} min={new Date().toISOString().split("T")[0]} onChange={e => { F("dueDate", e.target.value); if (formErrors.dueDate) setFormErrors(p => { const n = {...p}; delete n.dueDate; return n; }); }} className={`${dateClass} ${formErrors.dueDate ? "border-red-400" : ""}`} />{formErrors.dueDate && <p className="text-xs text-red-500 mt-1">{formErrors.dueDate}</p>}</div>
               <div><Label>Last Service Date</Label><DateInput value={form.lastServiceDate} onChange={e => F("lastServiceDate", e.target.value)} className={dateClass} /></div>
               <div><Label>Next Service Date</Label><DateInput value={form.nextServiceDate} min={new Date().toISOString().split("T")[0]} onChange={e => { F("nextServiceDate", e.target.value); if (formErrors.nextServiceDate) setFormErrors(p => { const n = {...p}; delete n.nextServiceDate; return n; }); }} className={`${dateClass} ${formErrors.nextServiceDate ? "border-red-400" : ""}`} />{formErrors.nextServiceDate && <p className="text-xs text-red-500 mt-1">{formErrors.nextServiceDate}</p>}</div>

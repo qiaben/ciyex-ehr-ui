@@ -198,9 +198,12 @@ export default function Suppliers() {
               <div className="col-span-2"><Label>Email</Label><Input type="email" value={form.email} onChange={e => { F("email", e.target.value); if (formErrors.email) setFormErrors(p => { const n = {...p}; delete n.email; return n; }); }} className={formErrors.email ? "border-red-400" : ""} placeholder="e.g. contact@supplier.com" />{formErrors.email && <p className="text-xs text-red-500 mt-1">{formErrors.email}</p>}</div>
               <div className="col-span-2"><Label>Address</Label><Input value={form.address} onChange={e => F("address", e.target.value)} placeholder="e.g. 123 Main St, City, State" /></div>
               <div className="col-span-2"><Label>Notes</Label><textarea value={form.notes} onChange={e => F("notes", e.target.value)} rows={2} className={`${dateInput} py-2`} /></div>
-              <div className="col-span-2 flex items-center gap-2">
-                <input type="checkbox" checked={form.active} onChange={e => F("active", e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-                <Label>Active</Label>
+              <div className="col-span-2">
+                <Label>Status</Label>
+                <select value={form.active ? "active" : "inactive"} onChange={e => F("active", e.target.value === "active")} className={`${dateInput} px-2`}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
               </div>
               <div className="col-span-2 flex justify-end gap-3 pt-2 border-t dark:border-gray-700">
                 <Button type="button" onClick={close}>Cancel</Button>
