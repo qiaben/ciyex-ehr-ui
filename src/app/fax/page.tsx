@@ -154,7 +154,7 @@ export default function FaxQueuePage() {
       ? OUTBOUND_STATUSES
       : null;
 
-  // --- Send fax ---
+  // --- Send or update fax ---
   async function handleSendFax(data: SendFaxForm) {
     try {
       const body: Record<string, unknown> = {
@@ -168,24 +168,27 @@ export default function FaxQueuePage() {
       if (data.category) body.category = data.category;
       if (data.notes) body.notes = data.notes;
 
-      const res = await fetchWithAuth(apiUrl("/api/fax"), {
-        method: "POST",
+      const isEdit = !!editFax;
+      const url = isEdit ? apiUrl(`/api/fax/${editFax.id}`) : apiUrl("/api/fax");
+      const res = await fetchWithAuth(url, {
+        method: isEdit ? "PUT" : "POST",
         body: JSON.stringify(body),
       });
 
       if (res.ok) {
-        showToast("Fax sent successfully");
+        showToast(isEdit ? "Fax updated successfully" : "Fax sent successfully");
         setShowSendForm(false);
         setResendFax(null);
+        setEditFax(null);
         fetchFaxes();
         fetchStats();
       } else {
         const json = await res.json().catch(() => null);
-        showToast(json?.message || "Failed to send fax", "error");
+        showToast(json?.message || (isEdit ? "Failed to update fax" : "Failed to send fax"), "error");
       }
     } catch (err) {
-      console.error("Send fax failed:", err);
-      showToast("Failed to send fax", "error");
+      console.error("Send/update fax failed:", err);
+      showToast(editFax ? "Failed to update fax" : "Failed to send fax", "error");
     }
   }
 

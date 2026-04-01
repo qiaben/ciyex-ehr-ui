@@ -5,6 +5,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import AdminLayout from "@/app/(admin)/layout";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { formatDisplayDate } from "@/utils/dateUtils";
+import { isValidUSPhone, formatUSPhone } from "@/utils/validation";
 import Label from "../form/Label";
 import Button from "../ui/button/Button";
 import Alert from "../ui/alert/Alert";
@@ -327,8 +328,8 @@ export default function RecallPage() {
   const saveRecall = async () => {
     if (!formData.patientId) { setAlert({ variant: "error", title: "Error", message: "Please select a patient." }); return; }
     if (!formData.dueDate) { setAlert({ variant: "error", title: "Error", message: "Due date is required." }); return; }
-    if (formData.patientPhone && !/^\+?[\d\s\-().]{7,20}$/.test(formData.patientPhone)) {
-      setAlert({ variant: "error", title: "Error", message: "Please enter a valid phone number." }); return;
+    if (formData.patientPhone && !isValidUSPhone(formData.patientPhone)) {
+      setAlert({ variant: "error", title: "Error", message: "Please enter a valid 10-digit US phone number." }); return;
     }
     if (formData.patientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.patientEmail)) {
       setAlert({ variant: "error", title: "Error", message: "Please enter a valid email address." }); return;
@@ -785,11 +786,11 @@ export default function RecallPage() {
                     <Label>Phone</Label>
                     <input type="tel" value={formData.patientPhone}
                       onChange={e => {
-                        const v = e.target.value;
+                        const v = formatUSPhone(e.target.value);
                         setFormData(prev => ({ ...prev, patientPhone: v }));
-                        setFormErrors(prev => ({ ...prev, patientPhone: v && !/^\+?[\d\s\-().]{7,20}$/.test(v) ? "Enter a valid phone number (7–20 digits)" : undefined }));
+                        setFormErrors(prev => ({ ...prev, patientPhone: v && !isValidUSPhone(v) ? "Enter a valid 10-digit US phone number" : undefined }));
                       }}
-                      placeholder="e.g. (555) 123-4567"
+                      placeholder="(555) 123-4567"
                       className={`mt-1 w-full h-9 rounded-lg border px-3 text-sm bg-white dark:bg-slate-800 ${formErrors.patientPhone ? "border-red-400 dark:border-red-500" : "border-slate-300 dark:border-slate-600"}`} />
                     {formErrors.patientPhone && <p className="mt-1 text-xs text-red-500">{formErrors.patientPhone}</p>}
                   </div>
