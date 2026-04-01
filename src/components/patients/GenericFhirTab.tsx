@@ -565,6 +565,17 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                     section.fields[i] = { ...f, type: "text", validation: undefined, placeholder: "Enter alphanumeric member ID (e.g., MEM123)" } as any;
                 }
             }
+            // Allergies: inject clinicalStatus dropdown if not present in config
+            if ((tabKey === "allergies" || tabKey === "allergy-intolerances") && section.fields) {
+                const hasStatus = section.fields.some((f: any) => f && (f.key === "clinicalStatus" || f.key === "status"));
+                if (!hasStatus) {
+                    section.fields.push({ key: "clinicalStatus", label: "Status", type: "select", options: [
+                        { value: "Active", label: "Active" },
+                        { value: "Inactive", label: "Inactive" },
+                        { value: "Resolved", label: "Resolved" },
+                    ] } as any);
+                }
+            }
             // Education: inject URL field if not present in config
             if ((tabKey === "education" || tabKey === "patient-education") && section.fields) {
                 const urlKeys = ["url", "externalUrl", "videoUrl", "articleUrl", "link", "resourceUrl"];
