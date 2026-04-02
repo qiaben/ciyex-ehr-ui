@@ -194,8 +194,10 @@ function timeFromMMDDYYYY(s: string, fallback: number, endOfDay = false): number
 }
 
 /** Format wait time = Current Time - Scheduled Appointment Time (uses local timezone).
- *  Only shows wait time for TODAY's appointments where the appointment time has passed.
- *  Returns null for future appointments or appointments from other days. */
+ *  Shows live wait time for TODAY's appointments:
+ *  - Before appointment time → "Not yet started"
+ *  - After appointment time → actual elapsed wait time (e.g. "15m", "1h 5m")
+ *  Returns null for appointments on other days. */
 function formatWaitTime(scheduledDateTime: string): { text: string; color: string } | null {
   if (!scheduledDateTime) return null;
   // Parse as local time (no "Z" suffix so it's treated as local)
@@ -215,7 +217,14 @@ function formatWaitTime(scheduledDateTime: string): { text: string; color: strin
   }
 
   const mins = Math.floor((now.getTime() - scheduled) / 60000);
-  if (mins < 0) return null; // appointment hasn't started yet
+  if (mins < 0) {
+    // Appointment hasn't started yet — show countdown
+    const untilMins = Math.abs(mins);
+    const h = Math.floor(untilMins / 60);
+    const m = untilMins % 60;
+    const text = h > 0 ? `Starts in ${h}h ${m}m` : `Starts in ${m}m`;
+    return { text, color: "#6b7280" }; // gray
+  }
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   const text = h > 0 ? `${h}h ${m}m` : `${m}m`;
@@ -342,8 +351,12 @@ function getDateRange(preset: string): { from: string; to: string } {
       futureEnd.setFullYear(futureEnd.getFullYear() + 1);
       return { from: fmt(tomorrow), to: fmt(futureEnd) };
     }
-    case "all_time":
-      return { from: "", to: "" };
+    case "all_time": {
+      // Send a wide date range so the server returns past + present + future appointments
+      const past = new Date(2000, 0, 1);
+      const future = new Date(now.getFullYear() + 5, 11, 31);
+      return { from: fmt(past), to: fmt(future) };
+    }
     default:
       return { from: today, to: today };
   }
@@ -410,10 +423,10 @@ export default function AppointmentPage() {
   // Silent refresh indicator (spinning icon only, no table flash)
   const [refreshing, setRefreshing] = useState(false);
 
-  // Wait time ticker
+  // Wait time ticker — update every 60s for live wait time display
   const [, setTick] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 30000); // update wait times every 30s
+    const t = setInterval(() => setTick((n) => n + 1), 60000);
     return () => clearInterval(t);
   }, []);
 
@@ -756,8 +769,13 @@ export default function AppointmentPage() {
     [getStatusOption, updateStatus]
   );
 
-  // Manual encounter creation
+  // Manual encounter creation — prevents duplicate encounters per appointment
   const createEncounter = useCallback(async (row: AppointmentDTO) => {
+    // Guard: prevent duplicate encounter for same appointment
+    if (row.encounterId) {
+      toast.warning(`Encounter #${row.encounterId} already exists for this appointment.`);
+      return;
+    }
     try {
       const res = await fetchWithAuth(
         `${getEnv("NEXT_PUBLIC_API_URL")}/api/appointments/${row.id}/encounter`,

@@ -117,16 +117,41 @@ export default function DynamicEncounterForm({ patientId, encounterId, embedded,
     if (!patientId || !encounterId) return;
     const base = API_BASE();
 
-    fetchWithAuth(`${base}/api/encounters/${patientId}/${encounterId}/summary`)
-      .then(async (res) => {
-        if (res.ok) {
-          const json = await res.json();
-          const data = json.data || json;
-          setEncounter(data);
-          if (data.status) setStatus(data.status as EncounterStatus);
+    const resolveStatus = (data: Record<string, any>): EncounterStatus | null => {
+      // Check multiple possible locations for status
+      const raw = data.status || data.meta?.status || data.signoff?.status || null;
+      if (raw && ['SIGNED', 'UNSIGNED', 'INCOMPLETE'].includes(String(raw).toUpperCase())) {
+        return String(raw).toUpperCase() as EncounterStatus;
+      }
+      // If signoff has signedAt or providerSignature has signedAt, treat as SIGNED
+      if (data.signoff?.signedAt || data.providerSignature?.signedAt) return 'SIGNED';
+      return null;
+    };
+
+    (async () => {
+      try {
+        // Try summary endpoint first
+        let encData: Record<string, any> | null = null;
+        const summaryRes = await fetchWithAuth(`${base}/api/encounters/${patientId}/${encounterId}/summary`);
+        if (summaryRes.ok) {
+          const json = await summaryRes.json();
+          encData = json.data || json;
         }
-      })
-      .catch(() => {});
+        // Fallback to direct encounter endpoint
+        if (!encData) {
+          const encRes = await fetchWithAuth(`${base}/api/encounters/${patientId}/${encounterId}`);
+          if (encRes.ok) {
+            const json = await encRes.json();
+            encData = json.data || json;
+          }
+        }
+        if (encData) {
+          setEncounter(encData);
+          const resolvedStatus = resolveStatus(encData);
+          if (resolvedStatus) setStatus(resolvedStatus);
+        }
+      } catch { /* ignore */ }
+    })();
 
     fetchWithAuth(`${base}/api/patients/${patientId}`)
       .then(async (res) => {
@@ -356,49 +381,121 @@ export default function DynamicEncounterForm({ patientId, encounterId, embedded,
     [patientId, encounterId, autoSave, pluginEvents]
   );
 
-  // Client-side print — clones the DOM and syncs live input values so all sections print correctly
+  // Client-side print — generates a professional medical visit note layout
   const downloadPdf = useCallback(() => {
     if (!contentRef.current) return;
 
-    // Clone the live DOM tree
-    const clone = contentRef.current.cloneNode(true) as HTMLElement;
+    const patientName = patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : '';
+    const dob = patient?.dateOfBirth || '';
+    const dos = encounter?.dateOfService || encounter?.encounterDate || encounter?.meta?.dateOfService || '';
+    const providerDisplay = encounter?.encounterProvider || encounter?.meta?.provider || encounter?.assignedProviders?.[0]?.providerName || '';
+    const visitType = encounter?.visitCategory || encounter?.meta?.visitCategory || encounter?.meta?.type || '';
+    const reason = encounter?.reasonForVisit || encounter?.meta?.reasonForVisit || '';
+    const encStatus = status || 'UNSIGNED';
+    const nowStr = new Date().toLocaleString();
 
-    // React sets the DOM .value property, not the HTML attribute — sync them on the clone
-    const liveEls = Array.from(contentRef.current.querySelectorAll("input, textarea, select"));
-    const cloneEls = Array.from(clone.querySelectorAll("input, textarea, select"));
-    liveEls.forEach((live, i) => {
-      const cl = cloneEls[i];
-      if (!cl) return;
-      if (live instanceof HTMLTextAreaElement) {
-        (cl as HTMLTextAreaElement).textContent = live.value;
-      } else if (live instanceof HTMLSelectElement) {
-        Array.from(live.options).forEach((opt, j) => {
-          const co = (cl as HTMLSelectElement).options[j];
-          if (!co) return;
-          if (opt.selected) co.setAttribute("selected", "selected");
-          else co.removeAttribute("selected");
-        });
-      } else {
-        (cl as HTMLInputElement).setAttribute("value", (live as HTMLInputElement).value);
+    // Extract section data from DOM — collect each section's label + visible values
+    const sectionEls = contentRef.current.querySelectorAll('[id^="section-"]');
+    let sectionsHtml = '';
+    sectionEls.forEach((secEl) => {
+      const heading = secEl.querySelector('h2, h3, [class*="font-semibold"], [class*="font-bold"]');
+      const sectionTitle = heading?.textContent?.trim() || '';
+      if (!sectionTitle) return;
+
+      // Collect all form field values
+      const fields: string[] = [];
+      const inputs = secEl.querySelectorAll('input, textarea, select');
+      inputs.forEach((inp) => {
+        const el = inp as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+        const val = el.value?.trim();
+        if (!val) return;
+        // Try to find associated label
+        const label = el.closest('div')?.querySelector('label')?.textContent?.trim() || '';
+        fields.push(label ? `<tr><td style="font-weight:600;padding:2px 12px 2px 0;vertical-align:top;white-space:nowrap">${label}</td><td style="padding:2px 0">${val}</td></tr>` : `<tr><td colspan="2" style="padding:2px 0">${val}</td></tr>`);
+      });
+
+      // Also collect checked checkboxes
+      const checks = secEl.querySelectorAll('input[type="checkbox"]:checked');
+      const checkLabels: string[] = [];
+      checks.forEach((ch) => {
+        const lbl = ch.closest('label')?.textContent?.trim() || (ch as HTMLInputElement).name;
+        if (lbl) checkLabels.push(lbl);
+      });
+      if (checkLabels.length > 0) {
+        fields.push(`<tr><td colspan="2" style="padding:2px 0">${checkLabels.join(', ')}</td></tr>`);
+      }
+
+      // Collect text content from display-only elements (paragraphs, spans with content)
+      const texts = secEl.querySelectorAll('p, [class*="text-gray"]');
+      texts.forEach((t) => {
+        const txt = t.textContent?.trim();
+        if (txt && txt.length > 2 && !txt.includes('No data') && !heading?.contains(t)) {
+          // Avoid duplicating label text
+          if (!fields.some(f => f.includes(txt))) {
+            fields.push(`<tr><td colspan="2" style="padding:2px 0">${txt}</td></tr>`);
+          }
+        }
+      });
+
+      if (fields.length > 0) {
+        sectionsHtml += `<div style="margin-bottom:16px"><h3 style="font-size:14px;font-weight:bold;border-bottom:2px solid #1e3a5f;padding-bottom:4px;margin-bottom:8px;color:#1e3a5f">${sectionTitle}</h3><table style="width:100%;font-size:12px">${fields.join('')}</table></div>`;
       }
     });
 
     const win = window.open("", "_blank");
     if (!win) { toast.error("Popup blocked — please allow popups and try again."); return; }
-    win.document.write(`<!DOCTYPE html><html><head><title>Encounter ${encounterId} Summary</title>
+    win.document.write(`<!DOCTYPE html><html><head><title>Visit Note — ${patientName} — Encounter #${encounterId}</title>
 <style>
-  body { font-family: sans-serif; font-size: 13px; color: #111; margin: 24px; }
-  h1,h2,h3 { margin: 0 0 6px; }
-  label { font-weight: 600; }
-  input, textarea, select { border: none; background: transparent; width: 100%; }
-  .bg-gray-50, [class*="bg-gray"] { background: #fff !important; }
-  [class*="dark:"] { background: #fff !important; color: #111 !important; }
-  @media print { body { margin: 0; } button { display: none !important; } }
-</style></head><body>${clone.innerHTML}</body></html>`);
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 12px; color: #111; padding: 24px 32px; line-height: 1.5; }
+  @media print { body { padding: 0.4in; } @page { size: letter; margin: 0.5in; } }
+  .header { display: flex; justify-content: space-between; border-bottom: 3px solid #1e3a5f; padding-bottom: 12px; margin-bottom: 16px; }
+  .header-left { font-size: 11px; }
+  .header-right { text-align: right; font-size: 11px; }
+  .header-right td { padding: 1px 0; }
+  .patient-bar { background: #f0f4f8; border: 1px solid #d0d8e0; border-radius: 4px; padding: 8px 14px; margin-bottom: 16px; font-size: 11px; display: flex; gap: 24px; flex-wrap: wrap; }
+  .patient-bar b { color: #1e3a5f; }
+  .status-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .status-signed { background: #d1fae5; color: #065f46; }
+  .status-unsigned { background: #fee2e2; color: #991b1b; }
+  h3 { page-break-after: avoid; }
+  .footer { margin-top: 24px; border-top: 1px solid #ccc; padding-top: 8px; font-size: 10px; color: #666; display: flex; justify-content: space-between; }
+  button { display: none !important; }
+  .print-btn { display: block !important; margin: 16px auto; padding: 8px 24px; background: #1e3a5f; color: #fff; border: none; border-radius: 4px; font-size: 13px; cursor: pointer; }
+  @media print { .print-btn { display: none !important; } }
+</style></head><body>
+  <div class="header">
+    <div class="header-left">
+      <div style="font-size:10px;color:#666">${nowStr}</div>
+      <div style="font-size:18px;font-weight:bold;color:#1e3a5f;margin:4px 0">Encounter Visit Note</div>
+    </div>
+    <div class="header-right">
+      <table>
+        <tr><td style="font-weight:600;padding-right:10px">Patient:</td><td>${patientName || '—'}</td></tr>
+        <tr><td style="font-weight:600;padding-right:10px">Provider:</td><td>${providerDisplay || '—'}</td></tr>
+        <tr><td style="font-weight:600;padding-right:10px">Visit Date:</td><td>${dos ? formatDisplayDate(dos) : '—'}</td></tr>
+        ${reason ? `<tr><td style="font-weight:600;padding-right:10px">Reason:</td><td>${reason}</td></tr>` : ''}
+      </table>
+    </div>
+  </div>
+  <div class="patient-bar">
+    <span><b>Patient:</b> ${patientName || '—'}</span>
+    <span><b>DOB:</b> ${dob ? formatDisplayDate(dob) : '—'}</span>
+    <span><b>Visit Type:</b> ${visitType || '—'}</span>
+    <span><b>Encounter #:</b> ${encounterId}</span>
+    <span class="status-badge ${encStatus === 'SIGNED' ? 'status-signed' : 'status-unsigned'}">${encStatus}</span>
+  </div>
+  ${sectionsHtml}
+  <div class="footer">
+    <span>Encounter #${encounterId} — ${patientName}</span>
+    <span>Printed: ${nowStr}</span>
+  </div>
+  <button class="print-btn" onclick="window.print()">Print</button>
+</body></html>`);
     win.document.close();
     win.focus();
-    win.print();
-  }, [encounterId, contentRef]);
+    setTimeout(() => win.print(), 500);
+  }, [encounterId, contentRef, patient, encounter, status]);
 
   const fmt = (d?: string) => formatDisplayDate(d);
 

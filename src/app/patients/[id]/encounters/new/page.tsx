@@ -86,6 +86,27 @@ export default function NewEncounterPage() {
     setError(null);
     try {
       const apiUrl = getEnv("NEXT_PUBLIC_API_URL") || "";
+
+      // Check for existing encounter on the same date of service
+      const dosDate = form.encounterDate; // YYYY-MM-DD
+      const existingRes = await fetchWithAuth(`${apiUrl}/api/encounters?page=0&size=1000&sort=id,desc`);
+      if (existingRes.ok) {
+        const existingJson = await existingRes.json();
+        const existingList = existingJson?.data?.content || existingJson?.data || [];
+        const duplicate = (Array.isArray(existingList) ? existingList : []).find((enc: any) => {
+          if (Number(enc.patientId) !== patientId) return false;
+          // Compare date of service
+          const encDate = enc.encounterDate || enc.startDate || enc.date || '';
+          const encDateStr = typeof encDate === 'string' ? encDate.slice(0, 10) : '';
+          return encDateStr === dosDate;
+        });
+        if (duplicate) {
+          setError(`An encounter already exists for this patient on ${dosDate}. Only one encounter per date of service is allowed.`);
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const res = await fetchWithAuth(`${apiUrl}/api/${patientId}/encounters`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

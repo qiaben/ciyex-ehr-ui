@@ -1669,8 +1669,10 @@ const Calendar: React.FC = () => {
         [activeView]
     );
 
-    const dayCellContent = useCallback(
-        (arg: any) => {
+    /** Build a dayCellContent renderer, optionally scoped to a single provider
+     *  (used by multi-provider grid so each column shows its own count). */
+    const makeDayCellContent = useCallback(
+        (forProviderId?: string) => (arg: any) => {
             if (activeView !== 'dayGridMonth') {
                 return arg.dayNumberText;
             }
@@ -1682,15 +1684,18 @@ const Calendar: React.FC = () => {
 
             const count = events.filter((e) => {
                 if (!e.start) return false;
-                // Always convert to local Date to get the correct local calendar day
-                // (ISO strings from .toISOString() are UTC and substring(0,10) can shift dates)
                 const eventStart = new Date(e.start as string | number | Date);
                 if (isNaN(eventStart.getTime())) return false;
                 const eventDateStr = eventStart.getFullYear() + '-' +
                     String(eventStart.getMonth() + 1).padStart(2, '0') + '-' +
                     String(eventStart.getDate()).padStart(2, '0');
                 if (eventDateStr !== cellDateStr) return false;
-                if (!allProvidersSelected && (!e.extendedProps.providerId || !selectedProviders.includes(String(e.extendedProps.providerId)))) return false;
+                // When scoped to a specific provider column, only count that provider's events
+                if (forProviderId) {
+                    if (String(e.extendedProps.providerId || '') !== forProviderId) return false;
+                } else {
+                    if (!allProvidersSelected && (!e.extendedProps.providerId || !selectedProviders.includes(String(e.extendedProps.providerId)))) return false;
+                }
                 if (!allLocationsSelected && (!e.extendedProps.locationId || !selectedLocations.includes(String(e.extendedProps.locationId)))) return false;
                 return true;
             }).length;
@@ -1758,6 +1763,9 @@ const Calendar: React.FC = () => {
         },
         [activeView, events, allProvidersSelected, selectedProviders, allLocationsSelected, selectedLocations]
     );
+
+    // Default dayCellContent (all selected providers) for single-calendar view
+    const dayCellContent = useMemo(() => makeDayCellContent(), [makeDayCellContent]);
 
 
 
@@ -2027,7 +2035,7 @@ const Calendar: React.FC = () => {
                                         select={(info) => handleDateSelect(info, p.value)}
                                         eventClick={handleEventClick}
                                         eventContent={renderEventContent}
-                                        dayCellContent={dayCellContent}
+                                        dayCellContent={makeDayCellContent(p.value)}
                                     />
                                 </div>
                             );

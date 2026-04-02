@@ -86,14 +86,24 @@ export default function EncounterList({ patientId }: Props) {
             )}
 
             <ul className="space-y-3">
-                {sorted.map((e) => (
-                    <li key={e.id} className="rounded-2xl border p-4 bg-white shadow-sm">
+                {sorted.map((e) => {
+                    const st = (e.status || "UNSIGNED").toUpperCase();
+                    const isSigned = st === "SIGNED";
+                    return (
+                    <li key={e.id} className="rounded-2xl border p-4 bg-white dark:bg-gray-900 shadow-sm">
                         <div className="flex items-start justify-between gap-4">
                             <div>
-                                <p className="font-medium">
-                                    {e.encounterDate} · {e.status || "OPEN"}
+                                <p className="font-medium flex items-center gap-2">
+                                    <span>{e.encounterDate}</span>
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${
+                                        isSigned
+                                            ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                                            : "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
+                                    }`}>
+                                        {isSigned ? "Signed" : "Unsigned"}
+                                    </span>
                                 </p>
-                                <p className="text-gray-700">{e.reason || "-"}</p>
+                                <p className="text-gray-700 dark:text-gray-300">{e.reason || "-"}</p>
                             </div>
                             <div className="flex gap-2">
                                 <Link
@@ -111,7 +121,8 @@ export default function EncounterList({ patientId }: Props) {
                             </div>
                         </div>
                     </li>
-                ))}
+                    );
+                })}
             </ul>
         </div>
     );
