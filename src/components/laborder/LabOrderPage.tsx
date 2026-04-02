@@ -283,8 +283,35 @@ export default function LabOrdersPage() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [searchDraft]);
 
-  // Re-fetch when query changes
-  useEffect(() => { fetchOrders(query, query.length > 0); }, [query, fetchOrders]);
+  // Keep all orders loaded — client-side filtering handles patient name search
+  // Only re-fetch from backend when query is empty (reset) or matches order/test fields
+  useEffect(() => {
+    // Always fetch all orders; client-side `filtered` handles name matching via patientCache
+    if (!query) { fetchOrders("", false); }
+    else {
+      // Try backend search first; if it returns fewer results, merge with existing
+      (async () => {
+        try {
+          const base = apiBase();
+          if (!base) return;
+          const org = resolveOrgId();
+          const res = await fetchWithAuth(`${base}/api/lab-order/search?q=${encodeURIComponent(query)}`, { method: "GET", headers: { orgId: org } });
+          const text = await res.text();
+          let parsed: unknown = null; try { parsed = text ? JSON.parse(text) : null; } catch { /* skip */ }
+          const arr = normalizeOrders(parsed).map(normalizePatientId);
+          if (res.ok && arr.length > 0) {
+            // Merge backend results with existing orders (dedup by id)
+            setOrders(prev => {
+              const map = new Map(prev.map(o => [o.id ?? `${o.orderNumber}-${o.patientId}`, o]));
+              arr.forEach(o => map.set(o.id ?? `${o.orderNumber}-${o.patientId}`, o));
+              return Array.from(map.values());
+            });
+          }
+          // If backend returns empty, don't clear — client-side filter will handle via patientCache
+        } catch { /* silent — client-side filter handles it */ }
+      })();
+    }
+  }, [query, fetchOrders]);
 
   /* ---------- Filtering & pagination ---------- */
 
