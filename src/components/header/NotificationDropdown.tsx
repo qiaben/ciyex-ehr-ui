@@ -26,7 +26,16 @@ interface AppNotification {
     type: "app";
 }
 
-type NotificationItem = MessageNotification | AppNotification;
+interface DocumentNotification {
+    id: string;
+    patientName: string;
+    fileName: string;
+    count: number;
+    createdAt: string;
+    type: "document";
+}
+
+type NotificationItem = MessageNotification | AppNotification | DocumentNotification;
 
 export default function NotificationDropdown() {
     const [isOpen, setIsOpen] = useState(false);
@@ -104,12 +113,35 @@ export default function NotificationDropdown() {
             if (totalUnread > 0) {
                 setNotifying(true);
             }
+
+            // Check for pending document reviews
+            let docNotifications: DocumentNotification[] = [];
+            try {
+                const docRes = await fetchWithAuth(`${API_URL()}/api/portal/document-reviews/pending`);
+                if (docRes.ok) {
+                    const docData = await docRes.json();
+                    const pending = Array.isArray(docData.data) ? docData.data : (docData.data?.content || []);
+                    if (pending.length > 0) {
+                        totalUnread += pending.length;
+                        setNotifying(true);
+                        docNotifications.push({
+                            id: "doc-pending",
+                            patientName: "",
+                            fileName: "",
+                            count: pending.length,
+                            createdAt: pending[0]?.createdDate || new Date().toISOString(),
+                            type: "document",
+                        });
+                    }
+                }
+            } catch { /* document reviews unavailable */ }
+
             setUnreadCount(totalUnread);
 
-            // Merge message notifications with existing app notifications
+            // Merge all notification types
             setNotifications((prev) => {
                 const appNotifs = prev.filter((n) => n.type === "app");
-                return [...newMsgNotifications, ...appNotifs];
+                return [...docNotifications, ...newMsgNotifications, ...appNotifs];
             });
         } catch {
             // silently fail
@@ -125,14 +157,18 @@ export default function NotificationDropdown() {
     const handleNotificationClick = (n: NotificationItem) => {
         if (n.type === "message") {
             router.push("/messaging");
+        } else if (n.type === "document") {
+            router.push("/document-reviews");
         }
         closeDropdown();
     };
 
     const formatTime = (item: NotificationItem) => {
         if (item.type === "app") return item.time;
+        const dateStr = item.type === "message" || item.type === "document" ? item.createdAt : "";
+        if (!dateStr) return "";
         try {
-            const d = new Date(item.createdAt);
+            const d = new Date(dateStr);
             const now = Date.now();
             const diff = now - d.getTime();
             if (diff < 60000) return "now";
@@ -219,6 +255,12 @@ export default function NotificationDropdown() {
                                                     <path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z" />
                                                 </svg>
                                             </div>
+                                        ) : n.type === "document" ? (
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-600 shrink-0">
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                            </div>
                                         ) : (
                                             <div
                                                 className={`flex h-8 w-8 items-center justify-center rounded-full shrink-0
@@ -242,14 +284,23 @@ export default function NotificationDropdown() {
                                                         {n.content}
                                                     </span>
                                                 </>
+                                            ) : n.type === "document" ? (
+                                                <>
+                                                    <span className="text-sm font-medium text-gray-900">
+                                                        Pending Document Review
+                                                    </span>
+                                                    <span className="text-xs text-gray-600 mt-0.5">
+                                                        {n.count} document{n.count !== 1 ? 's' : ''} awaiting review
+                                                    </span>
+                                                </>
                                             ) : (
                                                 <span className="text-sm font-medium text-gray-800">{n.message}</span>
                                             )}
                                             <span className="text-[11px] text-gray-400 mt-1">{formatTime(n)}</span>
                                         </div>
 
-                                        {n.type === "message" && (
-                                            <span className="shrink-0 h-2 w-2 rounded-full bg-blue-500 mt-2" />
+                                        {(n.type === "message" || n.type === "document") && (
+                                            <span className={`shrink-0 h-2 w-2 rounded-full mt-2 ${n.type === "document" ? "bg-amber-500" : "bg-blue-500"}`} />
                                         )}
                                     </div>
                                 </DropdownItem>
@@ -257,14 +308,24 @@ export default function NotificationDropdown() {
                         ))
                     )}
                 </ul>
-                {canReadMessages && notifications.some((n) => n.type === "message") && (
-                    <div className="border-t border-gray-100 pt-2 mt-auto">
-                        <button
-                            onClick={() => { router.push("/messaging"); closeDropdown(); }}
-                            className="w-full rounded-lg py-2 text-center text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
-                        >
-                            View all messages
-                        </button>
+                {(notifications.some((n) => n.type === "message" || n.type === "document")) && (
+                    <div className="border-t border-gray-100 pt-2 mt-auto space-y-1">
+                        {notifications.some((n) => n.type === "document") && (
+                            <button
+                                onClick={() => { router.push("/document-reviews"); closeDropdown(); }}
+                                className="w-full rounded-lg py-2 text-center text-sm font-medium text-amber-600 hover:bg-amber-50 transition-colors"
+                            >
+                                Review pending documents
+                            </button>
+                        )}
+                        {canReadMessages && notifications.some((n) => n.type === "message") && (
+                            <button
+                                onClick={() => { router.push("/messaging"); closeDropdown(); }}
+                                className="w-full rounded-lg py-2 text-center text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
+                            >
+                                View all messages
+                            </button>
+                        )}
                     </div>
                 )}
             </Dropdown>
