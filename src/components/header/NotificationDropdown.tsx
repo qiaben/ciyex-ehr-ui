@@ -129,7 +129,7 @@ export default function NotificationDropdown() {
                             patientName: "",
                             fileName: "",
                             count: pending.length,
-                            createdAt: pending[0]?.createdDate || new Date().toISOString(),
+                            createdAt: pending[0]?.createdAt || pending[0]?.createdDate || new Date().toISOString(),
                             type: "document",
                         });
                     }
