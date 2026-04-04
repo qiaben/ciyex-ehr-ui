@@ -6,7 +6,7 @@ import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { getEnv } from "@/utils/env";
 import { usePermissions } from "@/context/PermissionContext";
 import DynamicFormRenderer, { FieldConfig, FieldConfigFeatures, SectionDef, FieldDef } from "./DynamicFormRenderer";
-import { Plus, Pencil, Trash2, X, Save, Send, Loader2, Search, ChevronLeft, ChevronRight, Download, FileText, CheckCircle2 } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Save, Send, Loader2, Search, ChevronLeft, ChevronRight, Download, FileText, CheckCircle2, Eye } from "lucide-react";
 import { isValidEmail, isValidPhone, isValidFax, isValidUrl, isValidName, isValidUSPhone, isValidSSN, isStringOnly, isValidDriverLicense, isValidMedicaidId, isValidMedicareBeneficiaryId } from "@/utils/validation";
 import { toast, confirmDialog } from "@/utils/toast";
 import { formatDisplayDate, formatDisplayDateTime, parseLocalDate } from "@/utils/dateUtils";
@@ -3742,20 +3742,58 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                                         <td className="px-4 py-2.5 text-right">
                                             {canWrite && (
                                                 <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                                                    <button
-                                                        onClick={() => handleEdit(record)}
-                                                        className="p-1.5 text-gray-400 hover:text-blue-600 rounded"
-                                                        title="Edit"
-                                                    >
-                                                        <Pencil className="w-4 h-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDelete(record)}
-                                                        className="p-1.5 text-gray-400 hover:text-red-600 rounded"
-                                                        title="Delete"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
+                                                    {(tabKey === "documents" || tabKey === "document-references") ? (
+                                                        <>
+                                                            <button
+                                                                onClick={async () => {
+                                                                    const docId = record.fhirId || record.id;
+                                                                    if (!docId) return;
+                                                                    try {
+                                                                        const base = (getEnv("NEXT_PUBLIC_API_URL") || "").replace(/\/$/, "");
+                                                                        const res = await fetchWithAuth(`${base}/api/documents/upload/${docId}/download`);
+                                                                        if (res.ok) {
+                                                                            const blob = await res.blob();
+                                                                            const url = window.URL.createObjectURL(blob);
+                                                                            window.open(url, "_blank");
+                                                                            setTimeout(() => window.URL.revokeObjectURL(url), 30000);
+                                                                        } else {
+                                                                            toast.error("Unable to view document.");
+                                                                        }
+                                                                    } catch {
+                                                                        toast.error("Failed to load document.");
+                                                                    }
+                                                                }}
+                                                                className="p-1.5 text-gray-400 hover:text-blue-600 rounded"
+                                                                title="View"
+                                                            >
+                                                                <Eye className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDelete(record)}
+                                                                className="p-1.5 text-gray-400 hover:text-red-600 rounded"
+                                                                title="Delete"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleEdit(record)}
+                                                                className="p-1.5 text-gray-400 hover:text-blue-600 rounded"
+                                                                title="Edit"
+                                                            >
+                                                                <Pencil className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDelete(record)}
+                                                                className="p-1.5 text-gray-400 hover:text-red-600 rounded"
+                                                                title="Delete"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </>
+                                                    )}
                                                 </div>
                                             )}
                                         </td>
