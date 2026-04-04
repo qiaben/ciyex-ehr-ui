@@ -853,14 +853,15 @@ export default function AppointmentPage() {
       })();
       return matchDate && matchProvider && matchCategory && matchLocation && matchPatient && matchStatus && matchCompleted;
     }).sort((a, b) => {
-      // Sort by date descending (recent first), then by time descending
       const dateA = new Date(a.appointmentStartDate?.includes("T") ? a.appointmentStartDate : a.appointmentStartDate + "T00:00:00").getTime();
       const dateB = new Date(b.appointmentStartDate?.includes("T") ? b.appointmentStartDate : b.appointmentStartDate + "T00:00:00").getTime();
-      if (dateA !== dateB) return dateB - dateA;
-      // Parse time strings (HH:mm format) for same-day sorting (recent first)
+      // "Upcoming" preset: sort ascending (tomorrow first → future), all others: descending (recent first)
+      const ascending = datePreset === "upcoming";
+      if (dateA !== dateB) return ascending ? dateA - dateB : dateB - dateA;
+      // Parse time strings (HH:mm format) for same-day sorting
       const timeA = (a.appointmentStartTime || "").replace(":", "");
       const timeB = (b.appointmentStartTime || "").replace(":", "");
-      return timeB.localeCompare(timeA);
+      return ascending ? timeA.localeCompare(timeB) : timeB.localeCompare(timeA);
     });
   }, [rows, from, to, provider, category, location, patientName, hideCompleted, statusOptions, statusFilter]);
 

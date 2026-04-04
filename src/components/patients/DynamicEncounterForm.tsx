@@ -119,12 +119,17 @@ export default function DynamicEncounterForm({ patientId, encounterId, embedded,
 
     const resolveStatus = (data: Record<string, any>): EncounterStatus | null => {
       // Check multiple possible locations for status
-      const raw = data.status || data.meta?.status || data.signoff?.status || null;
+      const raw = data.status || data.meta?.status || data.signoff?.status || data.encounterStatus || null;
       if (raw && ['SIGNED', 'UNSIGNED', 'INCOMPLETE'].includes(String(raw).toUpperCase())) {
         return String(raw).toUpperCase() as EncounterStatus;
       }
-      // If signoff has signedAt or providerSignature has signedAt, treat as SIGNED
+      // FHIR Encounter status "finished" with a signoff → SIGNED
       if (data.signoff?.signedAt || data.providerSignature?.signedAt) return 'SIGNED';
+      // Map standard FHIR encounter statuses
+      if (raw) {
+        const lower = String(raw).toLowerCase();
+        if (lower === 'finished' || lower === 'completed') return 'SIGNED';
+      }
       return null;
     };
 
@@ -150,6 +155,27 @@ export default function DynamicEncounterForm({ patientId, encounterId, embedded,
           const resolvedStatus = resolveStatus(encData);
           if (resolvedStatus) setStatus(resolvedStatus);
         }
+
+        // Check localStorage for cached sign status (set by sign/unsign actions)
+        try {
+          const cachedStatus = localStorage.getItem(`enc-status-${patientId}-${encounterId}`);
+          if (cachedStatus && ['SIGNED', 'UNSIGNED', 'INCOMPLETE'].includes(cachedStatus)) {
+            setStatus(cachedStatus as EncounterStatus);
+          }
+        } catch { /* ignore */ }
+
+        // Also try the dedicated sign-status endpoint for an authoritative status
+        try {
+          const signRes = await fetchWithAuth(`${base}/api/${patientId}/encounters/${encounterId}/status`);
+          if (signRes.ok) {
+            const signJson = await signRes.json();
+            const signData = signJson.data || signJson;
+            const signStatus = signData?.status || signData?.encounterStatus;
+            if (signStatus && ['SIGNED', 'UNSIGNED', 'INCOMPLETE'].includes(String(signStatus).toUpperCase())) {
+              setStatus(String(signStatus).toUpperCase() as EncounterStatus);
+            }
+          }
+        } catch { /* sign-status endpoint may not exist — that's OK */ }
       } catch { /* ignore */ }
     })();
 
@@ -367,6 +393,8 @@ export default function DynamicEncounterForm({ patientId, encounterId, embedded,
         );
         if (res.ok) {
           setStatus(next);
+          // Persist status so page refresh picks it up immediately
+          try { localStorage.setItem(`enc-status-${patientId}-${encounterId}`, next); } catch { /* ignore */ }
           pluginEvents.emit("encounter:saved", { encounterId, status: next });
         } else {
           const json = await res.json().catch(() => null);
@@ -381,121 +409,187 @@ export default function DynamicEncounterForm({ patientId, encounterId, embedded,
     [patientId, encounterId, autoSave, pluginEvents]
   );
 
-  // Client-side print — generates a professional medical visit note layout
+  // Client-side print — generates a professional, readable medical visit note
   const downloadPdf = useCallback(() => {
     if (!contentRef.current) return;
 
+    const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const patientName = patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : '';
     const dob = patient?.dateOfBirth || '';
-    const dos = encounter?.dateOfService || encounter?.encounterDate || encounter?.meta?.dateOfService || '';
+    const dos = encounter?.dateOfService || encounter?.encounterDate || encounter?.startDate || encounter?.meta?.dateOfService || '';
     const providerDisplay = encounter?.encounterProvider || encounter?.meta?.provider || encounter?.assignedProviders?.[0]?.providerName || '';
     const visitType = encounter?.visitCategory || encounter?.meta?.visitCategory || encounter?.meta?.type || '';
     const reason = encounter?.reasonForVisit || encounter?.meta?.reasonForVisit || '';
     const encStatus = status || 'UNSIGNED';
     const nowStr = new Date().toLocaleString();
 
-    // Extract section data from DOM — collect each section's label + visible values
-    const sectionEls = contentRef.current.querySelectorAll('[id^="section-"]');
-    let sectionsHtml = '';
-    sectionEls.forEach((secEl) => {
-      const heading = secEl.querySelector('h2, h3, [class*="font-semibold"], [class*="font-bold"]');
-      const sectionTitle = heading?.textContent?.trim() || '';
-      if (!sectionTitle) return;
+    // Build sections from the form data (autoSave.formData) for a clean, structured print
+    const sectionsArr: { title: string; html: string }[] = [];
+    const fd = autoSave.formData || {};
 
-      // Collect all form field values
-      const fields: string[] = [];
-      const inputs = secEl.querySelectorAll('input, textarea, select');
-      inputs.forEach((inp) => {
-        const el = inp as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-        const val = el.value?.trim();
-        if (!val) return;
-        // Try to find associated label
-        const label = el.closest('div')?.querySelector('label')?.textContent?.trim() || '';
-        fields.push(label ? `<tr><td style="font-weight:600;padding:2px 12px 2px 0;vertical-align:top;white-space:nowrap">${label}</td><td style="padding:2px 0">${val}</td></tr>` : `<tr><td colspan="2" style="padding:2px 0">${val}</td></tr>`);
-      });
-
-      // Also collect checked checkboxes
-      const checks = secEl.querySelectorAll('input[type="checkbox"]:checked');
-      const checkLabels: string[] = [];
-      checks.forEach((ch) => {
-        const lbl = ch.closest('label')?.textContent?.trim() || (ch as HTMLInputElement).name;
-        if (lbl) checkLabels.push(lbl);
-      });
-      if (checkLabels.length > 0) {
-        fields.push(`<tr><td colspan="2" style="padding:2px 0">${checkLabels.join(', ')}</td></tr>`);
+    // Helper: format a value for display
+    const fmtVal = (v: unknown): string => {
+      if (v == null || v === '' || v === 'null' || v === 'undefined') return '';
+      if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+      if (Array.isArray(v)) {
+        const items = v.map(fmtVal).filter(Boolean);
+        return items.length > 0 ? items.join(', ') : '';
       }
+      if (typeof v === 'object') {
+        const o = v as Record<string, unknown>;
+        if (o.coding && Array.isArray(o.coding)) return (o.coding[0] as any)?.display || (o.coding[0] as any)?.code || o.text as string || '';
+        if (o.text) return String(o.text);
+        if (o.display) return String(o.display);
+        // Skip raw objects
+        return '';
+      }
+      return String(v);
+    };
 
-      // Collect text content from display-only elements (paragraphs, spans with content)
-      const texts = secEl.querySelectorAll('p, [class*="text-gray"]');
-      texts.forEach((t) => {
-        const txt = t.textContent?.trim();
-        if (txt && txt.length > 2 && !txt.includes('No data') && !heading?.contains(t)) {
-          // Avoid duplicating label text
-          if (!fields.some(f => f.includes(txt))) {
-            fields.push(`<tr><td colspan="2" style="padding:2px 0">${txt}</td></tr>`);
+    if (fieldConfig?.sections) {
+      for (const section of fieldConfig.sections) {
+        if (section.visible === false) continue;
+        const rows: string[] = [];
+
+        if (section.fields) {
+          for (const field of section.fields) {
+            if (!field || field.type === 'hidden') continue;
+            const val = fd[field.key];
+            const display = fmtVal(val);
+            if (!display) continue; // Skip empty fields
+
+            // For checkbox groups (ROS), deduplicate and present cleanly
+            if (field.type === 'checkbox-group' || field.type === 'checkboxGroup') {
+              const items = Array.isArray(val) ? [...new Set(val.map(String))] : [display];
+              rows.push(`<tr><td class="lbl">${esc(field.label)}</td><td>${items.map(i => esc(i)).join(', ')}</td></tr>`);
+            } else if (field.type === 'textarea') {
+              rows.push(`<tr><td class="lbl">${esc(field.label)}</td><td style="white-space:pre-wrap">${esc(display)}</td></tr>`);
+            } else {
+              rows.push(`<tr><td class="lbl">${esc(field.label)}</td><td>${esc(display)}</td></tr>`);
+            }
           }
         }
-      });
 
-      if (fields.length > 0) {
-        sectionsHtml += `<div style="margin-bottom:16px"><h3 style="font-size:14px;font-weight:bold;border-bottom:2px solid #1e3a5f;padding-bottom:4px;margin-bottom:8px;color:#1e3a5f">${sectionTitle}</h3><table style="width:100%;font-size:12px">${fields.join('')}</table></div>`;
+        // Also check for nested object data (e.g., ros.constitutional)
+        const sectionKey = section.key;
+        const nested = fd[sectionKey];
+        if (nested && typeof nested === 'object' && !Array.isArray(nested) && rows.length === 0) {
+          for (const [k, v] of Object.entries(nested as Record<string, unknown>)) {
+            const display = fmtVal(v);
+            if (!display) continue;
+            const label = k.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+            rows.push(`<tr><td class="lbl">${esc(label)}</td><td>${esc(display)}</td></tr>`);
+          }
+        }
+
+        if (rows.length > 0) {
+          sectionsArr.push({
+            title: section.title,
+            html: `<table class="sec-tbl">${rows.join('')}</table>`,
+          });
+        }
       }
-    });
+    }
+
+    // Fallback: if no data from formData, extract from DOM (for sections that use custom rendering)
+    if (sectionsArr.length === 0 && contentRef.current) {
+      const sectionEls = contentRef.current.querySelectorAll('[id^="section-"]');
+      sectionEls.forEach((secEl) => {
+        const heading = secEl.querySelector('h2, h3, [class*="font-semibold"], [class*="font-bold"]');
+        const sectionTitle = heading?.textContent?.trim() || '';
+        if (!sectionTitle) return;
+        const rows: string[] = [];
+        const seen = new Set<string>();
+        // Inputs with values
+        secEl.querySelectorAll('input, textarea, select').forEach((inp) => {
+          const el = inp as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+          if (el.type === 'checkbox' || el.type === 'hidden') return;
+          const val = el.value?.trim();
+          if (!val) return;
+          const label = el.closest('div')?.querySelector('label')?.textContent?.trim() || '';
+          const key = `${label}|${val}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          rows.push(label ? `<tr><td class="lbl">${esc(label)}</td><td>${esc(val)}</td></tr>` : `<tr><td colspan="2">${esc(val)}</td></tr>`);
+        });
+        // Checked checkboxes — deduplicated
+        const checkLabels: string[] = [];
+        secEl.querySelectorAll('input[type="checkbox"]:checked').forEach((ch) => {
+          const lbl = ch.closest('label')?.textContent?.trim() || (ch as HTMLInputElement).name;
+          if (lbl && !checkLabels.includes(lbl)) checkLabels.push(lbl);
+        });
+        if (checkLabels.length > 0) {
+          rows.push(`<tr><td colspan="2">${checkLabels.map(l => esc(l)).join(', ')}</td></tr>`);
+        }
+        if (rows.length > 0) {
+          sectionsArr.push({ title: sectionTitle, html: `<table class="sec-tbl">${rows.join('')}</table>` });
+        }
+      });
+    }
+
+    const sectionsHtml = sectionsArr.map(s =>
+      `<div class="section"><h3>${esc(s.title)}</h3>${s.html}</div>`
+    ).join('');
 
     const win = window.open("", "_blank");
     if (!win) { toast.error("Popup blocked — please allow popups and try again."); return; }
-    win.document.write(`<!DOCTYPE html><html><head><title>Visit Note — ${patientName} — Encounter #${encounterId}</title>
+    win.document.write(`<!DOCTYPE html><html><head><title>Visit Note — ${esc(patientName)} — Encounter #${encounterId}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 12px; color: #111; padding: 24px 32px; line-height: 1.5; }
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 12px; color: #222; padding: 24px 32px; line-height: 1.6; }
   @media print { body { padding: 0.4in; } @page { size: letter; margin: 0.5in; } }
   .header { display: flex; justify-content: space-between; border-bottom: 3px solid #1e3a5f; padding-bottom: 12px; margin-bottom: 16px; }
   .header-left { font-size: 11px; }
   .header-right { text-align: right; font-size: 11px; }
-  .header-right td { padding: 1px 0; }
-  .patient-bar { background: #f0f4f8; border: 1px solid #d0d8e0; border-radius: 4px; padding: 8px 14px; margin-bottom: 16px; font-size: 11px; display: flex; gap: 24px; flex-wrap: wrap; }
+  .header-right td { padding: 2px 0; }
+  .patient-bar { background: #f0f4f8; border: 1px solid #d0d8e0; border-radius: 6px; padding: 10px 16px; margin-bottom: 20px; font-size: 12px; display: flex; gap: 28px; flex-wrap: wrap; align-items: center; }
   .patient-bar b { color: #1e3a5f; }
-  .status-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .status-badge { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
   .status-signed { background: #d1fae5; color: #065f46; }
   .status-unsigned { background: #fee2e2; color: #991b1b; }
-  h3 { page-break-after: avoid; }
-  .footer { margin-top: 24px; border-top: 1px solid #ccc; padding-top: 8px; font-size: 10px; color: #666; display: flex; justify-content: space-between; }
+  .section { margin-bottom: 18px; page-break-inside: avoid; }
+  .section h3 { font-size: 13px; font-weight: 700; color: #1e3a5f; border-bottom: 2px solid #1e3a5f; padding-bottom: 4px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .sec-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }
+  .sec-tbl td { padding: 3px 12px 3px 0; vertical-align: top; border-bottom: 1px solid #eee; }
+  .sec-tbl .lbl { font-weight: 600; color: #444; white-space: nowrap; width: 180px; }
+  .footer { margin-top: 28px; border-top: 2px solid #ccc; padding-top: 8px; font-size: 10px; color: #666; display: flex; justify-content: space-between; }
   button { display: none !important; }
-  .print-btn { display: block !important; margin: 16px auto; padding: 8px 24px; background: #1e3a5f; color: #fff; border: none; border-radius: 4px; font-size: 13px; cursor: pointer; }
+  .print-btn { display: block !important; margin: 20px auto; padding: 10px 32px; background: #1e3a5f; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  .print-btn:hover { background: #2a4d7a; }
   @media print { .print-btn { display: none !important; } }
 </style></head><body>
   <div class="header">
     <div class="header-left">
       <div style="font-size:10px;color:#666">${nowStr}</div>
-      <div style="font-size:18px;font-weight:bold;color:#1e3a5f;margin:4px 0">Encounter Visit Note</div>
+      <div style="font-size:20px;font-weight:bold;color:#1e3a5f;margin:4px 0">Encounter Visit Note</div>
     </div>
     <div class="header-right">
       <table>
-        <tr><td style="font-weight:600;padding-right:10px">Patient:</td><td>${patientName || '—'}</td></tr>
-        <tr><td style="font-weight:600;padding-right:10px">Provider:</td><td>${providerDisplay || '—'}</td></tr>
-        <tr><td style="font-weight:600;padding-right:10px">Visit Date:</td><td>${dos ? formatDisplayDate(dos) : '—'}</td></tr>
-        ${reason ? `<tr><td style="font-weight:600;padding-right:10px">Reason:</td><td>${reason}</td></tr>` : ''}
+        <tr><td style="font-weight:600;padding-right:12px">Patient:</td><td>${esc(patientName) || '—'}</td></tr>
+        <tr><td style="font-weight:600;padding-right:12px">Provider:</td><td>${esc(String(providerDisplay)) || '—'}</td></tr>
+        <tr><td style="font-weight:600;padding-right:12px">Visit Date:</td><td>${dos ? formatDisplayDate(dos) : '—'}</td></tr>
+        ${reason ? `<tr><td style="font-weight:600;padding-right:12px">Reason:</td><td>${esc(String(reason))}</td></tr>` : ''}
       </table>
     </div>
   </div>
   <div class="patient-bar">
-    <span><b>Patient:</b> ${patientName || '—'}</span>
+    <span><b>Patient:</b> ${esc(patientName) || '—'}</span>
     <span><b>DOB:</b> ${dob ? formatDisplayDate(dob) : '—'}</span>
-    <span><b>Visit Type:</b> ${visitType || '—'}</span>
+    <span><b>Visit Type:</b> ${esc(String(visitType)) || '—'}</span>
     <span><b>Encounter #:</b> ${encounterId}</span>
     <span class="status-badge ${encStatus === 'SIGNED' ? 'status-signed' : 'status-unsigned'}">${encStatus}</span>
   </div>
-  ${sectionsHtml}
+  ${sectionsHtml || '<p style="color:#888;text-align:center;padding:24px">No encounter data recorded yet.</p>'}
   <div class="footer">
-    <span>Encounter #${encounterId} — ${patientName}</span>
+    <span>Encounter #${encounterId} — ${esc(patientName)}</span>
     <span>Printed: ${nowStr}</span>
   </div>
-  <button class="print-btn" onclick="window.print()">Print</button>
+  <button class="print-btn" onclick="window.print()">Print Visit Note</button>
 </body></html>`);
     win.document.close();
     win.focus();
     setTimeout(() => win.print(), 500);
-  }, [encounterId, contentRef, patient, encounter, status]);
+  }, [encounterId, contentRef, patient, encounter, status, autoSave.formData, fieldConfig]);
 
   const fmt = (d?: string) => formatDisplayDate(d);
 

@@ -191,7 +191,8 @@ export default function EncountersTable() {
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-12">#</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-12">S.No</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Encounter ID</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Patient</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Provider</th>
@@ -204,7 +205,7 @@ export default function EncountersTable() {
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                             {loading && (
                                 <tr>
-                                    <td colSpan={8} className="px-4 py-12 text-center">
+                                    <td colSpan={9} className="px-4 py-12 text-center">
                                         <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" />
                                     </td>
                                 </tr>
@@ -218,6 +219,7 @@ export default function EncountersTable() {
                                         onClick={() => router.push(`/patients/${row.patientId}/encounters/${row.id}?from=encounters`)}
                                     >
                                         <td className="px-4 py-3 text-gray-400 dark:text-gray-500">{clampedPage * pageSize + idx + 1}</td>
+                                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">{row.id || "—"}</td>
                                         <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{row.patientName || "—"}</td>
                                         <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">{formatDisplayDate(row.encounterDate) || "—"}</td>
                                         <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{row.encounterProvider || "—"}</td>
@@ -241,7 +243,7 @@ export default function EncountersTable() {
                             })}
                             {!loading && paged.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="px-4 py-12 text-center text-gray-400 dark:text-gray-500">
+                                    <td colSpan={9} className="px-4 py-12 text-center text-gray-400 dark:text-gray-500">
                                         No encounters found.
                                     </td>
                                 </tr>

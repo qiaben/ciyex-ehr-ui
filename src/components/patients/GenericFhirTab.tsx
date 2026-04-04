@@ -353,6 +353,13 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                 if ((tabKey === "immunizations" || tabKey === "immunization") && /^(lotNumber|lot_number|lot|lotNo|lotNum|batchNumber|batch_number)$/i.test(f.key)) {
                     section.fields[i] = { ...section.fields[i] || f, type: "text", validation: undefined, placeholder: "e.g., AB1234, 12345" } as any;
                 }
+                // Encounters: status field should be a select with SIGNED/UNSIGNED options
+                if ((tabKey === "encounters" || tabKey === "encounter") && (f.key === "status" || f.key === "encounterStatus")) {
+                    section.fields[i] = { ...f, type: "select", options: [
+                        { value: "UNSIGNED", label: "Unsigned" },
+                        { value: "SIGNED", label: "Signed" },
+                    ] };
+                }
                 // Encounters: keep reasonForVisit as-is (honor backend required flag)
                 // Encounters: ensure patient field is a searchable patient lookup
                 if ((tabKey === "encounters" || tabKey === "encounter")) {
@@ -756,6 +763,23 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
             if (r.reasonForVisit == null && r.reason != null) {
                 if (typeof r.reason === "string") r.reasonForVisit = r.reason;
                 else if (Array.isArray(r.reason)) r.reasonForVisit = r.reason[0]?.coding?.[0]?.display || r.reason[0]?.coding?.[0]?.code || r.reason[0]?.text || null;
+            }
+        }
+
+        // --- Encounter: normalize status to SIGNED/UNSIGNED for display ---
+        if (tabKey === "encounters" || tabKey === "encounter") {
+            const rawStatus = String(r.status || '').toLowerCase();
+            // Map various statuses to SIGNED/UNSIGNED
+            if (rawStatus === 'signed' || rawStatus === 'finished' || rawStatus === 'completed') {
+                r.status = 'SIGNED';
+            } else if (rawStatus === 'unsigned' || rawStatus === 'incomplete' || rawStatus === '') {
+                r.status = 'UNSIGNED';
+            } else if (rawStatus === 'in-progress' || rawStatus === 'in_progress' || rawStatus === 'arrived' || rawStatus === 'planned' || rawStatus === 'triaged') {
+                r.status = 'UNSIGNED';
+            }
+            // Check signoff/providerSignature for definitive SIGNED status
+            if (r.signoff?.signedAt || r.providerSignature?.signedAt) {
+                r.status = 'SIGNED';
             }
         }
 
@@ -1613,6 +1637,18 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                 setValidationErrors((prev) => { const n = { ...prev }; delete n[key]; return n; });
             }
         }
+        // Appointments: auto-sync visitType when appointmentType changes
+        if ((tabKey === "appointments" || tabKey === "appointment") &&
+            (key === "appointmentType" || key === "visitType" || key === "type") &&
+            typeof value === "string" && value) {
+            setFormData((prev) => ({
+                ...prev,
+                [key]: value,
+                visitType: value,
+                appointmentType: value,
+            }));
+            return; // already updated formData, skip the default setter below
+        }
         // Immunizations: lot number → alphanumeric+hyphen, dose → numeric (real-time block)
         if (tabKey === "immunizations" || tabKey === "immunization") {
             if (/^(lotNumber|lot_number|lot|lotNo|lotNum|batchNumber|batch_number)$/i.test(key) && typeof value === "string") {
@@ -1839,12 +1875,43 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                 defaults.sentDate = new Date().toISOString().slice(0, 10);
             }
         }
-        // For appointments tab: auto-fill patientId
-        if (tabKey === "appointments") {
+        // For appointments tab: auto-fill patientId + start/end date/time (matching home page form)
+        if (tabKey === "appointments" || tabKey === "appointment") {
             defaults.patientId = defaults.patientId || patientId;
             defaults.patient = defaults.patient || patientId;
             defaults.patientName = defaults.patientName || patientId;
             defaults.subject = defaults.subject || patientId;
+            // Auto-populate start date/time to now, end to +30 min (same as AppointmentModal)
+            const now = new Date();
+            const pad2 = (n: number) => String(n).padStart(2, '0');
+            const todayIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+            const currentTime = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+            const endDate = new Date(now.getTime() + 30 * 60000);
+            const endTimeStr = `${pad2(endDate.getHours())}:${pad2(endDate.getMinutes())}`;
+            // Set all common start date/time field names
+            if (!defaults.start && !defaults.appointmentStartDate && !defaults.startDate) {
+                defaults.start = `${todayIso}T${currentTime}`;
+                defaults.appointmentStartDate = todayIso;
+                defaults.startDate = todayIso;
+                defaults.appointmentStartTime = currentTime;
+                defaults.startTime = currentTime;
+            }
+            // Set all common end date/time field names
+            if (!defaults.end && !defaults.appointmentEndDate && !defaults.endDate) {
+                defaults.end = `${todayIso}T${endTimeStr}`;
+                defaults.appointmentEndDate = todayIso;
+                defaults.endDate = todayIso;
+                defaults.appointmentEndTime = endTimeStr;
+                defaults.endTime = endTimeStr;
+            }
+            // Auto-set status to Scheduled
+            if (!defaults.status) {
+                defaults.status = 'Scheduled';
+            }
+            // Auto-set priority to Routine
+            if (!defaults.priority) {
+                defaults.priority = 'Routine';
+            }
         }
         setFormData(defaults);
         setSelectedRecord(null);
@@ -1879,6 +1946,14 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                     .replace("{id}", String(resourceId));
                 router.push(url);
                 return;
+            }
+            // Encounters: navigate to the encounter detail page instead of inline view
+            if (tabKey === "encounters" || tabKey === "encounter") {
+                const encId = record.id || record.fhirId || record.encounterId;
+                if (encId) {
+                    router.push(`/patients/${patientId}/encounters/${encId}`);
+                    return;
+                }
             }
             // Ensure all values are safe for form rendering (stringify objects)
             const safeRecord: Record<string, any> = {};
@@ -3160,6 +3235,15 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                 return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">{smokingStatus}</span>;
             }
             return "-";
+        }
+
+        // Encounter status badge: SIGNED/UNSIGNED with clear color coding
+        if ((tabKey === "encounters" || tabKey === "encounter") && (colKey === "status" || colKey === "encounterStatus") && typeof value === "string") {
+            const upper = value.toUpperCase();
+            if (upper === "SIGNED") {
+                return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">SIGNED</span>;
+            }
+            return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800">UNSIGNED</span>;
         }
 
         // Status badge rendering
