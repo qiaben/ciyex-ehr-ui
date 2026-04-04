@@ -101,13 +101,7 @@ jobs:
           git tag -a "${RC_VERSION}-rc" -m "Release Candidate ${RC_VERSION}-rc"
           git push origin "${RC_VERSION}-rc"
           
-          sed -i "s/newTag: .*/newTag: \"${RC_VERSION}-rc\"/" k8s/overlays/stage/kustomization.yaml
-          git add k8s/overlays/stage/kustomization.yaml
-          git commit -m "chore: update stage image to ${RC_VERSION}-rc [skip ci]" || true
-          git push origin main || true
-          
           echo "✅ Created RC tag: ${RC_VERSION}-rc"
-          echo "✅ Updated stage overlay: ${RC_VERSION}-rc"
           echo "✅ Bumped main to: ${NEXT_VERSION}"
           
           echo "RC_VERSION=${RC_VERSION}" >> $GITHUB_ENV
@@ -258,13 +252,6 @@ jobs:
           git tag -a "v${GA_VERSION}" -m "Release ${GA_VERSION}"
           git push origin "v${GA_VERSION}"
           echo "✅ Created GA git tag: v${GA_VERSION}"
-          
-          git pull origin main
-          sed -i "s/newTag: .*/newTag: \"${GA_VERSION}\"/" k8s/overlays/prod/kustomization.yaml
-          git add k8s/overlays/prod/kustomization.yaml
-          git commit -m "chore: update prod image to ${GA_VERSION} [skip ci]" || true
-          git push origin main || true
-          echo "✅ Updated prod overlay: ${GA_VERSION}"
           
           PREV_TAG=$(git tag -l "v*" --sort=-v:refname | grep -v "v${GA_VERSION}" | head -n1)
           echo "PREV_TAG=${PREV_TAG}" >> $GITHUB_ENV
@@ -424,13 +411,9 @@ jobs:
           done
           
           if [ -n "$NEXT_RC" ]; then
-            echo "Reverting stage overlay to next RC: $NEXT_RC"
-            sed -i "s/newTag: .*/newTag: \"$NEXT_RC\"/" k8s/overlays/stage/kustomization.yaml
-            git add k8s/overlays/stage/kustomization.yaml
-            git commit -m "chore: revert stage to $NEXT_RC after skipping ${{ env.SKIPPED_RC }}" || echo "No changes"
-            git push origin main
+            echo "Next RC in line: $NEXT_RC"
           else
-            echo "No remaining RC tags. Stage overlay not modified."
+            echo "No remaining RC tags."
           fi
 
       - name: Send Teams notification
