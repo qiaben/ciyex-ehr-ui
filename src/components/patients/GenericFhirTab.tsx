@@ -3750,7 +3750,12 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                                                                     if (!docId) return;
                                                                     try {
                                                                         const base = (getEnv("NEXT_PUBLIC_API_URL") || "").replace(/\/$/, "");
-                                                                        const res = await fetchWithAuth(`${base}/api/documents/upload/${docId}/download`);
+                                                                        const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("authToken") : null;
+                                                                        const tenant = typeof window !== "undefined" ? localStorage.getItem("selectedTenant") : null;
+                                                                        const hdrs: Record<string, string> = { "Accept": "*/*" };
+                                                                        if (token) hdrs["Authorization"] = `Bearer ${token}`;
+                                                                        if (tenant) hdrs["X-Tenant-Name"] = tenant;
+                                                                        const res = await fetch(`${base}/api/documents/upload/${docId}/download`, { headers: hdrs, credentials: "include" });
                                                                         if (res.ok) {
                                                                             const blob = await res.blob();
                                                                             const url = window.URL.createObjectURL(blob);
@@ -3774,7 +3779,12 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                                                                     if (!docId) return;
                                                                     try {
                                                                         const base = (getEnv("NEXT_PUBLIC_API_URL") || "").replace(/\/$/, "");
-                                                                        const res = await fetchWithAuth(`${base}/api/documents/upload/${docId}/download`);
+                                                                        const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("authToken") : null;
+                                                                        const tenant = typeof window !== "undefined" ? localStorage.getItem("selectedTenant") : null;
+                                                                        const hdrs: Record<string, string> = { "Accept": "*/*" };
+                                                                        if (token) hdrs["Authorization"] = `Bearer ${token}`;
+                                                                        if (tenant) hdrs["X-Tenant-Name"] = tenant;
+                                                                        const res = await fetch(`${base}/api/documents/upload/${docId}/download`, { headers: hdrs, credentials: "include" });
                                                                         if (res.ok) {
                                                                             const blob = await res.blob();
                                                                             const url = window.URL.createObjectURL(blob);
