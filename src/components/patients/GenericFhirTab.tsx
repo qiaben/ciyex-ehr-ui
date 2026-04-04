@@ -3769,6 +3769,35 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                                                                 <Eye className="w-4 h-4" />
                                                             </button>
                                                             <button
+                                                                onClick={async () => {
+                                                                    const docId = record.fhirId || record.id;
+                                                                    if (!docId) return;
+                                                                    try {
+                                                                        const base = (getEnv("NEXT_PUBLIC_API_URL") || "").replace(/\/$/, "");
+                                                                        const res = await fetchWithAuth(`${base}/api/documents/upload/${docId}/download`);
+                                                                        if (res.ok) {
+                                                                            const blob = await res.blob();
+                                                                            const url = window.URL.createObjectURL(blob);
+                                                                            const a = document.createElement("a");
+                                                                            a.href = url;
+                                                                            a.download = record.title || record.fileName || "document";
+                                                                            document.body.appendChild(a);
+                                                                            a.click();
+                                                                            a.remove();
+                                                                            setTimeout(() => window.URL.revokeObjectURL(url), 5000);
+                                                                        } else {
+                                                                            toast.error("Unable to download document.");
+                                                                        }
+                                                                    } catch {
+                                                                        toast.error("Failed to download document.");
+                                                                    }
+                                                                }}
+                                                                className="p-1.5 text-gray-400 hover:text-green-600 rounded"
+                                                                title="Download"
+                                                            >
+                                                                <Download className="w-4 h-4" />
+                                                            </button>
+                                                            <button
                                                                 onClick={() => handleDelete(record)}
                                                                 className="p-1.5 text-gray-400 hover:text-red-600 rounded"
                                                                 title="Delete"
