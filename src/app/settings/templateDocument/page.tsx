@@ -2,7 +2,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { motion } from "framer-motion";
-import AdminLayout from "@/app/(admin)/layout";
 import {
   FileCode2, Eye, X as XIcon, Copy, Download, Save,
   Undo2, Redo2, Trash2, Search, Plus, ChevronDown, Upload
@@ -389,7 +388,7 @@ export default function TemplateStudio() {
   const previewHTML = useMemo(() => buildPreviewHTML(title, templateText, tplOptions), [title, templateText, tplOptions]);
 
   return (
-    <AdminLayout>
+    <>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-gray-50 p-4 sm:p-6">
         {/* Toast */}
         <AnimatePresence>
@@ -565,6 +564,6 @@ export default function TemplateStudio() {
           )}
         </AnimatePresence>
       </div>
-    </AdminLayout>
+    </>
   );
 }
