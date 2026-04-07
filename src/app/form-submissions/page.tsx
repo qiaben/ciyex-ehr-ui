@@ -8,7 +8,7 @@ import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { getEnv } from "@/utils/env";
 import { Modal } from "@/components/ui/modal";
 import {
-    ClipboardList, Loader2, CheckCircle2, XCircle, Eye,
+    ClipboardList, Loader2, CheckCircle2, Trash2, Eye,
     Clock, ChevronDown, ChevronRight, Search, RefreshCw,
 } from "lucide-react";
 
@@ -39,14 +39,6 @@ export default function FormSubmissionsPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [page, setPage] = useState(0);
     const pageSize = 20;
-
-    // Reject modal
-    const [rejectModal, setRejectModal] = useState<{
-        open: boolean;
-        subId: number | null;
-        formTitle: string;
-    }>({ open: false, subId: null, formTitle: "" });
-    const [rejectReason, setRejectReason] = useState("");
 
     // Preview modal
     const [previewModal, setPreviewModal] = useState<{
@@ -107,39 +99,27 @@ export default function FormSubmissionsPage() {
         }
     };
 
-    const openRejectModal = (subId: number, formTitle: string) => {
-        setRejectModal({ open: true, subId, formTitle });
-        setRejectReason("");
-    };
+    const handleDelete = async (subId: number) => {
+        if (!(await confirmDialog("Delete this form submission? This cannot be undone."))) return;
 
-    const handleReject = async () => {
-        if (!rejectModal.subId) return;
-        if (!rejectReason.trim()) {
-            toast.warning("Please provide a reason for rejection.");
-            return;
-        }
-
-        setActionLoading(rejectModal.subId);
-        setRejectModal({ open: false, subId: null, formTitle: "" });
-
+        setActionLoading(subId);
         try {
             const response = await fetchWithAuth(
-                `${API_URL()}/api/portal/form-submissions/${rejectModal.subId}/reject?reason=${encodeURIComponent(rejectReason)}`,
-                { method: "PUT" }
+                `${API_URL()}/api/portal/form-submissions/${subId}`,
+                { method: "DELETE" }
             );
             const data = await response.json().catch(() => ({}));
 
             if (response.ok && data.success !== false) {
-                toast.success("Form submission rejected. Patient will be notified.");
+                toast.success("Form submission deleted.");
                 fetchSubmissions();
             } else {
-                toast.error(`Failed to reject: ${data.message || "Unknown error"}`);
+                toast.error(`Failed to delete: ${data.message || "Unknown error"}`);
             }
         } catch {
-            toast.error("Failed to reject submission. Please try again.");
+            toast.error("Failed to delete submission. Please try again.");
         } finally {
             setActionLoading(null);
-            setRejectReason("");
         }
     };
 
@@ -293,12 +273,12 @@ export default function FormSubmissionsPage() {
                                                                 )}
                                                             </button>
                                                             <button
-                                                                onClick={() => openRejectModal(sub.id, sub.formTitle)}
+                                                                onClick={() => handleDelete(sub.id)}
                                                                 disabled={actionLoading === sub.id}
                                                                 className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
-                                                                title="Reject"
+                                                                title="Delete"
                                                             >
-                                                                <XCircle className="w-4 h-4" />
+                                                                <Trash2 className="w-4 h-4" />
                                                             </button>
                                                         </>
                                                     )}
@@ -336,40 +316,6 @@ export default function FormSubmissionsPage() {
                         )}
                     </>
                 )}
-
-                {/* Reject Modal */}
-                <Modal
-                    isOpen={rejectModal.open}
-                    onClose={() => setRejectModal({ open: false, subId: null, formTitle: "" })}
-                >
-                    <div className="p-6 max-w-md">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2">Reject Submission</h3>
-                        <p className="text-sm text-gray-500 mb-4">
-                            Reject &ldquo;{rejectModal.formTitle}&rdquo;? The patient will be notified.
-                        </p>
-                        <textarea
-                            value={rejectReason}
-                            onChange={(e) => setRejectReason(e.target.value)}
-                            rows={3}
-                            placeholder="Reason for rejection..."
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-red-500 focus:border-red-500"
-                        />
-                        <div className="flex items-center justify-end gap-2 mt-4">
-                            <button
-                                onClick={() => setRejectModal({ open: false, subId: null, formTitle: "" })}
-                                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleReject}
-                                className="px-4 py-2 text-sm bg-red-600 text-white rounded-md hover:bg-red-700"
-                            >
-                                Reject
-                            </button>
-                        </div>
-                    </div>
-                </Modal>
 
                 {/* Preview Modal */}
                 <Modal
@@ -409,15 +355,13 @@ export default function FormSubmissionsPage() {
                                 <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-gray-200">
                                     <button
                                         onClick={() => {
-                                            openRejectModal(
-                                                previewModal.submission!.id,
-                                                previewModal.submission!.formTitle
-                                            );
+                                            const subId = previewModal.submission!.id;
                                             setPreviewModal({ open: false, submission: null });
+                                            handleDelete(subId);
                                         }}
                                         className="px-4 py-2 text-sm text-red-600 border border-red-300 rounded-md hover:bg-red-50"
                                     >
-                                        Reject
+                                        Delete
                                     </button>
                                     <button
                                         onClick={() => {

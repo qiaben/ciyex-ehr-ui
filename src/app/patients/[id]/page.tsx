@@ -18,6 +18,7 @@ import VitalsFlowsheet from "@/components/patients/VitalsFlowsheet";
 import PaymentPostingTab from "@/components/patients/PaymentPostingTab";
 import StatementsTab from "@/components/patients/StatementsTab";
 import PortalSubmissionsTab from "@/components/patients/PortalSubmissionsTab";
+import PortalFormsTab from "@/components/patients/PortalFormsTab";
 import PluginSlot from "@/components/plugins/PluginSlot";
 import { usePluginRegistry } from "@/context/PluginRegistryContext";
 import { PluginContextProvider } from "@/context/PluginContextProvider";
@@ -554,6 +555,7 @@ export default function PatientDashboardPage() {
             label: "Portal",
             tabs: [
                 { key: "portal-submissions", label: "Form Submissions", icon: ClipboardCheck },
+                { key: "portal-forms", label: "Portal Forms", icon: FileCheck },
             ],
         },
         {
@@ -656,6 +658,11 @@ export default function PatientDashboardPage() {
         // Portal form submissions tab
         if (tabKey === "portal-submissions") {
             return <PortalSubmissionsTab patientId={Number(patient.id)} />;
+        }
+
+        // Portal forms (accepted submissions as viewable documents)
+        if (tabKey === "portal-forms") {
+            return <PortalFormsTab patientId={Number(patient.id)} />;
         }
 
         // All FHIR-resource-backed tabs render dynamically via GenericFhirTab
