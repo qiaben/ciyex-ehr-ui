@@ -94,6 +94,26 @@ function transformMenuToNavItems(items: MenuItemNode[]): NavItem[] {
 // Empty fallback — all navigation comes from the Menu API (database)
 const FALLBACK_NAV_ITEMS: NavItem[] = [];
 
+// Portal Management — injected if backend menu doesn't already include it
+const PORTAL_MANAGEMENT_NAV: NavItem = {
+  name: "Portal Management",
+  icon: <Globe className="h-6 w-6" />,
+  subItems: [
+    { name: "Form Submissions", path: "/form-submissions" },
+    { name: "Document Reviews", path: "/document-reviews" },
+    { name: "Patient Approvals", path: "/patient-approvals" },
+  ],
+};
+
+function hasPortalManagement(items: MenuItemNode[]): boolean {
+  for (const node of items) {
+    const key = node.item.itemKey?.toLowerCase() || "";
+    if (key === "portal-management" || key === "portalmanagement") return true;
+    if (node.children?.length && hasPortalManagement(node.children)) return true;
+  }
+  return false;
+}
+
 // Filter menu tree by permissions (recursive).
 // An item is visible if:
 //   - it has no requiredPermission (null) → always visible
@@ -141,7 +161,12 @@ const AppSidebar: React.FC = () => {
   const navItems = useMemo(() => {
     if (menuItems.length > 0) {
       const filtered = filterByPermission(menuItems, hasCategory);
-      return transformMenuToNavItems(filtered);
+      const items = transformMenuToNavItems(filtered);
+      // Inject "Portal Management" if the backend menu doesn't already have it
+      if (!hasPortalManagement(menuItems)) {
+        items.push(PORTAL_MANAGEMENT_NAV);
+      }
+      return items;
     }
     return FALLBACK_NAV_ITEMS;
   }, [menuItems, hasCategory]);
