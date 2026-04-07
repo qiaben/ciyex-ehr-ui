@@ -241,6 +241,16 @@ export class MediasoupStompProvider implements VideoCallProvider {
                 });
             });
 
+            sendTransport.on("connectionstatechange", (state: string) => {
+                console.log(`[telehealth] sendTransport state: ${state}`);
+                if (state === "failed") {
+                    console.error("[telehealth] Send transport ICE failed — media cannot be sent");
+                    this.onStateChange?.({ error: "Your network cannot send media. Please check your firewall/VPN and rejoin." });
+                } else if (state === "disconnected") {
+                    console.warn("[telehealth] Send transport disconnected — waiting for ICE restart...");
+                }
+            });
+
             this.sendTransport = sendTransport;
 
             // --- Recv transport ---
@@ -259,6 +269,16 @@ export class MediasoupStompProvider implements VideoCallProvider {
                     body: JSON.stringify({ userId: uid, transportId: recvTransport.id, dtlsParameters }),
                 });
                 cb();
+            });
+
+            recvTransport.on("connectionstatechange", (state: string) => {
+                console.log(`[telehealth] recvTransport state: ${state}`);
+                if (state === "failed") {
+                    console.error("[telehealth] Recv transport ICE failed — cannot receive remote media");
+                    this.onStateChange?.({ error: "Cannot receive remote audio/video. Please check your network and rejoin." });
+                } else if (state === "disconnected") {
+                    console.warn("[telehealth] Recv transport disconnected — waiting for ICE restart...");
+                }
             });
 
             this.recvTransport = recvTransport;
@@ -315,7 +335,7 @@ export class MediasoupStompProvider implements VideoCallProvider {
             this.consumers.set(consumer.id, consumer);
             this.stompClient?.publish({
                 destination: `/app/session/${this.sessionId}/consumer-resume`,
-                body: JSON.stringify({ consumerId: consumer.id }),
+                body: JSON.stringify({ consumerId: consumer.id, userId: this.userId }),
             });
             if (this.remoteVideoEl) {
                 const existing = this.remoteVideoEl.srcObject as MediaStream | null;
