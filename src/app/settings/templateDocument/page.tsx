@@ -101,7 +101,7 @@ export default function TemplateStudio() {
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [myTemplates, setMyTemplates] = useState<SavedTemplate[]>([]);
   const [filter, setFilter] = useState("");
-  const [showSource, setShowSource] = useState(false);
+  const [editorMode, setEditorMode] = useState<"source" | "visual">("source");
   const [sourceHTML, setSourceHTML] = useState("");
 
   // Toasts
@@ -170,7 +170,8 @@ export default function TemplateStudio() {
 
   // Save
   async function performSave(name: string) {
-    const content = getHTML();
+    // Use source HTML in source mode, or TipTap HTML in visual mode
+    const content = editorMode === "source" ? sourceHTML : getHTML();
     const body: UpsertBody = { name, context: toServerContext(context), content, options: {} };
     try {
       const saved = currentId ? await apiUpdateTemplate(Number(currentId), body) : await apiCreateTemplate(body);
@@ -187,13 +188,14 @@ export default function TemplateStudio() {
     else performSave(title || "Untitled");
   };
 
-  const newTemplate = () => { setCurrentId(null); setTitle(""); editor?.commands.setContent(""); };
+  const newTemplate = () => { setCurrentId(null); setTitle(""); setSourceHTML(""); editor?.commands.setContent(""); };
 
   const loadTemplate = async (t: SavedTemplate) => {
     try {
       const row = await apiGetTemplate(Number(t.id));
       setCurrentId(String(row.id));
       setTitle(row.name);
+      setSourceHTML(row.content || "");
       editor?.commands.setContent(row.content || "");
     } catch { showToast("Load failed", "error"); }
   };
@@ -205,7 +207,7 @@ export default function TemplateStudio() {
     try {
       await apiDeleteTemplate(Number(t.id));
       setMyTemplates(p => p.filter(x => x.id !== t.id));
-      if (t.id === currentId) { setCurrentId(null); setTitle(""); editor?.commands.setContent(""); }
+      if (t.id === currentId) { setCurrentId(null); setTitle(""); setSourceHTML(""); editor?.commands.setContent(""); }
       showToast("Deleted!", "success");
     } catch { showToast("Delete failed", "error"); }
   };
@@ -217,7 +219,7 @@ export default function TemplateStudio() {
       const text = String(reader.result || "");
       try {
         const saved = await apiCreateTemplate({ name: f.name.replace(/\.[^.]+$/, ""), context: toServerContext(context), content: text, options: {} });
-        setCurrentId(String(saved.id)); setTitle(saved.name); editor?.commands.setContent(saved.content);
+        setCurrentId(String(saved.id)); setTitle(saved.name); setSourceHTML(saved.content); editor?.commands.setContent(saved.content);
         refreshList();
         showToast("Imported!", "success");
       } catch { showToast("Import failed", "error"); }
@@ -227,8 +229,8 @@ export default function TemplateStudio() {
   };
 
   const downloadHTML = () => {
-    const html = getHTML();
-    const full = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title || "Template"}</title><style>body{font-family:system-ui,sans-serif;max-width:800px;margin:2em auto;padding:0 1em;color:#222}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px}h1,h2,h3{color:#2d5c9f}</style></head><body>${html}</body></html>`;
+    const content = editorMode === "source" ? sourceHTML : getHTML();
+    const full = /<!doctype|<html/i.test(content) ? content : `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title || "Template"}</title><style>body{font-family:system-ui,sans-serif;max-width:800px;margin:2em auto;padding:0 1em;color:#222}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px}h1,h2,h3{color:#2d5c9f}</style></head><body>${content}</body></html>`;
     const blob = new Blob([full], { type: "text/html" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -239,18 +241,19 @@ export default function TemplateStudio() {
   };
 
   const copyHTML = async () => {
-    try { await navigator.clipboard.writeText(getHTML()); showToast("Copied!", "success"); }
+    const content = editorMode === "source" ? sourceHTML : getHTML();
+    try { await navigator.clipboard.writeText(content); showToast("Copied!", "success"); }
     catch { showToast("Copy failed", "error"); }
   };
 
-  // Source view toggle
-  const toggleSource = () => {
-    if (showSource) {
+  // Mode toggle
+  const toggleMode = () => {
+    if (editorMode === "source") {
       editor?.commands.setContent(sourceHTML);
-      setShowSource(false);
+      setEditorMode("visual");
     } else {
       setSourceHTML(getHTML());
-      setShowSource(true);
+      setEditorMode("source");
     }
   };
 
@@ -269,9 +272,10 @@ export default function TemplateStudio() {
 
   // Preview HTML
   const previewHTML = useMemo(() => {
-    const content = getHTML();
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:system-ui,-apple-system,sans-serif;max-width:800px;margin:2em auto;padding:0 1.5em;color:#1a1a1a;line-height:1.6}h1{color:#2d5c9f;border-bottom:2px solid #e5e7eb;padding-bottom:.3em}h2{color:#2d5c9f}h3{color:#374151}table{border-collapse:collapse;width:100%;margin:1em 0}td,th{border:1px solid #d1d5db;padding:8px 12px;text-align:left}th{background:#f3f4f6;font-weight:600}blockquote{border-left:4px solid #2d5c9f;margin:1em 0;padding:.5em 1em;background:#f8fafc}code{background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:.9em}pre{background:#1e293b;color:#e2e8f0;padding:1em;border-radius:8px;overflow-x:auto}img{max-width:100%;border-radius:8px}hr{border:none;border-top:2px solid #e5e7eb;margin:2em 0}a{color:#2563eb}mark{background:#fef08a;padding:2px 4px;border-radius:2px}</style></head><body>${content}</body></html>`;
-  }, [getHTML, editor?.state.doc.content.size]);
+    const content = editorMode === "source" ? sourceHTML : getHTML();
+    if (/<!doctype|<html/i.test(content)) return content;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:system-ui,-apple-system,sans-serif;max-width:800px;margin:2em auto;padding:0 1.5em;color:#1a1a1a;line-height:1.6}h1{color:#2d5c9f;border-bottom:2px solid #e5e7eb;padding-bottom:.3em}h2{color:#2d5c9f}h3{color:#374151}table{border-collapse:collapse;width:100%;margin:1em 0}td,th{border:1px solid #d1d5db;padding:8px 12px;text-align:left}th{background:#f3f4f6;font-weight:600}blockquote{border-left:4px solid #2d5c9f;margin:1em 0;padding:.5em 1em;background:#f8fafc}code{background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:.9em}img{max-width:100%;border-radius:8px}hr{border:none;border-top:2px solid #e5e7eb;margin:2em 0}a{color:#2563eb}</style></head><body>${content}</body></html>`;
+  }, [editorMode, sourceHTML, getHTML, editor?.state.doc.content.size]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -403,20 +407,21 @@ export default function TemplateStudio() {
 
             <div className="flex-1" />
 
-            {/* Source toggle */}
-            <button onClick={toggleSource} className={`text-xs px-2 py-1 rounded-md border ${showSource ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}>
-              {showSource ? "Visual" : "HTML Source"}
+            {/* Mode toggle */}
+            <button onClick={toggleMode} className={`text-xs px-2 py-1 rounded-md border ${editorMode === "source" ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}>
+              {editorMode === "source" ? "Visual Editor" : "HTML Source"}
             </button>
           </div>
 
           {/* Editor Content */}
           <div className="bg-white min-h-[500px]">
-            {showSource ? (
+            {editorMode === "source" ? (
               <textarea
                 value={sourceHTML}
                 onChange={e => setSourceHTML(e.target.value)}
                 className="w-full min-h-[500px] p-4 font-mono text-sm border-0 outline-none resize-y bg-gray-50"
                 spellCheck={false}
+                placeholder="Paste your HTML template here..."
               />
             ) : (
               <EditorContent editor={editor} />
@@ -425,7 +430,7 @@ export default function TemplateStudio() {
 
           {/* Status bar */}
           <div className="border-t bg-gray-50 px-4 py-1.5 text-xs text-gray-500 flex items-center justify-between">
-            <span>{currentId ? `Editing: ${title || "Untitled"}` : "New template"}</span>
+            <span>{currentId ? `Editing: ${title || "Untitled"}` : "New template"} ({editorMode === "source" ? "HTML Source" : "Visual"})</span>
             <span>{context === "encounter" ? "Encounter" : "Portal"} template</span>
           </div>
         </main>
