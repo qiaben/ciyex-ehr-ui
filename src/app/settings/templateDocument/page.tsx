@@ -23,12 +23,12 @@ import {
   Code, Quote, Minus, HighlighterIcon, Palette, Type, Pilcrow,
 } from "lucide-react";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
+import { getEnv } from "@/utils/env";
 
 /* =========================================================
    API helpers
    ========================================================= */
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-const API = `${API_BASE}/api/template-documents`;
+const API_URL = () => `${getEnv("NEXT_PUBLIC_API_URL")}/api/template-documents`;
 
 const toServerContext = (c: "encounter" | "portal") => c === "encounter" ? "ENCOUNTER" : "PORTAL";
 const fromServerContext = (c: string) => c === "ENCOUNTER" ? "encounter" : "portal";
@@ -37,28 +37,29 @@ type UpsertBody = { name: string; context: string; content: string; options: Rec
 type ServerTemplate = { id: number; name: string; context: string; content: string; options: Record<string, any>; createdAt?: string; updatedAt?: string; };
 
 async function apiCreateTemplate(body: UpsertBody): Promise<ServerTemplate> {
-  const res = await fetchWithAuth(`${API}`, { method: "POST", body: JSON.stringify(body) });
+  const res = await fetchWithAuth(API_URL(), { method: "POST", body: JSON.stringify(body) });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 async function apiUpdateTemplate(id: number, body: UpsertBody): Promise<ServerTemplate> {
-  const res = await fetchWithAuth(`${API}/${id}`, { method: "PUT", body: JSON.stringify(body) });
+  const res = await fetchWithAuth(`${API_URL()}/${id}`, { method: "PUT", body: JSON.stringify(body) });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 async function apiGetTemplate(id: number): Promise<ServerTemplate> {
-  const res = await fetchWithAuth(`${API}/${id}`);
+  const res = await fetchWithAuth(`${API_URL()}/${id}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 async function apiListTemplates(context?: string): Promise<ServerTemplate[]> {
-  const url = context ? `${API}?context=${context}` : API;
+  const base = API_URL();
+  const url = context ? `${base}?context=${context}` : base;
   const res = await fetchWithAuth(url);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 async function apiDeleteTemplate(id: number): Promise<void> {
-  const res = await fetchWithAuth(`${API}/${id}`, { method: "DELETE" });
+  const res = await fetchWithAuth(`${API_URL()}/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error(await res.text());
 }
 
