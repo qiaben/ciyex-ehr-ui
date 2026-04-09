@@ -315,10 +315,11 @@ const REFRESH_OPTIONS = [
 /** Date preset options for the date filter dropdown */
 const DATE_PRESETS = [
   { label: "Today", value: "today" },
+  { label: "Past", value: "past" },
+  { label: "Upcoming", value: "upcoming" },
   { label: "Last 7 Days", value: "last_7_days" },
   { label: "Current Month", value: "current_month" },
   { label: "Last Month", value: "last_month" },
-  { label: "Upcoming", value: "upcoming" },
   { label: "All Time", value: "all_time" },
 ];
 
@@ -330,6 +331,12 @@ function getDateRange(preset: string): { from: string; to: string } {
   switch (preset) {
     case "today":
       return { from: today, to: today };
+    case "past": {
+      const pastStart = new Date(2000, 0, 1);
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return { from: fmt(pastStart), to: fmt(yesterday) };
+    }
     case "last_7_days": {
       const d = new Date(now);
       d.setDate(d.getDate() - 7);

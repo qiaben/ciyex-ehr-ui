@@ -4,7 +4,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import React, { useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
-import { isValidName, isValidPhone, isValidEmail } from "@/utils/validation";
+import { isValidName, isValidUSPhone, isValidEmail } from "@/utils/validation";
 import { toast, confirmDialog } from "@/utils/toast";
 import AdminLayout from "@/app/(admin)/layout";
 import Link from "next/link";
@@ -116,7 +116,7 @@ export default function PatientListPage() {
         else if (!isValidName(p.lastName)) errs.lastName = "Name must contain only letters";
         if (p.middleName && !isValidName(p.middleName)) errs.middleName = "Name must contain only letters";
         if (!p.phoneNumber.trim()) errs.phoneNumber = "Phone number is required";
-        else if (!isValidPhone(p.phoneNumber)) errs.phoneNumber = "Enter a valid phone number";
+        else if (!isValidUSPhone(p.phoneNumber)) errs.phoneNumber = "Enter a valid 10-digit US phone number";
         if (!p.email?.trim()) errs.email = "Email is required";
         else if (!isValidEmail(p.email)) errs.email = "Enter a valid email address";
         if (!p.gender) errs.gender = "Gender is required";
