@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { getEnv } from "@/utils/env";
 import GenericSettingsPage from "@/components/settings/GenericSettingsPage";
@@ -44,6 +45,12 @@ export default function SettingsPage() {
     const { getSlotContributions, loaded: pluginsLoaded } = usePluginRegistry();
     const { hasCategory } = usePermissions();
     const isAdmin = hasCategory("admin");
+    const router = useRouter();
+
+    // Tab keys that should navigate to dedicated pages instead of GenericSettingsPage
+    const DEDICATED_PAGES: Record<string, string> = {
+        "template-documents": "/settings/templateDocument",
+    };
 
     const pluginNavItems = pluginsLoaded ? getSlotContributions("settings:nav-item") : [];
 
@@ -123,10 +130,17 @@ export default function SettingsPage() {
                     {visibleItems.map((item) => {
                         const Icon = getIcon(item.icon);
                         const isActive = activeKey === item.tabKey;
+                        const dedicatedRoute = DEDICATED_PAGES[item.tabKey];
                         return (
                             <button
                                 key={item.tabKey}
-                                onClick={() => setActiveKey(item.tabKey)}
+                                onClick={() => {
+                                    if (dedicatedRoute) {
+                                        router.push(dedicatedRoute);
+                                    } else {
+                                        setActiveKey(item.tabKey);
+                                    }
+                                }}
                                 className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
                                     isActive
                                         ? "bg-blue-600 text-white"
