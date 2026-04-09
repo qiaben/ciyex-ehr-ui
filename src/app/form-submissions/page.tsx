@@ -111,22 +111,31 @@ export default function FormSubmissionsPage() {
             return;
         }
 
-        setActionLoading(rejectModal.subId);
+        const subId = rejectModal.subId;
+        setActionLoading(subId);
         setRejectModal({ open: false, subId: null, formTitle: "" });
 
         try {
-            const response = await fetchWithAuth(
-                `${API_URL()}/api/portal/form-submissions/${rejectModal.subId}/reject?reason=${encodeURIComponent(rejectReason)}`,
+            // Reject first so backend can notify the patient with the reason
+            const rejectRes = await fetchWithAuth(
+                `${API_URL()}/api/portal/form-submissions/${subId}/reject?reason=${encodeURIComponent(rejectReason)}`,
                 { method: "PUT" }
             );
-            const data = await response.json().catch(() => ({}));
+            const rejectData = await rejectRes.json().catch(() => ({}));
 
-            if (response.ok && data.success !== false) {
-                toast.success("Form submission rejected. Patient will be notified.");
-                fetchSubmissions();
-            } else {
-                toast.error(`Failed to reject: ${data.message || "Unknown error"}`);
+            if (!rejectRes.ok || rejectData.success === false) {
+                toast.error(`Failed to reject: ${rejectData.message || "Unknown error"}`);
+                return;
             }
+
+            // Delete the submission after rejection
+            await fetchWithAuth(
+                `${API_URL()}/api/portal/form-submissions/${subId}`,
+                { method: "DELETE" }
+            ).catch(() => {});
+
+            toast.success("Form submission rejected and deleted.");
+            fetchSubmissions();
         } catch {
             toast.error("Failed to reject submission. Please try again.");
         } finally {
