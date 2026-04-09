@@ -7,10 +7,6 @@ import { formatDisplayDateTime } from "@/utils/dateUtils";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { getEnv } from "@/utils/env";
 import { Modal } from "@/components/ui/modal";
-import {
-    ClipboardList, Loader2, CheckCircle2, Trash2, Eye,
-    Clock, ChevronDown, ChevronRight, Search, RefreshCw,
-} from "lucide-react";
 
 const API_URL = () => getEnv("NEXT_PUBLIC_API_URL") || "";
 
@@ -45,6 +41,10 @@ export default function FormSubmissionsPage() {
         open: boolean;
         submission: FormSubmission | null;
     }>({ open: false, submission: null });
+
+    // Reject modal
+    const [rejectModal, setRejectModal] = useState<{ open: boolean; subId: number | null; formTitle: string }>({ open: false, subId: null, formTitle: "" });
+    const [rejectReason, setRejectReason] = useState("");
 
     const fetchSubmissions = useCallback(async () => {
         try {
@@ -87,7 +87,7 @@ export default function FormSubmissionsPage() {
             const data = await response.json().catch(() => ({}));
 
             if (response.ok && data.success !== false) {
-                toast.success("Form submission accepted and added to patient records.");
+                toast.success("Form submission accepted.");
                 fetchSubmissions();
             } else {
                 toast.error(`Failed to accept: ${data.message || "Unknown error"}`);
@@ -99,27 +99,39 @@ export default function FormSubmissionsPage() {
         }
     };
 
-    const handleDelete = async (subId: number) => {
-        if (!(await confirmDialog("Delete this form submission? This cannot be undone."))) return;
+    const openRejectModal = (subId: number, formTitle: string) => {
+        setRejectModal({ open: true, subId, formTitle });
+        setRejectReason("");
+    };
 
-        setActionLoading(subId);
+    const handleReject = async () => {
+        if (!rejectModal.subId) return;
+        if (!rejectReason.trim()) {
+            toast.warning("Please provide a reason for rejection.");
+            return;
+        }
+
+        setActionLoading(rejectModal.subId);
+        setRejectModal({ open: false, subId: null, formTitle: "" });
+
         try {
             const response = await fetchWithAuth(
-                `${API_URL()}/api/portal/form-submissions/${subId}`,
-                { method: "DELETE" }
+                `${API_URL()}/api/portal/form-submissions/${rejectModal.subId}/reject?reason=${encodeURIComponent(rejectReason)}`,
+                { method: "PUT" }
             );
             const data = await response.json().catch(() => ({}));
 
             if (response.ok && data.success !== false) {
-                toast.success("Form submission deleted.");
+                toast.success("Form submission rejected. Patient will be notified.");
                 fetchSubmissions();
             } else {
-                toast.error(`Failed to delete: ${data.message || "Unknown error"}`);
+                toast.error(`Failed to reject: ${data.message || "Unknown error"}`);
             }
         } catch {
-            toast.error("Failed to delete submission. Please try again.");
+            toast.error("Failed to reject submission. Please try again.");
         } finally {
             setActionLoading(null);
+            setRejectReason("");
         }
     };
 
@@ -148,38 +160,67 @@ export default function FormSubmissionsPage() {
             status === "rejected" ? "bg-red-100 text-red-700" :
             "bg-gray-100 text-gray-600";
         return (
-            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
+            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
                 {status.charAt(0).toUpperCase() + status.slice(1)}
             </span>
         );
     };
 
+    if (loading) {
+        return (
+            <AdminLayout>
+                <div className="p-6">
+                    <div className="flex items-center justify-center min-h-64">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                            <p className="mt-4 text-gray-600">Loading form submissions...</p>
+                        </div>
+                    </div>
+                </div>
+            </AdminLayout>
+        );
+    }
+
+    if (error) {
+        return (
+            <AdminLayout>
+                <div className="p-6">
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                            <svg className="h-5 w-5 text-red-400 mt-0.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                            </svg>
+                            <div>
+                                <h3 className="text-sm font-medium text-red-800">Error</h3>
+                                <p className="mt-1 text-sm text-red-700">{error}</p>
+                                <button
+                                    onClick={() => { setError(""); setLoading(true); fetchSubmissions(); }}
+                                    className="mt-3 bg-red-100 text-red-800 px-3 py-1 rounded text-sm hover:bg-red-200"
+                                >
+                                    Try Again
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </AdminLayout>
+        );
+    }
+
     return (
         <AdminLayout>
-            <div className="p-6 max-w-7xl mx-auto">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                            <ClipboardList className="w-6 h-6 text-blue-600" />
-                            Form Submissions
-                        </h1>
-                        <p className="text-sm text-gray-500 mt-1">
-                            Review and manage form submissions from the patient portal
-                        </p>
-                    </div>
-                    <button
-                        onClick={fetchSubmissions}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
-                    >
-                        <RefreshCw className="w-4 h-4" /> Refresh
-                    </button>
+            <div className="p-6">
+                <div className="mb-6">
+                    <h1 className="text-2xl font-bold text-gray-900">Form Reviews</h1>
+                    <p className="text-gray-600 mt-1">Review form submissions from the patient portal</p>
                 </div>
 
                 {/* Filters */}
                 <div className="flex items-center gap-3 mb-4">
                     <div className="relative flex-1 max-w-xs">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
                         <input
                             type="text"
                             placeholder="Search by patient or form name..."
@@ -198,123 +239,124 @@ export default function FormSubmissionsPage() {
                     </select>
                 </div>
 
-                {/* Table */}
-                {loading ? (
-                    <div className="flex items-center justify-center py-16">
-                        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-                    </div>
-                ) : error ? (
-                    <div className="text-center py-16">
-                        <p className="text-red-500 text-sm">{error}</p>
-                        <button onClick={fetchSubmissions} className="text-sm text-blue-600 hover:text-blue-700 mt-2">
-                            Try Again
+                {paged.length === 0 ? (
+                    <div className="bg-white rounded-lg shadow p-8 text-center">
+                        <div className="text-gray-400 mb-4">
+                            <svg className="mx-auto h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">
+                            {statusFilter === "pending" ? "No Pending Form Submissions" : "No Form Submissions Found"}
+                        </h3>
+                        <p className="text-gray-600">
+                            {statusFilter === "pending"
+                                ? "All patient form submissions have been reviewed."
+                                : "No form submissions match your search criteria."}
+                        </p>
+                        <button
+                            onClick={() => { setLoading(true); fetchSubmissions(); }}
+                            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                        >
+                            Refresh
                         </button>
                     </div>
-                ) : paged.length === 0 ? (
-                    <div className="text-center py-16 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                        <ClipboardList className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                        <p className="text-sm text-gray-500">
-                            {statusFilter === "pending"
-                                ? "No pending form submissions"
-                                : "No form submissions found"}
-                        </p>
-                    </div>
                 ) : (
-                    <>
-                        <div className="border border-gray-200 rounded-lg overflow-hidden">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Form</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {paged.map((sub) => (
-                                        <tr key={sub.id} className="hover:bg-gray-50">
-                                            <td className="px-4 py-3">
-                                                <div className="text-sm font-medium text-gray-900">{sub.patientName}</div>
-                                                <div className="text-xs text-gray-500">ID: {sub.patientId}</div>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <div className="text-sm text-gray-900">{sub.formTitle}</div>
-                                                <div className="text-xs text-gray-500 font-mono">{sub.formKey}</div>
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-500">
-                                                {formatDisplayDateTime(sub.submittedDate) || sub.submittedDate}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {statusBadge(sub.status)}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center justify-end gap-1">
-                                                    <button
-                                                        onClick={() => openPreview(sub)}
-                                                        className="p-1.5 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50"
-                                                        title="View Response"
-                                                    >
-                                                        <Eye className="w-4 h-4" />
-                                                    </button>
-                                                    {sub.status === "pending" && (
-                                                        <>
-                                                            <button
-                                                                onClick={() => handleAccept(sub.id)}
-                                                                disabled={actionLoading === sub.id}
-                                                                className="p-1.5 text-gray-400 hover:text-green-600 rounded hover:bg-green-50 disabled:opacity-50"
-                                                                title="Accept"
-                                                            >
-                                                                {actionLoading === sub.id ? (
-                                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                                ) : (
-                                                                    <CheckCircle2 className="w-4 h-4" />
-                                                                )}
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDelete(sub.id)}
-                                                                disabled={actionLoading === sub.id}
-                                                                className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
-                                                                title="Delete"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        {/* Pagination */}
-                        {totalPages > 1 && (
-                            <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
-                                <span>
-                                    Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, filtered.length)} of {filtered.length}
+                    <div className="bg-white shadow rounded-lg overflow-hidden">
+                        <div className="px-4 py-5 sm:p-6">
+                            <div className="mb-4 flex justify-between items-center">
+                                <span className="text-sm text-gray-600">
+                                    {filtered.length} {statusFilter === "pending" ? "pending " : ""}submission{filtered.length !== 1 ? "s" : ""} for review
                                 </span>
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        onClick={() => setPage((p) => Math.max(0, p - 1))}
-                                        disabled={page === 0}
-                                        className="px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40"
-                                    >
-                                        Previous
-                                    </button>
-                                    <button
-                                        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                                        disabled={page >= totalPages - 1}
-                                        className="px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40"
-                                    >
-                                        Next
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={() => { setLoading(true); fetchSubmissions(); }}
+                                    className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                                >
+                                    Refresh
+                                </button>
                             </div>
-                        )}
-                    </>
+
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Form</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted</th>
+                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {paged.map((sub) => (
+                                            <tr key={sub.id} className="hover:bg-gray-50">
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm font-medium text-gray-900">{sub.patientName || `Patient #${sub.patientId}`}</div>
+                                                    <div className="text-xs text-gray-500">ID: {sub.patientId}</div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="text-sm font-medium text-gray-900">{sub.formTitle}</div>
+                                                    {sub.formDescription && (
+                                                        <div className="text-xs text-gray-500 truncate max-w-[200px] mt-0.5">{sub.formDescription}</div>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    {statusBadge(sub.status)}
+                                                    {sub.reviewNote && (
+                                                        <div className="text-xs text-gray-400 mt-1 truncate max-w-[150px]" title={sub.reviewNote}>
+                                                            {sub.reviewNote}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {formatDisplayDateTime(sub.submittedDate)}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                    <div className="flex justify-end space-x-2">
+                                                        <button
+                                                            onClick={() => openPreview(sub)}
+                                                            className="text-blue-600 hover:text-blue-800 px-2 py-1 rounded text-sm hover:bg-blue-50"
+                                                        >
+                                                            Preview
+                                                        </button>
+                                                        {sub.status === "pending" && (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => handleAccept(sub.id)}
+                                                                    disabled={actionLoading === sub.id}
+                                                                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                >
+                                                                    {actionLoading === sub.id ? "Processing..." : "Accept"}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => openRejectModal(sub.id, sub.formTitle)}
+                                                                    disabled={actionLoading === sub.id}
+                                                                    className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                >
+                                                                    {actionLoading === sub.id ? "Processing..." : "Reject"}
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {totalPages > 1 && (
+                                <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
+                                    <span>{filtered.length} submission{filtered.length !== 1 ? "s" : ""}</span>
+                                    <div className="flex items-center gap-2">
+                                        <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 text-sm">Prev</button>
+                                        <span>Page {page + 1} of {totalPages}</span>
+                                        <button disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 text-sm">Next</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 )}
 
                 {/* Preview Modal */}
@@ -355,13 +397,13 @@ export default function FormSubmissionsPage() {
                                 <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-gray-200">
                                     <button
                                         onClick={() => {
-                                            const subId = previewModal.submission!.id;
+                                            const sub = previewModal.submission!;
                                             setPreviewModal({ open: false, submission: null });
-                                            handleDelete(subId);
+                                            openRejectModal(sub.id, sub.formTitle);
                                         }}
                                         className="px-4 py-2 text-sm text-red-600 border border-red-300 rounded-md hover:bg-red-50"
                                     >
-                                        Delete
+                                        Reject
                                     </button>
                                     <button
                                         onClick={() => {
@@ -377,6 +419,48 @@ export default function FormSubmissionsPage() {
                             )}
                         </div>
                     )}
+                </Modal>
+
+                {/* Reject Modal */}
+                <Modal isOpen={rejectModal.open} onClose={() => setRejectModal({ open: false, subId: null, formTitle: "" })} className="max-w-[480px] p-6">
+                    <div className="space-y-4">
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-900">Reject Form Submission</h3>
+                            <p className="text-sm text-gray-500 mt-1">
+                                Rejecting <span className="font-medium text-gray-700">{rejectModal.formTitle}</span>. The patient will be notified with your reason.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                                Reason for Rejection <span className="text-red-500">*</span>
+                            </label>
+                            <textarea
+                                value={rejectReason}
+                                onChange={(e) => setRejectReason(e.target.value)}
+                                placeholder="e.g. Incomplete information, missing fields, invalid data..."
+                                rows={4}
+                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 placeholder:text-gray-400 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none resize-none"
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-end gap-3 pt-2">
+                            <button
+                                onClick={() => setRejectModal({ open: false, subId: null, formTitle: "" })}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleReject}
+                                disabled={!rejectReason.trim()}
+                                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Reject Submission
+                            </button>
+                        </div>
+                    </div>
                 </Modal>
             </div>
         </AdminLayout>

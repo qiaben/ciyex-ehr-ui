@@ -99,7 +99,7 @@ const PORTAL_MANAGEMENT_NAV: NavItem = {
   name: "Portal Management",
   icon: <Globe className="h-6 w-6" />,
   subItems: [
-    { name: "Form Submissions", path: "/form-submissions" },
+    { name: "Form Reviews", path: "/form-submissions" },
     { name: "Document Reviews", path: "/document-reviews" },
     { name: "Patient Approvals", path: "/patient-approvals" },
   ],
