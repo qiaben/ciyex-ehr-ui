@@ -571,7 +571,16 @@ export default function PatientDashboardPage() {
     const { getSlotContributions } = usePluginRegistry();
     const pluginTabs = getSlotContributions("patient-chart:tab");
 
-    const baseCategories = dynamicTabCategories || defaultTabCategories;
+    // Inject "Forms" tab right after Demographics in whatever category contains it
+    const rawCategories = dynamicTabCategories || defaultTabCategories;
+    const formsTab = { key: "portal-forms", label: "Forms", icon: FileCheck };
+    const baseCategories = rawCategories.map((cat) => {
+        const demoIdx = cat.tabs.findIndex((t) => t.key === "demographics");
+        if (demoIdx < 0 || cat.tabs.some((t) => t.key === "portal-forms")) return cat;
+        const tabs = [...cat.tabs];
+        tabs.splice(demoIdx + 1, 0, formsTab);
+        return { ...cat, tabs };
+    });
     const tabCategories = pluginTabs.length > 0
         ? [
             ...baseCategories,
