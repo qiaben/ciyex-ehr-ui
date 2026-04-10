@@ -33,7 +33,7 @@ export default function PortalSubmissionsTab({ patientId }: { patientId: number 
         try {
             setLoading(true);
             const res = await fetchWithAuth(
-                `${API_BASE()}/api/patients/${patientId}/form-submissions`
+                `${API_BASE()}/api/portal/form-submissions/patient/${patientId}`
             );
             if (res.ok) {
                 const json = await res.json();
