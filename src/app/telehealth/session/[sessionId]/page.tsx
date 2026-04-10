@@ -7,7 +7,7 @@ import { useVideoCall } from "@/hooks/useVideoCall";
 import type { VideoCallSession } from "@/lib/telehealth/VideoCallProvider";
 import {
     Video, VideoOff, Mic, MicOff, PhoneOff, MessageSquare,
-    Loader2, AlertTriangle, Users, Send,
+    Loader2, AlertTriangle, Users, Send, Circle, StopCircle,
 } from "lucide-react";
 
 /**
@@ -32,6 +32,8 @@ export default function TelehealthSessionPage() {
     const [sessionError, setSessionError] = useState<string | null>(null);
     const [showChat, setShowChat] = useState(false);
     const [chatInput, setChatInput] = useState("");
+    const [recordingStatus, setRecordingStatus] = useState<"idle" | "starting" | "recording" | "stopping">("idle");
+    const [recordingError, setRecordingError] = useState<string | null>(null);
 
     const localVideoRef  = useRef<HTMLVideoElement>(null);
     const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -88,6 +90,40 @@ export default function TelehealthSessionPage() {
     const handleSendChat = () => {
         sendChat(chatInput);
         setChatInput("");
+    };
+
+    const handleToggleRecording = async () => {
+        if (!sessionId) return;
+        setRecordingError(null);
+        try {
+            if (recordingStatus === "idle") {
+                setRecordingStatus("starting");
+                const res = await fetchWithAuth(`/api/telehealth/sessions/${sessionId}/recording/start`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ mode: "COMPOSITE" }),
+                });
+                if (!res.ok) {
+                    const errText = await res.text();
+                    throw new Error(errText || "Failed to start recording");
+                }
+                setRecordingStatus("recording");
+            } else if (recordingStatus === "recording") {
+                setRecordingStatus("stopping");
+                const res = await fetchWithAuth(`/api/telehealth/sessions/${sessionId}/recording/stop`, {
+                    method: "POST",
+                });
+                if (!res.ok) {
+                    const errText = await res.text();
+                    throw new Error(errText || "Failed to stop recording");
+                }
+                setRecordingStatus("idle");
+            }
+        } catch (err: any) {
+            console.error("[telehealth] Recording error:", err);
+            setRecordingError(err.message || "Recording failed");
+            setRecordingStatus("idle");
+        }
     };
 
     // --- Render states ---
@@ -186,6 +222,16 @@ export default function TelehealthSessionPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    {recordingStatus === "recording" && (
+                        <span className="flex items-center gap-1 text-xs text-red-400 bg-red-900/30 px-2 py-1 rounded animate-pulse">
+                            <Circle className="w-3 h-3 fill-red-500 text-red-500" /> Recording
+                        </span>
+                    )}
+                    {recordingError && (
+                        <span className="text-xs text-red-400 bg-red-900/30 px-2 py-1 rounded flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" /> {recordingError}
+                        </span>
+                    )}
                     {remotePeers.size > 0 && (
                         <span className="flex items-center gap-1 text-xs text-green-400 bg-green-900/30 px-2 py-1 rounded">
                             <Users className="w-3 h-3" /> {remotePeers.size + 1}
@@ -294,6 +340,27 @@ export default function TelehealthSessionPage() {
                 >
                     <MessageSquare className="w-5 h-5" />
                 </button>
+
+                {role === "provider" && (
+                    <button
+                        onClick={handleToggleRecording}
+                        disabled={recordingStatus === "starting" || recordingStatus === "stopping"}
+                        className={`p-3 rounded-full transition-colors disabled:opacity-50 ${
+                            recordingStatus === "recording"
+                                ? "bg-red-600 text-white hover:bg-red-700 animate-pulse"
+                                : "bg-gray-700 text-white hover:bg-gray-600"
+                        }`}
+                        title={recordingStatus === "recording" ? "Stop recording" : "Start recording"}
+                    >
+                        {recordingStatus === "starting" || recordingStatus === "stopping" ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : recordingStatus === "recording" ? (
+                            <StopCircle className="w-5 h-5" />
+                        ) : (
+                            <Circle className="w-5 h-5 fill-current" />
+                        )}
+                    </button>
+                )}
 
                 <button
                     onClick={handleEndCall}
