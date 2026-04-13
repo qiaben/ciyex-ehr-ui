@@ -194,10 +194,9 @@ function timeFromMMDDYYYY(s: string, fallback: number, endOfDay = false): number
 }
 
 /** Format wait time = Current Time - Scheduled Appointment Time (uses local timezone).
- *  Shows live wait time for TODAY's appointments:
- *  - Before appointment time → "Not yet started"
- *  - After appointment time → actual elapsed wait time (e.g. "15m", "1h 5m")
- *  Returns null for appointments on other days. */
+ *  - Past appointments (already happened): shows elapsed wait time (e.g. "15m", "1h 5m")
+ *  - Today upcoming: shows "Starts in Xm"
+ *  - Future appointments: shows "In X days" */
 function formatWaitTime(scheduledDateTime: string): { text: string; color: string } | null {
   if (!scheduledDateTime) return null;
   // Parse as local time (no "Z" suffix so it's treated as local)
@@ -205,31 +204,40 @@ function formatWaitTime(scheduledDateTime: string): { text: string; color: strin
   const scheduled = new Date(raw).getTime();
   if (isNaN(scheduled)) return null;
 
-  // Only show wait time for today's appointments
   const now = new Date();
   const scheduledDate = new Date(raw);
-  if (
-    scheduledDate.getFullYear() !== now.getFullYear() ||
-    scheduledDate.getMonth() !== now.getMonth() ||
-    scheduledDate.getDate() !== now.getDate()
-  ) {
-    return null; // not today — no wait time
-  }
+  const isToday =
+    scheduledDate.getFullYear() === now.getFullYear() &&
+    scheduledDate.getMonth() === now.getMonth() &&
+    scheduledDate.getDate() === now.getDate();
 
   const mins = Math.floor((now.getTime() - scheduled) / 60000);
+
+  if (isToday) {
+    if (mins < 0) {
+      // Appointment hasn't started yet — show countdown
+      const untilMins = Math.abs(mins);
+      const h = Math.floor(untilMins / 60);
+      const m = untilMins % 60;
+      const text = h > 0 ? `Starts in ${h}h ${m}m` : `Starts in ${m}m`;
+      return { text, color: "#6b7280" }; // gray
+    }
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    const text = h > 0 ? `${h}h ${m}m` : `${m}m`;
+    const color = mins < 15 ? "#22c55e" : mins < 30 ? "#eab308" : "#ef4444";
+    return { text, color };
+  }
+
+  // Future appointment — show days until
   if (mins < 0) {
-    // Appointment hasn't started yet — show countdown
-    const untilMins = Math.abs(mins);
-    const h = Math.floor(untilMins / 60);
-    const m = untilMins % 60;
-    const text = h > 0 ? `Starts in ${h}h ${m}m` : `Starts in ${m}m`;
+    const days = Math.ceil(Math.abs(mins) / 1440);
+    const text = days === 1 ? "Tomorrow" : `In ${days} days`;
     return { text, color: "#6b7280" }; // gray
   }
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  const text = h > 0 ? `${h}h ${m}m` : `${m}m`;
-  const color = mins < 15 ? "#22c55e" : mins < 30 ? "#eab308" : "#ef4444";
-  return { text, color };
+
+  // Past appointment — no wait time
+  return null;
 }
 
 /** Extract display text from a FHIR CodeableConcept or raw Java toString string */
@@ -862,8 +870,9 @@ export default function AppointmentPage() {
     }).sort((a, b) => {
       const dateA = new Date(a.appointmentStartDate?.includes("T") ? a.appointmentStartDate : a.appointmentStartDate + "T00:00:00").getTime();
       const dateB = new Date(b.appointmentStartDate?.includes("T") ? b.appointmentStartDate : b.appointmentStartDate + "T00:00:00").getTime();
-      // "Upcoming" preset: sort ascending (tomorrow first → future), all others: descending (recent first)
-      const ascending = datePreset === "upcoming";
+      // "Upcoming" and "All Time" presets: sort ascending (past → present → future)
+      // All others: descending (most recent first)
+      const ascending = datePreset === "upcoming" || datePreset === "all_time";
       if (dateA !== dateB) return ascending ? dateA - dateB : dateB - dateA;
       // Parse time strings (HH:mm format) for same-day sorting
       const timeA = (a.appointmentStartTime || "").replace(":", "");
