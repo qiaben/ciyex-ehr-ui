@@ -223,7 +223,7 @@ export default function ClinicalSidebar({
                         <ShieldAlert className="w-3 h-3 shrink-0 text-red-400" />
                         <span className="flex-1 text-left truncate">
                             <span className="font-medium">Allergies: </span>
-                            {!loaded ? "..." : allergies.length === 0 ? <span title="No Known Allergies">NKA</span> : allergies.slice(0, 2).map(a => a.allergyName || a.substance).join(", ")}
+                            {!loaded ? "..." : allergies.length === 0 ? <span title="No Known Allergies">NKA</span> : null}
                         </span>
                         {allergies.length > 0 && (
                             <span className="px-1 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium">{allergies.length}</span>
@@ -238,7 +238,7 @@ export default function ClinicalSidebar({
                         <HeartPulse className="w-3 h-3 shrink-0 text-orange-400" />
                         <span className="flex-1 text-left truncate">
                             <span className="font-medium">Problems: </span>
-                            {!loaded ? "..." : problems.length === 0 ? "None" : problems.slice(0, 2).map(p => p.conditionName || p.title || p.code || p.name || "Problem").join(", ")}
+                            {!loaded ? "..." : problems.length === 0 ? "None" : null}
                         </span>
                         {problems.length > 0 && (
                             <span className="px-1 py-0.5 rounded bg-orange-50 text-orange-600 text-[10px] font-medium">{problems.length}</span>
@@ -253,7 +253,7 @@ export default function ClinicalSidebar({
                         <Cigarette className="w-3 h-3 shrink-0 text-amber-500" />
                         <span className="flex-1 text-left truncate">
                             <span className="font-medium">History: </span>
-                            {!loaded ? "..." : smokingStatus || "No records"}
+                            {!loaded ? "..." : historyCount === 0 ? "No records" : null}
                         </span>
                         {historyCount > 0 && (
                             <span className="px-1 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px] font-medium">{historyCount}</span>
@@ -268,23 +268,7 @@ export default function ClinicalSidebar({
                         <Activity className="w-3 h-3 shrink-0 text-green-500" />
                         <span className="flex-1 text-left truncate">
                             <span className="font-medium">Vitals: </span>
-                            <span className="text-gray-600">{!loaded ? "..." : !vitals ? "No recorded vitals" : (() => {
-                                const v = vitals;
-                                const sys = v.bpSystolic ?? v.systolicBP ?? v.systolic ?? v.bloodPressureSystolic ?? v.sbp ?? null;
-                                const dia = v.bpDiastolic ?? v.diastolicBP ?? v.diastolic ?? v.bloodPressureDiastolic ?? v.dbp ?? null;
-                                const hr  = v.pulse ?? v.heartRate ?? v.pulseRate ?? v.hr ?? null;
-                                const temp = v.temperatureC ?? v.temperature ?? v.temp ?? null;
-                                const spo2 = v.oxygenSaturation ?? v.spO2 ?? v.spo2 ?? v.o2Saturation ?? null;
-                                const rr = v.respiratoryRate ?? v.respirations ?? v.rr ?? null;
-                                const parts = [
-                                    sys != null ? `BP ${sys}/${dia ?? "?"}` : null,
-                                    hr != null ? `HR ${hr}` : null,
-                                    temp != null ? `T ${temp}°` : null,
-                                    spo2 != null ? `SpO₂ ${spo2}%` : null,
-                                    rr != null ? `RR ${rr}` : null,
-                                ].filter(Boolean);
-                                return parts.length > 0 ? parts.join(" · ") : "No recorded vitals";
-                            })()}</span>
+                            {!loaded ? "..." : vitalsCount === 0 ? "No recorded vitals" : null}
                         </span>
                         {vitalsCount > 0 && (
                             <span className="px-1 py-0.5 rounded bg-green-50 text-green-600 text-[10px] font-medium">{vitalsCount}</span>

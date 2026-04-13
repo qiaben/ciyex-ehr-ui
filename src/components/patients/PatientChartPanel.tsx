@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { getEnv } from "@/utils/env";
 import { formatDisplayDate } from "@/utils/dateUtils";
+import { usePermissions } from "@/context/PermissionContext";
 import ClinicalSidebar from "@/components/patients/ClinicalSidebar";
 import GenericFhirTab from "@/components/patients/GenericFhirTab";
 import AllergiesSummary from "@/components/patients/AllergiesSummary";
@@ -97,6 +98,9 @@ const defaultTabCategories = [
   },
 ];
 
+// Tabs that should be hidden for PATIENT role
+const PATIENT_HIDDEN_TABS = new Set(["facility", "facilities", "healthcareservices"]);
+
 export default function PatientChartPanel({ patientId }: PatientChartPanelProps) {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,6 +108,8 @@ export default function PatientChartPanel({ patientId }: PatientChartPanelProps)
   const [viewMode, setViewMode] = useState("dashboard");
   const [highlightedTab, setHighlightedTab] = useState("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { role } = usePermissions();
+  const isPatientRole = role?.toUpperCase() === "PATIENT";
   const [tabCategories, setTabCategories] = useState(defaultTabCategories);
 
   // Fetch tab layout
@@ -281,7 +287,7 @@ export default function PatientChartPanel({ patientId }: PatientChartPanelProps)
           onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
           activeTab={highlightedTab}
           onNavigate={onTabClick}
-          tabCategories={tabCategories}
+          tabCategories={isPatientRole ? tabCategories.map(cat => ({ ...cat, tabs: cat.tabs.filter(t => !PATIENT_HIDDEN_TABS.has(t.key)) })).filter(cat => cat.tabs.length > 0) : tabCategories}
         />
         <main className="flex-1 min-w-0 p-4 overflow-y-auto">
           {renderContent()}

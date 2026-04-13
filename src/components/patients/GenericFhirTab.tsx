@@ -481,6 +481,7 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                         fileConfig: {
                             ...(f.fileConfig || {}),
                             allowedTypes: mergedTypes,
+                            maxSizeMB: f.fileConfig?.maxSizeMB || 15,
                             dragDrop: true,
                             uploadEndpoint: f.fileConfig?.uploadEndpoint || "/api/documents/upload",
                         },
@@ -3833,20 +3834,14 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                                                                     const docId = record.fhirId || record.id;
                                                                     if (!docId) return;
                                                                     try {
-                                                                        const base = (getEnv("NEXT_PUBLIC_API_URL") || "").replace(/\/$/, "");
-                                                                        const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("authToken") : null;
-                                                                        const tenant = typeof window !== "undefined" ? localStorage.getItem("selectedTenant") : null;
-                                                                        const hdrs: Record<string, string> = { "Accept": "*/*" };
-                                                                        if (token) hdrs["Authorization"] = `Bearer ${token}`;
-                                                                        if (tenant) hdrs["X-Tenant-Name"] = tenant;
-                                                                        const res = await fetch(`${base}/api/documents/upload/${docId}/download`, { headers: hdrs, credentials: "include" });
+                                                                        const res = await fetchWithAuth(`${API_BASE()}/api/documents/upload/${docId}/download`);
                                                                         if (res.ok) {
                                                                             const blob = await res.blob();
                                                                             const url = window.URL.createObjectURL(blob);
                                                                             window.open(url, "_blank");
                                                                             setTimeout(() => window.URL.revokeObjectURL(url), 30000);
                                                                         } else {
-                                                                            toast.error("Unable to view document.");
+                                                                            toast.error("Unable to view document. The file may not exist or you don't have permission.");
                                                                         }
                                                                     } catch {
                                                                         toast.error("Failed to load document.");
@@ -3862,13 +3857,7 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                                                                     const docId = record.fhirId || record.id;
                                                                     if (!docId) return;
                                                                     try {
-                                                                        const base = (getEnv("NEXT_PUBLIC_API_URL") || "").replace(/\/$/, "");
-                                                                        const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("authToken") : null;
-                                                                        const tenant = typeof window !== "undefined" ? localStorage.getItem("selectedTenant") : null;
-                                                                        const hdrs: Record<string, string> = { "Accept": "*/*" };
-                                                                        if (token) hdrs["Authorization"] = `Bearer ${token}`;
-                                                                        if (tenant) hdrs["X-Tenant-Name"] = tenant;
-                                                                        const res = await fetch(`${base}/api/documents/upload/${docId}/download`, { headers: hdrs, credentials: "include" });
+                                                                        const res = await fetchWithAuth(`${API_BASE()}/api/documents/upload/${docId}/download`);
                                                                         if (res.ok) {
                                                                             const blob = await res.blob();
                                                                             const url = window.URL.createObjectURL(blob);
@@ -3880,7 +3869,7 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                                                                             a.remove();
                                                                             setTimeout(() => window.URL.revokeObjectURL(url), 5000);
                                                                         } else {
-                                                                            toast.error("Unable to download document.");
+                                                                            toast.error("Unable to download document. The file may not exist or you don't have permission.");
                                                                         }
                                                                     } catch {
                                                                         toast.error("Failed to download document.");

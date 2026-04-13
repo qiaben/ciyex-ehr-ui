@@ -794,7 +794,7 @@ const AppointmentModal: React.FC = () => {
                                             >
                                                 <div className="font-medium text-gray-800 dark:text-gray-100">{getPatientFullName(p)}</div>
                                                 {p.dateOfBirth ? (
-                                                    <div className="text-xs text-gray-500">DOB: {p.dateOfBirth}</div>
+                                                    <div className="text-xs text-gray-500">DOB: {(() => { const d = p.dateOfBirth; if (!d) return ""; const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[2]}/${m[3]}/${m[1]}` : d; })()}</div>
                                                 ) : null}
                                             </li>
                                         ))}

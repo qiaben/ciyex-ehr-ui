@@ -688,7 +688,7 @@ export default function AppointmentPage() {
       @page { size: landscape; margin: 0.5in; }
       h2 { text-align: center; font-size: 14px; margin-bottom: 8px; }
     </style></head><body>
-      <h2>${formatToMMDDYYYY(todayISO())} &mdash; Appointments</h2>
+      <h2>Appointments</h2>
       <table>
         <thead><tr>
           <th>Date</th><th>Patient</th><th>Provider</th><th>Location</th><th>Type</th><th>Status</th><th>Room</th><th>Reason</th>
