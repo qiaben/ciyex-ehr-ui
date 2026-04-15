@@ -462,6 +462,18 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                         section.fields[i] = { ...f, label: "Allergen", placeholder: "e.g., Penicillin, Peanuts, Dust" };
                     }
                 }
+                // Insurance — status dropdown: only Active and Inactive
+                if ((tabKey === "insurance-coverage" || tabKey === "insurance" || tabKey === "coverage") && f.key === "status") {
+                    section.fields[i] = { ...f, options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }] };
+                }
+                // Documents — status field not mandatory
+                if ((tabKey === "documents" || tabKey === "document-references") && f.key === "status") {
+                    section.fields[i] = { ...section.fields[i] || f, required: false };
+                }
+                // Documents — date field placeholder MM/DD/YYYY
+                if ((tabKey === "documents" || tabKey === "document-references") && (f.key === "documentDate" || f.key === "date")) {
+                    section.fields[i] = { ...section.fields[i] || f, placeholder: "MM/DD/YYYY" };
+                }
                 // Issue 13: Insurance — insurance company dropdown from dedicated API
                 if ((tabKey === "insurance-coverage" || tabKey === "insurance" || tabKey === "coverage") && (f.key === "payerName" || f.key === "insurerName" || f.key === "companyName" || f.key === "insurer" || f.key === "payor")) {
                     section.fields[i] = { ...f, type: "lookup", lookupConfig: { endpoint: "/api/insurance-companies", displayField: "name", valueField: "name", searchable: true }, required: true };

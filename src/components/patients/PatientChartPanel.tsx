@@ -98,8 +98,8 @@ const defaultTabCategories = [
   },
 ];
 
-// Tabs that should be hidden for PATIENT role
-const PATIENT_HIDDEN_TABS = new Set(["facility", "facilities", "healthcareservices"]);
+// Tabs that should be hidden in the patient chart sidebar
+const HIDDEN_PATIENT_CHART_TABS = new Set(["facility", "facilities", "healthcareservices"]);
 
 export default function PatientChartPanel({ patientId }: PatientChartPanelProps) {
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -108,8 +108,6 @@ export default function PatientChartPanel({ patientId }: PatientChartPanelProps)
   const [viewMode, setViewMode] = useState("dashboard");
   const [highlightedTab, setHighlightedTab] = useState("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { role } = usePermissions();
-  const isPatientRole = role?.toUpperCase() === "PATIENT";
   const [tabCategories, setTabCategories] = useState(defaultTabCategories);
 
   // Fetch tab layout
@@ -287,7 +285,7 @@ export default function PatientChartPanel({ patientId }: PatientChartPanelProps)
           onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
           activeTab={highlightedTab}
           onNavigate={onTabClick}
-          tabCategories={isPatientRole ? tabCategories.map(cat => ({ ...cat, tabs: cat.tabs.filter(t => !PATIENT_HIDDEN_TABS.has(t.key)) })).filter(cat => cat.tabs.length > 0) : tabCategories}
+          tabCategories={tabCategories.map(cat => ({ ...cat, tabs: cat.tabs.filter(t => !HIDDEN_PATIENT_CHART_TABS.has(t.key)) })).filter(cat => cat.tabs.length > 0)}
         />
         <main className="flex-1 min-w-0 p-4 overflow-y-auto">
           {renderContent()}
