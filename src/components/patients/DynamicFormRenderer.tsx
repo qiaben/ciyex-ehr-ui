@@ -718,11 +718,9 @@ function FileUploadField({
           <span className="text-sm text-gray-500 dark:text-gray-400">
             {uploading ? "Uploading..." : "Drag & drop or click to upload"}
           </span>
-          {allowedTypes.length > 0 && (
-            <span className="text-xs text-gray-400 mt-1">
-              {allowedTypes.join(", ")} (max {maxSizeMB}MB)
-            </span>
-          )}
+          <span className="text-xs text-gray-400 mt-1">
+            {allowedTypes.length > 0 ? allowedTypes.join(", ") + " " : ""}(upload files up to {maxSizeMB} MB)
+          </span>
           <input
             id={`file-${field.key}`}
             type="file"

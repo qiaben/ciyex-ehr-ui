@@ -18,6 +18,7 @@ import {
 import Alert from "@/components/ui/alert/Alert";
 import FilterMultiSelect from "@/components/calendar/FilterMultiSelect";
 import DateInput from "@/components/ui/DateInput";
+import { usePermissions } from "@/context/PermissionContext";
 
 const monthViewStyles = `
 /* Hide horizontal scrollbar only — use clip (not hidden) so position:sticky still works */
@@ -531,7 +532,9 @@ type ViewType = 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay';
 
 
 const Calendar: React.FC = () => {
+    const { role } = usePermissions();
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+    const [providerAutoFiltered, setProviderAutoFiltered] = useState(false);
 
     // Status options loaded from API (consistent with Appointment page)
     const [statusOptions, setStatusOptions] = useState<Option<AppointmentStatus>[]>(FALLBACK_STATUS_OPTIONS);
@@ -797,6 +800,20 @@ const Calendar: React.FC = () => {
         document.addEventListener('visibilitychange', handleVisibility);
         return () => document.removeEventListener('visibilitychange', handleVisibility);
     }, [fetchProviders]);
+
+    // HIPAA: When logged-in user is a PROVIDER, auto-filter to show only their appointments
+    useEffect(() => {
+        if (providerAutoFiltered) return;
+        if (role?.toUpperCase() !== 'PROVIDER') return;
+        if (providers.length <= 1) return; // only "All Providers" placeholder
+        const practitionerFhirId = typeof window !== 'undefined' ? localStorage.getItem('practitionerFhirId') : null;
+        if (!practitionerFhirId) return;
+        const match = providers.find(p => p.value === practitionerFhirId || p.value === String(practitionerFhirId));
+        if (match) {
+            setSelectedProviders([match.value]);
+            setProviderAutoFiltered(true);
+        }
+    }, [providers, role, providerAutoFiltered]);
 
     // No auto-select: let users freely choose "All Providers" in any view
 

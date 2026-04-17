@@ -36,16 +36,36 @@ export default function PatientApprovals() {
         },
       });
 
+      if (!response.ok) {
+        // Portal service may not be deployed or reachable
+        if (response.status === 502 || response.status === 503 || response.status === 504) {
+          setPendingUsers([]);
+          setError('');
+          return;
+        }
+        const errText = await response.text().catch(() => '');
+        setError(errText || `Service returned ${response.status}`);
+        return;
+      }
+
       const data = await response.json();
 
       if (data.success) {
         setPendingUsers(data.data || []);
       } else {
-        setError(data.message || 'Failed to load pending users');
+        // If service says unavailable, treat as empty list instead of hard error
+        if (data.message?.toLowerCase().includes('unavailable')) {
+          setPendingUsers([]);
+          setError('');
+        } else {
+          setError(data.message || 'Failed to load pending users');
+        }
       }
     } catch (error) {
       console.error('Error fetching pending users:', error);
-      setError('Failed to load pending users');
+      // Network errors (service down) — show empty state, not error
+      setPendingUsers([]);
+      setError('');
     } finally {
       setLoading(false);
     }

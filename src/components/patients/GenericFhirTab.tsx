@@ -3698,6 +3698,7 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                                 }}
                                 className="block w-full text-sm text-gray-600 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
                             />
+                            <p className="mt-1 text-xs text-gray-400">pdf, doc, docx, jpg, jpeg, png, dicom, csv, xls, xlsx, txt, zip (upload files up to 15 MB)</p>
                             {formData.fileName && (
                                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Uploaded: {formData.fileName}</p>
                             )}
@@ -3843,10 +3844,19 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                                                         <>
                                                             <button
                                                                 onClick={async () => {
-                                                                    const docId = record.fhirId || record.id;
+                                                                    // Extract file ID from attachment URL or use FHIR id as fallback
+                                                                    const attachUrl = record.attachment || record.fileUrl || record.documentUrl || record.content;
+                                                                    const fileId = typeof attachUrl === "string" && attachUrl.includes("/")
+                                                                        ? attachUrl.split("/").filter(Boolean).find((seg: string) => seg.match(/^[0-9a-f-]{36}$/i)) || attachUrl.split("/").filter(Boolean).pop()
+                                                                        : attachUrl;
+                                                                    const docId = fileId || record.fhirId || record.id;
                                                                     if (!docId) return;
                                                                     try {
-                                                                        const res = await fetchWithAuth(`${API_BASE()}/api/documents/upload/${docId}/download`);
+                                                                        // Try files-proxy first, then documents/upload fallback
+                                                                        let res = await fetchWithAuth(`${API_BASE()}/api/files-proxy/${docId}/download`);
+                                                                        if (!res.ok) {
+                                                                            res = await fetchWithAuth(`${API_BASE()}/api/documents/upload/${docId}/download`);
+                                                                        }
                                                                         if (res.ok) {
                                                                             const blob = await res.blob();
                                                                             const url = window.URL.createObjectURL(blob);
@@ -3866,10 +3876,17 @@ function GenericFhirTabInner({ tabKey, patientId, patientName }: GenericFhirTabP
                                                             </button>
                                                             <button
                                                                 onClick={async () => {
-                                                                    const docId = record.fhirId || record.id;
+                                                                    const attachUrl = record.attachment || record.fileUrl || record.documentUrl || record.content;
+                                                                    const fileId = typeof attachUrl === "string" && attachUrl.includes("/")
+                                                                        ? attachUrl.split("/").filter(Boolean).find((seg: string) => seg.match(/^[0-9a-f-]{36}$/i)) || attachUrl.split("/").filter(Boolean).pop()
+                                                                        : attachUrl;
+                                                                    const docId = fileId || record.fhirId || record.id;
                                                                     if (!docId) return;
                                                                     try {
-                                                                        const res = await fetchWithAuth(`${API_BASE()}/api/documents/upload/${docId}/download`);
+                                                                        let res = await fetchWithAuth(`${API_BASE()}/api/files-proxy/${docId}/download`);
+                                                                        if (!res.ok) {
+                                                                            res = await fetchWithAuth(`${API_BASE()}/api/documents/upload/${docId}/download`);
+                                                                        }
                                                                         if (res.ok) {
                                                                             const blob = await res.blob();
                                                                             const url = window.URL.createObjectURL(blob);
