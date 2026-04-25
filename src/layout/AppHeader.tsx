@@ -5,12 +5,12 @@ import NotificationDropdown from "@/components/header/NotificationDropdown";
 import UserDropdown from "@/components/header/UserDropdown";
 import { useSidebar } from "@/context/SidebarContext";
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import DateInput from "@/components/ui/DateInput";
 import PluginSlot from "@/components/plugins/PluginSlot";
 import { usePermissions } from "@/context/PermissionContext";
-import { isValidName, isValidPhone, isValidEmail } from "@/utils/validation";
+import { isValidName, isValidEmail, isValidUSPhone, formatUSPhone } from "@/utils/validation";
 import {
     Dialog,
     DialogContent,
@@ -34,6 +34,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({ pageTitle }) => {
     const canWriteAppointment = canWriteResource("Appointment");
     const inputRef = useRef<HTMLInputElement>(null);
     const router = useRouter();
+    const pathname = usePathname();
+    const hideHeaderSearch = pathname?.startsWith("/calendar");
 
     const [formData, setFormData] = useState({
         firstName: "",
@@ -77,6 +79,12 @@ const AppHeader: React.FC<AppHeaderProps> = ({ pageTitle }) => {
         setFieldErrors({});
     };
 
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+        setFormData((prev) => ({ ...prev, phoneNumber: digits }));
+        if (fieldErrors.phoneNumber) setFieldErrors((prev) => { const n = { ...prev }; delete n.phoneNumber; return n; });
+    };
+
     const handleInputChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
     ) => {
@@ -96,7 +104,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ pageTitle }) => {
         else if (!isValidName(formData.lastName)) errs.lastName = "Name must contain only letters";
         if (formData.middleName && !isValidName(formData.middleName)) errs.middleName = "Name must contain only letters";
         if (!formData.phoneNumber.trim()) errs.phoneNumber = "Phone number is required";
-        else if (!isValidPhone(formData.phoneNumber)) errs.phoneNumber = "Enter a valid phone number";
+        else if (!isValidUSPhone(formData.phoneNumber)) errs.phoneNumber = "Enter a valid 10-digit US phone number";
         if (!formData.email.trim()) errs.email = "Email is required";
         else if (!isValidEmail(formData.email)) errs.email = "Enter a valid email address";
         if (!formData.gender) errs.gender = "Gender is required";
@@ -290,8 +298,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({ pageTitle }) => {
 
                 {/* Right section: search + actions grouped together */}
                 <div className="flex items-center gap-3 flex-1 justify-end">
-                    {/* Search box */}
-                    <div className="max-w-md w-full" ref={searchRef}>
+                    {/* Search box — hidden on Calendar page (patient search lives in the appointment modal) */}
+                    <div className={`max-w-md w-full ${hideHeaderSearch ? "hidden" : ""}`} ref={searchRef}>
                         <div className="relative">
                             <span className="absolute inset-y-0 left-3 flex items-center">
                                 <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -467,16 +475,18 @@ const AppHeader: React.FC<AppHeaderProps> = ({ pageTitle }) => {
                                 </label>
                                 <input
                                     name="phoneNumber"
+                                    type="tel"
+                                    inputMode="numeric"
                                     required
                                     placeholder="(555) 123-4567"
-                                    value={formData.phoneNumber}
-                                    onChange={handleInputChange}
+                                    value={formatUSPhone(formData.phoneNumber)}
+                                    onChange={handlePhoneChange}
                                     className={`w-full p-2 border rounded ${fieldErrors.phoneNumber ? "border-red-400" : ""}`}
                                 />
                                 {fieldErrors.phoneNumber ? (
                                     <p className="text-xs text-red-500 mt-1">{fieldErrors.phoneNumber}</p>
                                 ) : (
-                                    <p className="text-xs text-gray-500 mt-1">Include country code if outside your region.</p>
+                                    <p className="text-xs text-gray-500 mt-1">10-digit US phone number.</p>
                                 )}
                             </div>
                             <div>

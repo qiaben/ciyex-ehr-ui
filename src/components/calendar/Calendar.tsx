@@ -727,6 +727,11 @@ const Calendar: React.FC = () => {
         calendarRef.current?.getApi().next();
     };
 
+    const goToday = () => {
+        Object.values(calendarRefs.current).forEach(cal => cal?.getApi().today());
+        calendarRef.current?.getApi().today();
+    };
+
     const changeView = useCallback((v: ViewType) => {
         setActiveView(v);
         // Change view on ALL calendar instances
@@ -1306,7 +1311,7 @@ const Calendar: React.FC = () => {
         };
     }, [patientQuery, apiUrl, isOpen]);
 
-    // Default 15-minute end when selecting on grid
+    // Default 30-minute end when selecting on grid
     const handleDateSelect = useCallback((selectInfo: DateSelectArg, providerId?: string) => {
         // Block past time slots — only allow current time or future
         if (selectInfo.start < new Date()) return;
@@ -1314,7 +1319,7 @@ const Calendar: React.FC = () => {
         resetModalFields();
 
         const start = selectInfo.start;
-        const end = new Date(start.getTime() + 15 * 60 * 1000);
+        const end = new Date(start.getTime() + 30 * 60 * 1000);
 
         // UI inputs (MM/DD/YYYY)
         setStartDateInput(dateToMMDDYYYY(start));
@@ -1829,27 +1834,37 @@ const Calendar: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Center: Prev / Date / Next */}
-                <div className="flex items-center gap-2">
+                {/* Center: Today / Prev-Next, then Date */}
+                <div className="flex items-center gap-3">
                     <button
                         type="button"
-                        onClick={goPrev}
-                        className="h-9 w-9 flex items-center justify-center rounded-lg border border-gray-300 bg-white text-sm font-semibold hover:bg-gray-50 dark:border-gray-700 dark:bg-dark-900"
+                        onClick={goToday}
+                        className="h-9 px-3 flex items-center justify-center rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-dark-900 dark:text-gray-200"
                     >
-                        &lt;
+                        Today
                     </button>
-
-                    <div className="min-w-[240px] text-center text-base font-semibold text-gray-900 dark:text-white/90">
+                    <div className="inline-flex items-center rounded-lg border border-gray-300 bg-white dark:border-gray-700 dark:bg-dark-900 overflow-hidden">
+                        <button
+                            type="button"
+                            onClick={goPrev}
+                            aria-label="Previous"
+                            className="h-9 w-9 flex items-center justify-center text-sm font-semibold hover:bg-gray-50 dark:hover:bg-white/10"
+                        >
+                            &lt;
+                        </button>
+                        <div className="w-px h-5 bg-gray-200 dark:bg-gray-700" />
+                        <button
+                            type="button"
+                            onClick={goNext}
+                            aria-label="Next"
+                            className="h-9 w-9 flex items-center justify-center text-sm font-semibold hover:bg-gray-50 dark:hover:bg-white/10"
+                        >
+                            &gt;
+                        </button>
+                    </div>
+                    <div className="min-w-[200px] text-base font-semibold text-gray-900 dark:text-white/90">
                         {calendarTitle}
                     </div>
-
-                    <button
-                        type="button"
-                        onClick={goNext}
-                        className="h-9 w-9 flex items-center justify-center rounded-lg border border-gray-300 bg-white text-sm font-semibold hover:bg-gray-50 dark:border-gray-700 dark:bg-dark-900"
-                    >
-                        &gt;
-                    </button>
                 </div>
 
                 {/* Right: View toggles */}
@@ -1966,10 +1981,10 @@ const Calendar: React.FC = () => {
                                         height="auto"
                                         contentHeight="auto"
                                         slotMinTime="00:00:00"
-                                        slotDuration="00:15:00"
+                                        slotDuration="00:30:00"
                                         slotLabelInterval="00:30:00"
                                         slotLabelFormat={{ hour: 'numeric', minute: '2-digit', hour12: true }}
-                                        defaultTimedEventDuration="00:15:00"
+                                        defaultTimedEventDuration="00:30:00"
                                         scrollTime={`${workingHoursStart}:00`}
                                         businessHours={businessHours}
                                         views={{ timeGridDay: { titleFormat: { year: "numeric", month: "long", day: "numeric", weekday: "long" } } }}
@@ -2016,10 +2031,10 @@ const Calendar: React.FC = () => {
                                         height="auto"
                                         contentHeight="auto"
                                         slotMinTime="00:00:00"
-                                        slotDuration="00:15:00"
+                                        slotDuration="00:30:00"
                                         slotLabelInterval="00:30:00"
                                         slotLabelFormat={{ hour: 'numeric', minute: '2-digit', hour12: true }}
-                                        defaultTimedEventDuration="00:15:00"
+                                        defaultTimedEventDuration="00:30:00"
                                         scrollTime={`${workingHoursStart}:00`}
                                         businessHours={businessHours}
                                         eventDisplay="block"
@@ -2085,9 +2100,9 @@ const Calendar: React.FC = () => {
                                     height="auto"
                                     contentHeight="auto"
                                     slotMinTime="00:00:00"
-                                    slotDuration="00:15:00"
+                                    slotDuration="00:30:00"
                                     slotLabelFormat={{ hour: 'numeric', minute: '2-digit', hour12: true }}
-                                    defaultTimedEventDuration="00:15:00"
+                                    defaultTimedEventDuration="00:30:00"
                                     scrollTime={`${workingHoursStart}:00`}
                                     businessHours={businessHours}
                                     eventDisplay="block"
@@ -2275,7 +2290,7 @@ const Calendar: React.FC = () => {
 
                                 {/* Inline Create New Patient Form */}
                                 {showCreatePatient && (
-                                    <div className="sm:col-span-2 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800 p-4 space-y-3">
+                                    <div className="sm:col-span-2 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800 p-4 space-y-3 overflow-hidden">
                                         <div className="flex items-center justify-between mb-1">
                                             <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">Create New Patient</span>
                                             <button type="button" onClick={() => setShowCreatePatient(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
@@ -2305,7 +2320,26 @@ const Calendar: React.FC = () => {
                                             </div>
                                             <div>
                                                 <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-400">Phone Number*</label>
-                                                <input type="tel" value={newPt.phoneNumber} maxLength={10} onChange={(e) => { const digits = e.target.value.replace(/\D/g, '').slice(0, 10); setNewPt(p => ({ ...p, phoneNumber: digits })); }} className="h-8 w-full rounded-md border border-gray-300 px-2 text-sm dark:border-gray-700 dark:bg-dark-900 dark:text-gray-100" />
+                                                <input
+                                                    type="tel"
+                                                    inputMode="numeric"
+                                                    value={(() => {
+                                                        const d = newPt.phoneNumber;
+                                                        if (d.length <= 3) return d;
+                                                        if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+                                                        return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6, 10)}`;
+                                                    })()}
+                                                    placeholder="(555) 123-4567"
+                                                    onChange={(e) => {
+                                                        const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                                        setNewPt(p => ({ ...p, phoneNumber: digits }));
+                                                        setNewPtError('');
+                                                    }}
+                                                    className={`h-8 w-full rounded-md border px-2 text-sm dark:border-gray-700 dark:bg-dark-900 dark:text-gray-100 ${newPt.phoneNumber && newPt.phoneNumber.length !== 10 ? 'border-red-400' : 'border-gray-300'}`}
+                                                />
+                                                {newPt.phoneNumber && newPt.phoneNumber.length !== 10 && (
+                                                    <p className="mt-0.5 text-[10px] text-red-500">Enter a valid 10-digit US phone number</p>
+                                                )}
                                             </div>
                                             <div>
                                                 <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-400">Email*</label>
@@ -2321,7 +2355,7 @@ const Calendar: React.FC = () => {
                                         </div>
                                         <div className="flex justify-end gap-2 pt-1">
                                             <button type="button" onClick={() => setShowCreatePatient(false)} className="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50">Cancel</button>
-                                            <button type="button" onClick={handleCreatePatientAndSelect} disabled={createPatientSaving || !newPt.firstName || !newPt.lastName || !newPt.dateOfBirth || !newPt.phoneNumber || !newPt.gender || !newPt.email || !emailRegex.test(newPt.email)} className="px-3 py-1.5 text-xs rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                                            <button type="button" onClick={handleCreatePatientAndSelect} disabled={createPatientSaving || !newPt.firstName || !newPt.lastName || !newPt.dateOfBirth || newPt.phoneNumber.length !== 10 || !newPt.gender || !newPt.email || !emailRegex.test(newPt.email)} className="px-3 py-1.5 text-xs rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
                                                 {createPatientSaving ? 'Creating...' : 'Create & Select Patient'}
                                             </button>
                                         </div>
@@ -2376,7 +2410,7 @@ const Calendar: React.FC = () => {
                                                     setStartTime(t);
                                                     if (t) {
                                                         const startDt = new Date(`${startDate || '2000-01-01'}T${t}`);
-                                                        const endDt = new Date(startDt.getTime() + 15 * 60 * 1000);
+                                                        const endDt = new Date(startDt.getTime() + 30 * 60 * 1000);
                                                         setEndTime(`${String(endDt.getHours()).padStart(2, '0')}:${String(endDt.getMinutes()).padStart(2, '0')}`);
                                                     }
                                                 }}
