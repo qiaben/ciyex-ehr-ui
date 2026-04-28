@@ -13,7 +13,7 @@ import DateInput from "@/components/ui/DateInput";
 import {
   Calendar, Clock, AlertTriangle, CheckCircle2, Phone, Mail, MessageSquare,
   FileText, ChevronRight, ChevronDown, Search, Plus, Filter, X, User,
-  TrendingUp, XCircle, Bell, Send, Eye, Stethoscope,
+  TrendingUp, XCircle, Bell, Send, Eye,
 } from "lucide-react";
 
 const API = getEnv("NEXT_PUBLIC_API_URL")!;
@@ -182,12 +182,6 @@ export default function RecallPage() {
   const [patientSearching, setPatientSearching] = useState(false);
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
 
-  // Provider search in modal
-  const [providerQuery, setProviderQuery] = useState("");
-  const [providerResults, setProviderResults] = useState<Provider[]>([]);
-  const [providerSearching, setProviderSearching] = useState(false);
-  const [showProviderDropdown, setShowProviderDropdown] = useState(false);
-
   // Detail side panel
   const [detailRecall, setDetailRecall] = useState<PatientRecall | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -295,51 +289,15 @@ export default function RecallPage() {
     return () => { cancelled = true; clearTimeout(t); };
   }, [patientQuery, showCreateModal]);
 
-  /* ── Provider search (debounced) ── */
-  useEffect(() => {
-    if (!showCreateModal) return;
-    const q = providerQuery.trim();
-    if (!q) { setProviderResults([]); return; }
-    let cancelled = false;
-    setProviderSearching(true);
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetchWithAuth(`${API}/api/providers?search=${encodeURIComponent(q)}&size=20`);
-        const json = await res.json();
-        if (cancelled) return;
-        let list: any[] = [];
-        if (Array.isArray(json?.data?.content)) list = json.data.content;
-        else if (Array.isArray(json?.data)) list = json.data;
-        else if (Array.isArray(json?.content)) list = json.content;
-        else if (Array.isArray(json)) list = json;
-        const mapped: Provider[] = list
-          .filter((p: any) => p && (p.id || p.fhirId))
-          .map((p: any) => ({
-            id: p.id ?? p.fhirId,
-            name: (p.fullName && String(p.fullName).trim())
-              || (p.name && String(p.name).trim())
-              || `${p?.identification?.firstName ?? ""} ${p?.identification?.lastName ?? ""}`.trim()
-              || `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim()
-              || String(p.id ?? p.fhirId),
-          }));
-        setProviderResults(mapped);
-        setShowProviderDropdown(true);
-      } catch { if (!cancelled) setProviderResults([]); }
-      finally { if (!cancelled) setProviderSearching(false); }
-    }, 250);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [providerQuery, showCreateModal]);
-
   /* ── Actions ── */
   const openCreate = () => {
     setEditRecall(null);
     setFormData({
       patientId: "", patientName: "", patientPhone: "", patientEmail: "",
       recallTypeId: "", providerId: "", providerName: "", dueDate: "",
-      preferredContact: "PHONE", priority: "NORMAL", status: "SCHEDULED", notes: "",
+      preferredContact: "PHONE", priority: "NORMAL", status: "DUE", notes: "",
     });
     setPatientQuery(""); setPatientResults([]); setShowPatientDropdown(false);
-    setProviderQuery(""); setProviderResults([]); setShowProviderDropdown(false);
     setFormErrors({});
     setShowCreateModal(true);
   };
@@ -355,14 +313,7 @@ export default function RecallPage() {
       dueDate: r.dueDate ?? "", preferredContact: r.preferredContact ?? "PHONE",
       priority: r.priority ?? "NORMAL", status: r.status ?? "DUE", notes: r.notes ?? "",
     });
-    setPatientQuery("");
-    setProviderQuery(r.providerName ?? ""); setProviderResults([]); setShowProviderDropdown(false);
-    setFormErrors({}); setShowCreateModal(true);
-  };
-
-  const chooseProvider = (p: Provider) => {
-    setFormData(prev => ({ ...prev, providerId: String(p.id), providerName: p.name }));
-    setProviderQuery(p.name); setProviderResults([]); setShowProviderDropdown(false);
+    setPatientQuery(""); setFormErrors({}); setShowCreateModal(true);
   };
 
   const choosePatient = (p: Patient) => {
@@ -762,45 +713,18 @@ export default function RecallPage() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  {/* Provider (typeahead) */}
-                  <div className="relative">
+                  {/* Provider */}
+                  <div>
                     <Label>Provider</Label>
-                    {formData.providerId ? (
-                      <div className="flex items-center gap-2 mt-1 p-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                        <Stethoscope className="w-4 h-4 text-slate-400" />
-                        <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{formData.providerName}</span>
-                        <button onClick={() => { setFormData(prev => ({ ...prev, providerId: "", providerName: "" })); setProviderQuery(""); }}
-                          className="ml-auto p-0.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded">
-                          <X className="w-3.5 h-3.5 text-slate-400" />
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="relative mt-1">
-                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                          <input type="text" placeholder="Search provider..." value={providerQuery}
-                            onChange={e => { setProviderQuery(e.target.value); setShowProviderDropdown(true); }}
-                            onFocus={() => { if (providerResults.length > 0) setShowProviderDropdown(true); }}
-                            className="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800" />
-                        </div>
-                        {showProviderDropdown && (providerSearching || providerResults.length > 0) && (
-                          <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg">
-                            {providerSearching ? (
-                              <div className="px-3 py-2 text-xs text-slate-400">Searching...</div>
-                            ) : (
-                              <ul className="max-h-48 overflow-auto py-1">
-                                {providerResults.map(p => (
-                                  <li key={p.id} onMouseDown={e => e.preventDefault()} onClick={() => chooseProvider(p)}
-                                    className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
-                                    <div className="font-medium text-slate-800 dark:text-slate-100">{p.name || `Provider #${p.id}`}</div>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        )}
-                      </>
-                    )}
+                    <select value={formData.providerId}
+                      onChange={e => {
+                        const prov = providers.find(p => String(p.id) === e.target.value);
+                        setFormData(prev => ({ ...prev, providerId: e.target.value, providerName: prov?.name ?? "" }));
+                      }}
+                      className="mt-1 w-full h-9 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 text-sm">
+                      <option value="">Select provider...</option>
+                      {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
                   </div>
                   {/* Due Date */}
                   <div>
@@ -839,19 +763,22 @@ export default function RecallPage() {
                   </div>
                 </div>
 
-                {/* Status */}
-                <div>
-                  <Label>Status</Label>
-                  <select value={formData.status}
-                    onChange={e => setFormData(prev => ({ ...prev, status: e.target.value }))}
-                    className="mt-1 w-full h-9 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 text-sm">
-                    <option value="SCHEDULED">Scheduled</option>
-                    <option value="CONTACTED">Contacted</option>
-                    <option value="COMPLETED">Completed</option>
-                    <option value="CANCELLED">Cancelled</option>
-                    <option value="NO_RESPONSE">No Response</option>
-                  </select>
-                </div>
+                {/* Status (shown in edit mode) */}
+                {editRecall && (
+                  <div>
+                    <Label>Status</Label>
+                    <select value={formData.status}
+                      onChange={e => setFormData(prev => ({ ...prev, status: e.target.value }))}
+                      className="mt-1 w-full h-9 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 text-sm">
+                      <option value="DUE">Due</option>
+                      <option value="SCHEDULED">Scheduled</option>
+                      <option value="NOTIFIED">Notified</option>
+                      <option value="COMPLETED">Completed</option>
+                      <option value="CANCELLED">Cancelled</option>
+                      <option value="OVERDUE">Overdue</option>
+                    </select>
+                  </div>
+                )}
 
                 {/* Contact Info */}
                 <div className="grid grid-cols-2 gap-4">

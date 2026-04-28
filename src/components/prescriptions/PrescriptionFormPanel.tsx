@@ -139,48 +139,22 @@ export default function PrescriptionFormPanel({ open, onClose, prescription, onS
 
   useEffect(() => {
     if (open) {
-      const initial = prescription ? { ...prescription } : blankPrescription();
-      // Normalize field names for any list-row fallback
-      const normalize = (raw: any): Prescription => ({
-        ...raw,
-        prescriberName: raw.prescriberName || raw.providerName || raw.prescribingDoctor || raw.prescriber || raw.renderingProvider || "",
-        prescriberNpi: raw.prescriberNpi || raw.providerNpi || raw.npi || "",
-        medicationSystem: raw.medicationSystem || raw.codeSystem || raw.system || "NDC",
-      });
-      const applyForm = (p: Prescription) => {
-        setForm(p);
-        setErrors({});
-        skipPatientSearchRef.current = !!(p.patientName);
-        setPatientQuery(p.patientName || "");
-        setPatientResults([]);
-        setShowPatientDropdown(false);
-        setPharmacyQuery(p.pharmacyName || "");
-        setPharmacyResults([]);
-        setShowPharmacyDropdown(false);
-        skipPrescriberSearchRef.current = !!(p.prescriberName);
-        setPrescriberQuery(p.prescriberName || "");
-        setPrescriberResults([]);
-        setShowPrescriberDropdown(false);
-        setRefillsInput(p.refills != null ? String(p.refills) : "0");
-      };
-      // Apply normalized list row first so panel renders without delay
-      applyForm(normalize(initial));
-      // If editing, refetch full record by id and merge
-      if (prescription && prescription.id) {
-        (async () => {
-          try {
-            const apiBase = (getEnv("NEXT_PUBLIC_API_URL") || "").replace(/\/+$/, "");
-            const res = await fetchWithAuth(`${apiBase}/api/prescriptions/${prescription.id}`);
-            if (!res.ok) return;
-            const json = await res.json().catch(() => null);
-            const data = json?.data || json;
-            if (data && typeof data === "object") {
-              const merged = normalize({ ...initial, ...data });
-              applyForm(merged);
-            }
-          } catch { /* fall back to row data */ }
-        })();
-      }
+      const p = prescription ? { ...prescription } : blankPrescription();
+      setForm(p);
+      setErrors({});
+      // Only set skip flag if there's an actual value to suppress searching on
+      skipPatientSearchRef.current = !!(p.patientName);
+      setPatientQuery(p.patientName || "");
+      setPatientResults([]);
+      setShowPatientDropdown(false);
+      setPharmacyQuery(p.pharmacyName || "");
+      setPharmacyResults([]);
+      setShowPharmacyDropdown(false);
+      skipPrescriberSearchRef.current = !!(p.prescriberName);
+      setPrescriberQuery(p.prescriberName || "");
+      setPrescriberResults([]);
+      setShowPrescriberDropdown(false);
+      setRefillsInput(p.refills != null ? String(p.refills) : "0");
     }
   }, [open, prescription]);
 

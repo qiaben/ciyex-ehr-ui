@@ -257,18 +257,10 @@ function ImmunizationFormPanel({ open, onClose, record, onSaved, showToast }: {
 
   useEffect(() => {
     if (open) {
-      // Normalize administeredBy: backend may use various field names
-      const normalizeAdminBy = (r: any) =>
-        r?.administeredBy || r?.administeredByName || r?.performer || r?.practitionerName || r?.providerName || "";
-      const normalizeOrderingProv = (r: any) =>
-        r?.orderingProvider || r?.orderingProviderName || r?.requesterName || r?.providerName || "";
-      const normalized = record
-        ? { ...record, administeredBy: normalizeAdminBy(record), orderingProvider: normalizeOrderingProv(record) }
-        : blankImmunization();
-      setForm(normalized);
-      setPatientQuery(normalized?.patientName || "");
-      setAdminByQuery(normalized?.administeredBy || "");
-      setOrderProvQuery(normalized?.orderingProvider || "");
+      setForm(record ? { ...record } : blankImmunization());
+      setPatientQuery(record?.patientName || "");
+      setAdminByQuery(record?.administeredBy || "");
+      setOrderProvQuery(record?.orderingProvider || "");
     }
   }, [open, record]);
   useEffect(() => {
@@ -611,15 +603,10 @@ export default function ImmunizationsPage() {
               } catch { /* silent */ }
             })
           );
-          const resolved = filtered.map((r) => {
-            const ra = r as any;
-            return {
-              ...r,
-              patientName: (r.patientId && nameMap[String(r.patientId)]) ? nameMap[String(r.patientId)] : (r.patientName || ""),
-              // Normalize administeredBy from possible alternate field names
-              administeredBy: r.administeredBy || ra.administeredByName || ra.performer || ra.practitionerName || ra.providerName || "",
-            };
-          });
+          const resolved = filtered.map((r) => ({
+            ...r,
+            patientName: (r.patientId && nameMap[String(r.patientId)]) ? nameMap[String(r.patientId)] : (r.patientName || ""),
+          }));
           if (Array.isArray(json.data)) {
             setRecords(resolved);
             setTotalPages(1);

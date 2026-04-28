@@ -452,19 +452,9 @@ export default function LabOrdersPage() {
   };
 
   const patientName = (o: LabOrder) => {
-    // Try patientName field first (some APIs return combined name)
-    const combined = (o as any).patientName as string | undefined;
-    if (combined && String(combined).trim()) return String(combined).trim();
-    // Fall back to firstName + lastName from order itself (handles single-name cases)
-    const built = `${o.patientFirstName || ""} ${o.patientLastName || ""}`.trim();
-    if (built) return built;
-    // Resolve via patient cache by patientId
+    if (o.patientFirstName && o.patientLastName) return `${o.patientFirstName} ${o.patientLastName}`;
     const c = patientCache.get(o.patientId);
-    if (c) {
-      const fromCache = `${c.firstName || ""} ${c.lastName || ""}`.trim();
-      if (fromCache) return fromCache;
-    }
-    return String(o.patientId || "\u2014");
+    return c ? `${c.firstName} ${c.lastName}` : String(o.patientId || "\u2014");
   };
 
   return (

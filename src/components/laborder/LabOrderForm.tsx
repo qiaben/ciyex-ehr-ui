@@ -59,18 +59,13 @@ type Draft = {
   procedureCode?: string;
 };
 
-// Generate unique order number using date stamp + random suffix to prevent duplicates
-// Format: LAB-YYYYMMDD-XXXX (e.g. LAB-20260428-A1B2)
+// Generate unique order number using timestamp to prevent duplicates
 function generateSequentialOrderNumber(): string {
   const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
-  const datestamp = `${yyyy}${mm}${dd}`;
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let suffix = '';
-  for (let i = 0; i < 4; i++) suffix += chars.charAt(Math.floor(Math.random() * chars.length));
-  return `LAB-${datestamp}-${suffix}`;
+  const year = now.getFullYear();
+  const timestamp = now.getTime();
+  const uniqueNum = timestamp % 100000; // Last 5 digits of timestamp for uniqueness
+  return `ORD-${year}-${String(uniqueNum).padStart(4,'0')}`;
 }
 
 // ---------------- Date display helpers (UI shows MM/DD/YYYY, we store YYYY-MM-DD) ----------------
@@ -645,18 +640,11 @@ export default function LabOrderForm({ initial }: { initial?: Partial<LabOrder> 
   }
 
   function selectPatient(p: LabOrder) {
-    const firstName = p.patientFirstName ?? "";
-    const lastName = p.patientLastName ?? "";
-    const fullName = `${firstName} ${lastName}`.trim();
-    setDraft((d) => ({
-      ...d,
-      patientId: String(p.patientId ?? ""),
-      patientFirstName: firstName,
-      patientLastName: lastName,
-      mrn: p.mrn ?? "",
-      patientSearch: fullName,
-      patientHomePhone: p.patientHomePhone ?? d.patientHomePhone ?? "",
-    }));
+    upd("patientId", String(p.patientId ?? ""));
+    upd("patientFirstName", p.patientFirstName ?? "");
+    upd("patientLastName", p.patientLastName ?? "");
+    upd("mrn", p.mrn ?? "");
+    upd("patientSearch", `${p.patientFirstName} ${p.patientLastName}`);
     setShowPatientDropdown(false);
     if (errors.patientId) setErrors(prev => ({ ...prev, patientId: undefined }));
   }
@@ -875,7 +863,7 @@ export default function LabOrderForm({ initial }: { initial?: Partial<LabOrder> 
 
       const serverMsg = (json?.message || json?.error || '').toString().trim();
       const fallback = serverMsg || (text && text.length < 160 ? text : '') || `HTTP ${res.status}`;
-      setMessage({ type: 'error', text: serverMsg || fallback || 'Failed to create lab order' });
+      setMessage({ type: 'error', text: `Failed to save order: ${fallback || 'Unknown error'}` });
     } catch (err) {
       console.error('saveDraft error', err);
       setMessage({ type: 'error', text: 'Error connecting to backend.' });
@@ -989,7 +977,7 @@ export default function LabOrderForm({ initial }: { initial?: Partial<LabOrder> 
                   className={`flex-1 border rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-80 ${errors.orderNumber ? 'border-orange-500' : 'border-slate-300'}`}
                   value={draft.orderNumber ?? ''}
                   onChange={(e) => upd('orderNumber', e.target.value)}
-                  placeholder="LAB-YYYYMMDD-XXXX"
+                  placeholder="ORD-YYYY-0001"
                   readOnly={!initial}
                 />
                 {!initial && (

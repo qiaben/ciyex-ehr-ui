@@ -179,20 +179,8 @@ export default function CDSPage() {
   const handleSave = async (data: Partial<CDSRule>) => {
     const url = editingRule ? `${API()}/api/cds/rules/${editingRule.id}` : `${API()}/api/cds/rules`;
     const method = editingRule ? "PUT" : "POST";
-    // Ensure required fields have sensible defaults; backend rejects nulls on enum/required fields
-    const payload: Partial<CDSRule> = {
-      ...data,
-      ruleType: data.ruleType || "preventive_screening",
-      severity: data.severity || "info",
-      actionType: data.actionType || "alert",
-      isActive: data.isActive ?? true,
-      appliesTo: data.appliesTo || "all",
-      conditions: data.conditions || {},
-    };
-    // Drop null snoozeDays — backend type is non-nullable number
-    if ((payload as any).snoozeDays == null) delete (payload as any).snoozeDays;
     try {
-      const res = await fetchWithAuth(url, { method, body: JSON.stringify(payload) });
+      const res = await fetchWithAuth(url, { method, body: JSON.stringify(data) });
       const json = await res.json().catch(() => null);
       if (res.ok && json?.success) {
         setToast({ type: "success", text: editingRule ? "Rule updated" : "Rule created" });
@@ -201,12 +189,10 @@ export default function CDSPage() {
         fetchRules();
         fetchStats();
       } else {
-        const msg = json?.message || json?.error || (typeof json === "string" ? json : null) || `Failed to save rule (HTTP ${res.status})`;
-        setToast({ type: "error", text: msg });
+        setToast({ type: "error", text: json?.message || "Failed to save rule" });
       }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "An error occurred while saving the rule";
-      setToast({ type: "error", text: msg });
+    } catch {
+      setToast({ type: "error", text: "An error occurred while saving the rule" });
     }
   };
 

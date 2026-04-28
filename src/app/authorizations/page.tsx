@@ -1467,7 +1467,7 @@ export default function PriorAuthorizationsPage() {
                 >
                   <FormRow>
                     <FormField
-                      label="Authorization Number"
+                      label="Auth Number"
                       value={formData.authNumber}
                       onChange={(v) =>
                         setFormData({ ...formData, authNumber: v })

@@ -58,16 +58,14 @@ export default function LedgerTab({ showToast }: Props) {
     if (!patientQuery.trim()) { setPatientResults([]); return; }
     const t = setTimeout(async () => {
       try {
-        const res = await fetchWithAuth(apiUrl(`/api/patients?search=${encodeURIComponent(patientQuery)}&size=20`));
+        const res = await fetchWithAuth(apiUrl(`/api/patients?search=${encodeURIComponent(patientQuery)}`));
         const json = await res.json();
         let list: typeof patientResults = [];
-        if (Array.isArray(json?.data?.content)) list = json.data.content;
-        else if (Array.isArray(json?.data)) list = json.data;
-        else if (Array.isArray(json?.content)) list = json.content;
-        else if (Array.isArray(json)) list = json;
+        if (Array.isArray(json?.data)) list = json.data;
+        else if (Array.isArray(json?.data?.content)) list = json.data.content;
         setPatientResults(list);
         setShowDropdown(true);
-      } catch { setPatientResults([]); setShowDropdown(true); }
+      } catch { /* silent */ }
     }, 250);
     return () => clearTimeout(t);
   }, [patientQuery]);
@@ -120,14 +118,14 @@ export default function LedgerTab({ showToast }: Props) {
           referenceType: chargeForm.referenceType,
         }),
       });
-      const json = await res.json().catch(() => ({}));
+      const json = await res.json();
       if (res.ok && (json.success !== false)) {
         showToast({ type: "success", text: "Charge posted" });
         setChargeOpen(false);
         setChargeForm({ amount: "", description: "", referenceType: "" });
         fetchLedger();
       } else {
-        showToast({ type: "error", text: json.message || json.error || "Failed to post charge" });
+        showToast({ type: "error", text: json.message || "Failed to post charge" });
       }
     } catch {
       showToast({ type: "error", text: "Network error" });
@@ -155,21 +153,17 @@ export default function LedgerTab({ showToast }: Props) {
             setShowDropdown(true);
           }}
         />
-        {showDropdown && patientQuery.trim() && (
+        {showDropdown && patientResults.length > 0 && (
           <div className="absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg">
-            {patientResults.length > 0 ? (
-              patientResults.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => selectPatient(p)}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-800 dark:text-gray-200"
-                >
-                  {pName(p)} <span className="text-xs text-gray-400">({p.id})</span>
-                </button>
-              ))
-            ) : (
-              <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">No patients match your search</div>
-            )}
+            {patientResults.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => selectPatient(p)}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-800 dark:text-gray-200"
+              >
+                {pName(p)} <span className="text-xs text-gray-400">({p.id})</span>
+              </button>
+            ))}
           </div>
         )}
       </div>
