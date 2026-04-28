@@ -56,6 +56,15 @@ function NewLabOrderContent() {
               ? dataLike.data as Record<string, unknown>
               : dataLike) as Record<string, unknown>;
 
+            // Normalize provider field names (backend may use providerName, prescribingDoctor etc.)
+            if (!payload.orderingProvider) {
+              const altProv = (payload as any).providerName || (payload as any).renderingProvider || (payload as any).prescribingDoctor;
+              if (altProv) payload.orderingProvider = altProv;
+            }
+            if (!payload.physicianName && payload.orderingProvider) {
+              payload.physicianName = payload.orderingProvider;
+            }
+
             // If patient name is missing but patientId exists, fetch patient details
             const pId = payload?.patientId || patientId;
             const hasName = !!(payload?.patientFirstName || payload?.patientLastName);

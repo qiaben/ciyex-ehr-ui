@@ -29,10 +29,13 @@ type InvItem = {
   costMethod: string;
   categoryId: number | null;
   categoryName: string;
+  category?: { id?: number | null; name?: string } | null;
   locationId: number | null;
   locationName: string;
+  location?: { id?: number | null; name?: string } | null;
   supplierId: number | null;
   supplierName: string;
+  supplier?: { id?: number | null; name?: string } | null;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
@@ -128,6 +131,8 @@ export default function Inventory() {
   const [modalMode, setModalMode] = useState<"closed" | "add" | "edit">("closed");
   const [editItem, setEditItem] = useState<InvItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<InvItem | null>(null);
+  const [adjustTarget, setAdjustTarget] = useState<InvItem | null>(null);
+  const [adjustSaving, setAdjustSaving] = useState(false);
 
   // Alert
   const [alertData, setAlertData] = useState<AlertData | null>(null);
@@ -272,6 +277,53 @@ export default function Inventory() {
     }
   }
 
+  async function handleAdjust(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!adjustTarget) return;
+    const fd = new FormData(e.currentTarget);
+    const direction = String(fd.get("direction") || "increase");
+    const qtyRaw = Number(fd.get("quantity") || 0);
+    if (!Number.isFinite(qtyRaw) || qtyRaw <= 0) {
+      setAlertData({ variant: "error", title: "Validation Error", message: "Quantity must be a positive number." });
+      return;
+    }
+    const reasonCode = String(fd.get("reasonCode") || "correction");
+    const notes = String(fd.get("notes") || "");
+    const signed = direction === "decrease" ? -qtyRaw : qtyRaw;
+
+    const payload = {
+      quantityChange: signed,
+      reasonCode,
+      notes,
+    };
+
+    setAdjustSaving(true);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/inventory/${adjustTarget.id}/adjust`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      let json: { success?: boolean; message?: string; data?: any } | null = null;
+      const text = await res.text();
+      if (text) { try { json = JSON.parse(text); } catch { /* ignore */ } }
+      if (!res.ok || (json && json.success === false)) {
+        throw new Error((json && json.message) || `Adjustment failed (HTTP ${res.status})`);
+      }
+      setAdjustTarget(null);
+      setAlertData({
+        variant: "success",
+        title: "Stock Adjusted",
+        message: `${adjustTarget.name} ${direction === "decrease" ? "decreased" : "increased"} by ${qtyRaw}.`,
+      });
+      fetchItems();
+    } catch (err: any) {
+      setAlertData({ variant: "error", title: "Error", message: err.message || "Adjustment failed." });
+    } finally {
+      setAdjustSaving(false);
+    }
+  }
+
   async function handleDelete() {
     if (!deleteTarget) return;
     try {
@@ -339,19 +391,19 @@ export default function Inventory() {
           </select>
         </Field>
         <Field label="Category">
-          <select name="categoryId" defaultValue={item?.categoryId ?? ""} className={selectCls}>
+          <select name="categoryId" defaultValue={item?.categoryId ?? item?.category?.id ?? ""} className={selectCls}>
             <option value="">-- None --</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
         <Field label="Location">
-          <select name="locationId" defaultValue={item?.locationId ?? ""} className={selectCls}>
+          <select name="locationId" defaultValue={item?.locationId ?? item?.location?.id ?? ""} className={selectCls}>
             <option value="">-- None --</option>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
         </Field>
         <Field label="Supplier">
-          <select name="supplierId" defaultValue={item?.supplierId ?? ""} className={selectCls}>
+          <select name="supplierId" defaultValue={item?.supplierId ?? item?.supplier?.id ?? ""} className={selectCls}>
             <option value="">-- None --</option>
             {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
@@ -441,6 +493,9 @@ export default function Inventory() {
                       <td className="px-4 py-3"><Pill tone={tone}>{label}</Pill></td>
                       <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{item.createdBy || "\u2014"}</td>
                       <td className="px-4 py-3 text-right space-x-1">
+                        <button onClick={() => setAdjustTarget(item)} className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50 transition" title="Adjust Stock">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>
+                        </button>
                         <button onClick={() => { setEditItem(item); setModalMode("edit"); }} className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 transition" title="Edit">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                         </button>
@@ -504,6 +559,51 @@ export default function Inventory() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Adjust Stock Modal */}
+        {adjustTarget && (
+          <Modal onClose={() => { if (!adjustSaving) setAdjustTarget(null); }}>
+            <ModalHeader title={`Adjust Stock — ${adjustTarget.name}`} onClose={() => { if (!adjustSaving) setAdjustTarget(null); }} />
+            <form onSubmit={handleAdjust} className="flex max-h-[70vh] flex-col">
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="rounded-md bg-slate-50 p-3 text-sm dark:bg-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400">Current stock: </span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">{adjustTarget.stockOnHand} {adjustTarget.unit}</span>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field label="Direction" required>
+                    <select name="direction" defaultValue="increase" className={selectCls}>
+                      <option value="increase">Increase (+)</option>
+                      <option value="decrease">Decrease (-)</option>
+                    </select>
+                  </Field>
+                  <Field label="Quantity" required>
+                    <Input name="quantity" type="number" min="1" step="1" defaultValue="" className={inputCls} required />
+                  </Field>
+                </div>
+                <Field label="Reason" required>
+                  <select name="reasonCode" defaultValue="correction" className={selectCls}>
+                    <option value="received">Received</option>
+                    <option value="consumed">Consumed</option>
+                    <option value="damaged">Damaged</option>
+                    <option value="expired">Expired</option>
+                    <option value="returned">Returned</option>
+                    <option value="correction">Correction</option>
+                  </select>
+                </Field>
+                <Field label="Notes">
+                  <Input name="notes" defaultValue="" className={inputCls} placeholder="Optional context" />
+                </Field>
+              </div>
+              <div className="flex justify-end gap-3 border-t px-6 py-4 dark:border-gray-700">
+                <Button type="button" disabled={adjustSaving} onClick={() => setAdjustTarget(null)}>Cancel</Button>
+                <Button type="submit" disabled={adjustSaving} className="bg-amber-600 text-white hover:bg-amber-700">
+                  {adjustSaving ? "Saving..." : "Apply Adjustment"}
+                </Button>
+              </div>
+            </form>
+          </Modal>
         )}
       </div>
     </>

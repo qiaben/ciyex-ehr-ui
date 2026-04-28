@@ -872,6 +872,27 @@ export default function ReferralsPage() {
     }
   };
 
+  const handleSend = async (referral: Referral) => {
+    if (!referral.id) return;
+    setTransitioningId(referral.id);
+    try {
+      const res = await fetchWithAuth(`${apiBase()}/api/referrals/${referral.id}/send`, {
+        method: "POST",
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && (json.success ?? true)) {
+        setToast({ type: "success", text: "Referral sent" });
+        refreshAll();
+      } else {
+        setToast({ type: "error", text: json.message || "Failed to send referral" });
+      }
+    } catch {
+      setToast({ type: "error", text: "Network error" });
+    } finally {
+      setTransitioningId(null);
+    }
+  };
+
   const handleDelete = async () => {
     if (!deleteTarget?.id) return;
     setDeleting(true);
@@ -1078,7 +1099,7 @@ export default function ReferralsPage() {
                             {/* Workflow transition button */}
                             {workflow && (
                               <button
-                                onClick={() => handleStatusTransition(r, workflow.next)}
+                                onClick={() => workflow.next === "sent" ? handleSend(r) : handleStatusTransition(r, workflow.next)}
                                 disabled={isTransitioning}
                                 title={workflow.label}
                                 className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 transition disabled:opacity-50"

@@ -439,8 +439,23 @@ function CodeTable({
                   </span>
                 </td>
                 <td className="px-4 py-2.5 text-right">
-                  <button onClick={(e) => { e.stopPropagation(); onEdit(c); }} className="p-1 text-slate-400 hover:text-blue-600" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-                  <button onClick={(e) => { e.stopPropagation(); onDelete(c.id); }} className="p-1 text-slate-400 hover:text-red-600 ml-1" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onEdit(c); }}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition"
+                      title="Edit code"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-medium">Edit</span>
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDelete(c.id); }}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 transition"
+                      title="Delete code"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </td>
               </tr>
               {expandedRow === c.id && (

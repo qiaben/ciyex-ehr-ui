@@ -325,8 +325,17 @@ export default function TransactionsTab({ showToast }: Props) {
                 <tr>
                   <td colSpan={8} className="text-center py-20">
                     <DollarSign className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                    <p className="text-sm font-medium text-gray-500">No transactions found</p>
-                    <p className="text-xs text-gray-400 mt-1">Collect a payment to get started</p>
+                    {searchQuery ? (
+                      <>
+                        <p className="text-sm font-medium text-gray-500">No payments found</p>
+                        <p className="text-xs text-gray-400 mt-1">No results match your filters. Try clearing the search.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium text-gray-500">No transactions found</p>
+                        <p className="text-xs text-gray-400 mt-1">Collect a payment to get started</p>
+                      </>
+                    )}
                   </td>
                 </tr>
               ) : (

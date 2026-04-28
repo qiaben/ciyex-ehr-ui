@@ -83,11 +83,13 @@ const ClaimManagementDashboard: React.FC = () => {
   const [patientQuery, setPatientQuery] = useState("");
   const [patientResults, setPatientResults] = useState<any[]>([]);
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | number | null>(null);
 
   // Provider search autocomplete state
   const [providerQuery, setProviderQuery] = useState("");
   const [providerResults, setProviderResults] = useState<any[]>([]);
   const [showProviderDropdown, setShowProviderDropdown] = useState(false);
+  const [selectedProviderId, setSelectedProviderId] = useState<string | number | null>(null);
 
   const loadClaims = useCallback(async () => {
     setLoading(true);
@@ -128,7 +130,7 @@ const ClaimManagementDashboard: React.FC = () => {
     }
     const timer = setTimeout(async () => {
       try {
-        const res = await fetchWithAuth(`/api/patients?search=${encodeURIComponent(patientQuery)}`);
+        const res = await fetchWithAuth(`/api/patients?search=${encodeURIComponent(patientQuery)}&size=20`);
         if (res.ok) {
           const json = await res.json();
           const list = json.data?.content || json.data || json.content || [];
@@ -151,10 +153,10 @@ const ClaimManagementDashboard: React.FC = () => {
     }
     const timer = setTimeout(async () => {
       try {
-        const res = await fetchWithAuth(`/api/providers?search=${encodeURIComponent(providerQuery)}`);
+        const res = await fetchWithAuth(`/api/providers?search=${encodeURIComponent(providerQuery)}&size=20`);
         if (res.ok) {
           const json = await res.json();
-          const list = json.data || [];
+          const list = json.data?.content || json.data || json.content || [];
           setProviderResults(Array.isArray(list) ? list : []);
           setShowProviderDropdown(true);
         }
@@ -212,9 +214,11 @@ const ClaimManagementDashboard: React.FC = () => {
     setPatientQuery("");
     setPatientResults([]);
     setShowPatientDropdown(false);
+    setSelectedPatientId(null);
     setProviderQuery("");
     setProviderResults([]);
     setShowProviderDropdown(false);
+    setSelectedProviderId(null);
     setShowEditModal(true);
   };
 
@@ -224,9 +228,11 @@ const ClaimManagementDashboard: React.FC = () => {
     setPatientQuery("");
     setPatientResults([]);
     setShowPatientDropdown(false);
+    setSelectedPatientId(null);
     setProviderQuery("");
     setProviderResults([]);
     setShowProviderDropdown(false);
+    setSelectedProviderId(null);
   };
 
   const handleEditChange = (field: string, value: string) => {
@@ -235,12 +241,23 @@ const ClaimManagementDashboard: React.FC = () => {
 
   const saveEdit = async () => {
     if (!editClaim) return;
+    // Validation
+    if (!editForm.patientName?.trim()) {
+      setEditError("Patient name is required");
+      return;
+    }
+    if (!editForm.provider?.trim()) {
+      setEditError("Provider is required");
+      return;
+    }
     setEditSaving(true);
     setEditError("");
     try {
       // Merge edit form with original claim data to preserve IDs and required fields
       // Strip nested objects with null/undefined id to avoid "id cannot be null" backend errors
       const merged: Record<string, any> = { ...editClaim, ...editForm };
+      if (selectedPatientId != null) merged.patientId = selectedPatientId;
+      if (selectedProviderId != null) merged.providerId = selectedProviderId;
       const payload: Record<string, any> = {};
       for (const [k, v] of Object.entries(merged)) {
         if (v !== null && typeof v === "object" && !Array.isArray(v) && "id" in v && (v as any).id == null) continue;
@@ -564,27 +581,33 @@ const ClaimManagementDashboard: React.FC = () => {
                   placeholder="Search patients..."
                   className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                {showPatientDropdown && patientResults.length > 0 && (
+                {showPatientDropdown && (
                   <ul className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto">
-                    {patientResults.map((p: any, idx: number) => {
-                      const name = p.name
-                        || [p.firstName, p.lastName].filter(Boolean).join(" ")
-                        || [p.identification?.firstName, p.identification?.lastName].filter(Boolean).join(" ")
-                        || `Patient #${p.id || idx}`;
-                      return (
-                        <li
-                          key={p.id || idx}
-                          onMouseDown={() => {
-                            handleEditChange("patientName", name);
-                            setPatientQuery("");
-                            setShowPatientDropdown(false);
-                          }}
-                          className="px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 cursor-pointer"
-                        >
-                          {name}
-                        </li>
-                      );
-                    })}
+                    {patientResults.length === 0 ? (
+                      <li className="px-3 py-2 text-sm text-gray-500">No patients match your search</li>
+                    ) : (
+                      patientResults.map((p: any, idx: number) => {
+                        const name = p.fullName
+                          || p.name
+                          || [p.firstName, p.lastName].filter(Boolean).join(" ")
+                          || [p.identification?.firstName, p.identification?.lastName].filter(Boolean).join(" ")
+                          || `Patient #${p.id || idx}`;
+                        return (
+                          <li
+                            key={p.id || idx}
+                            onMouseDown={() => {
+                              handleEditChange("patientName", name);
+                              setSelectedPatientId(p.id ?? p.fhirId ?? null);
+                              setPatientQuery("");
+                              setShowPatientDropdown(false);
+                            }}
+                            className="px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 cursor-pointer"
+                          >
+                            {name}
+                          </li>
+                        );
+                      })
+                    )}
                   </ul>
                 )}
               </div>
@@ -604,27 +627,34 @@ const ClaimManagementDashboard: React.FC = () => {
                   placeholder="Search providers..."
                   className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                {showProviderDropdown && providerResults.length > 0 && (
+                {showProviderDropdown && (
                   <ul className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto">
-                    {providerResults.map((p: any, idx: number) => {
-                      const name = p.name
-                        || [p.identification?.firstName, p.identification?.lastName].filter(Boolean).join(" ")
-                        || [p.firstName, p.lastName].filter(Boolean).join(" ")
-                        || `Provider #${p.id || idx}`;
-                      return (
-                        <li
-                          key={p.id || idx}
-                          onMouseDown={() => {
-                            handleEditChange("provider", name);
-                            setProviderQuery("");
-                            setShowProviderDropdown(false);
-                          }}
-                          className="px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 cursor-pointer"
-                        >
-                          {name}
-                        </li>
-                      );
-                    })}
+                    {providerResults.length === 0 ? (
+                      <li className="px-3 py-2 text-sm text-gray-500">No providers match your search</li>
+                    ) : (
+                      providerResults.map((p: any, idx: number) => {
+                        const name = p.fullName
+                          || p.name
+                          || p.displayName
+                          || [p.identification?.firstName, p.identification?.lastName].filter(Boolean).join(" ")
+                          || [p.firstName, p.lastName].filter(Boolean).join(" ")
+                          || `Provider #${p.id || idx}`;
+                        return (
+                          <li
+                            key={p.id || idx}
+                            onMouseDown={() => {
+                              handleEditChange("provider", name);
+                              setSelectedProviderId(p.id ?? p.fhirId ?? null);
+                              setProviderQuery("");
+                              setShowProviderDropdown(false);
+                            }}
+                            className="px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 cursor-pointer"
+                          >
+                            {name}
+                          </li>
+                        );
+                      })
+                    )}
                   </ul>
                 )}
               </div>
