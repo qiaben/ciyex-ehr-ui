@@ -669,10 +669,8 @@ export default function AppointmentPage() {
   }, [refreshInterval, loadAppointments]);
 
   const onPrint = () => {
-    // Build a clean print table from actual data — no raw innerHTML to avoid interactive elements
-    const pw = window.open("", "_blank");
-    if (!pw) { window.print(); return; }
-
+    // Use a hidden iframe instead of window.open — popup blockers silently
+    // block the latter, which made the Print button appear non-functional.
     const printRows = filtered.map((r) => {
       const statusOpt = getStatusOption(r.status);
       return `<tr>
@@ -687,7 +685,7 @@ export default function AppointmentPage() {
       </tr>`;
     }).join("");
 
-    pw.document.write(`<!DOCTYPE html><html><head><title>Ciyex | FrontDesk</title><style>
+    const html = `<!DOCTYPE html><html><head><title>Ciyex | FrontDesk</title><style>
       body { font-family: system-ui, -apple-system, sans-serif; margin: 0.5in; }
       table { width: 100%; border-collapse: collapse; font-size: 11px; }
       th, td { border: 1px solid #ddd; padding: 4px 8px; text-align: left; }
@@ -703,9 +701,29 @@ export default function AppointmentPage() {
         </tr></thead>
         <tbody>${printRows}</tbody>
       </table>
-    </body></html>`);
-    pw.document.close();
-    setTimeout(() => { pw.print(); pw.close(); }, 300);
+    </body></html>`;
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow?.document;
+    if (!doc) { document.body.removeChild(iframe); window.print(); return; }
+    doc.open();
+    doc.write(html);
+    doc.close();
+    iframe.onload = () => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } finally {
+        setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 1000);
+      }
+    };
   };
 
   // Handle date preset change (#5)
@@ -964,10 +982,16 @@ export default function AppointmentPage() {
               </button>
               {refreshOpen && (
                 <div className="absolute right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-10 min-w-25">
+                  <button
+                    onClick={() => { loadAppointments(true); setRefreshOpen(false); }}
+                    className="block w-full text-left px-3 py-1.5 text-sm border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-blue-600"
+                  >
+                    Refresh now
+                  </button>
                   {REFRESH_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
-                      onClick={() => { setRefreshInterval(opt.value); setRefreshOpen(false); }}
+                      onClick={() => { setRefreshInterval(opt.value); if (opt.value) loadAppointments(true); setRefreshOpen(false); }}
                       className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 ${
                         refreshInterval === opt.value ? "font-semibold text-blue-600" : ""
                       }`}
@@ -1002,20 +1026,27 @@ export default function AppointmentPage() {
               </button>
               {tvOpen && (
                 <div className="absolute right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-10 min-w-45">
-                  <button
-                    onClick={() => { window.open("/appointments/tv?mode=staff", "_blank"); setTvOpen(false); }}
+                  {/* Anchor tags (not buttons + window.open) so popup blockers don't silently block the new tab */}
+                  <a
+                    href="/appointments/tv?mode=staff"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setTvOpen(false)}
                     className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
                     <Monitor className="w-4 h-4 text-blue-500" />
                     Staff TV Board
-                  </button>
-                  <button
-                    onClick={() => { window.open("/appointments/tv?mode=waiting-room", "_blank"); setTvOpen(false); }}
+                  </a>
+                  <a
+                    href="/appointments/tv?mode=waiting-room"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setTvOpen(false)}
                     className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
                     <Tv className="w-4 h-4 text-green-500" />
                     Waiting Room
-                  </button>
+                  </a>
                 </div>
               )}
             </div>

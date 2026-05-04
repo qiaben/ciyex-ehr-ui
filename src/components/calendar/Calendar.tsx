@@ -2086,6 +2086,7 @@ const Calendar: React.FC = () => {
                                     contentHeight="auto"
                                     slotMinTime="00:00:00"
                                     slotDuration="00:15:00"
+                                    slotLabelInterval="00:30:00"
                                     slotLabelFormat={{ hour: 'numeric', minute: '2-digit', hour12: true }}
                                     defaultTimedEventDuration="00:15:00"
                                     scrollTime={`${workingHoursStart}:00`}
