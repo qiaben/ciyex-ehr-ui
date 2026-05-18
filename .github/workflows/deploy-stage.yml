@@ -58,13 +58,10 @@ jobs:
           sed -i "s|newName: IMAGE_URL|newName: $REGISTRY/$IMAGE_NAME|g" k8s/overlays/stage/kustomization.yaml
           sed -i "s|newTag: IMAGE_TAG|newTag: $VERSION|g" k8s/overlays/stage/kustomization.yaml
 
-      - name: Install SSH client
-        run: which ssh || (sudo apt-get update -qq && sudo apt-get install -y openssh-client)
-
-      - name: Set up SSH key
+      - name: Configure kubectl for stage
         run: |
-          echo "${{ secrets.SSH_KEY_STAGE }}" > /tmp/stage_key
-          chmod 600 /tmp/stage_key
+          echo "${{ secrets.KUBE_CONFIG_STAGE }}" | base64 -d > /tmp/kube-stage.yaml
+          echo "KUBECONFIG=/tmp/kube-stage.yaml" >> $GITHUB_ENV
 
       - name: Create registry pull secret
         run: |
@@ -72,18 +69,15 @@ jobs:
             --docker-server=$REGISTRY \
             --docker-username=${{ secrets.PROD_REGISTRY_USERNAME }} \
             --docker-password=${{ secrets.PROD_REGISTRY_PASSWORD }} \
-            --dry-run=client -o yaml | \
-            ssh -i /tmp/stage_key -o StrictHostKeyChecking=no debian@ns1005474.ip-147-135-65.us kubectl apply -f -
+            --dry-run=client -o yaml | kubectl apply -f - --validate=false
 
       - name: Deploy to Stage
-        run: |
-          kubectl kustomize k8s/overlays/stage/ | \
-            ssh -i /tmp/stage_key -o StrictHostKeyChecking=no debian@ns1005474.ip-147-135-65.us kubectl apply -f -
+        run: kubectl apply -k k8s/overlays/stage/ --validate=false
 
       - name: Verify deployment
         run: |
-          ssh -i /tmp/stage_key -o StrictHostKeyChecking=no debian@ns1005474.ip-147-135-65.us \
-            "kubectl rollout status deployment/ciyex-ehr-ui-stage --timeout=3m && kubectl get pods -l app=ciyex-ehr-ui -o wide"
+          kubectl rollout status deployment/ciyex-ehr-ui-stage --timeout=3m
+          kubectl get pods -l app=ciyex-ehr-ui -o wide
 
   notify:
     name: Notify Team
