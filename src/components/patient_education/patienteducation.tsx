@@ -375,13 +375,17 @@ export default function PatientEducationPage() {
     }
     async function confirmAssign(patientId: string, patientName: string, notes?: string) {
         if (!assignTarget) return
+        if (!patientId || !patientId.trim()) {
+            setAlertData({ variant: 'error', title: 'Validation Error', message: 'Please select a patient before assigning.' })
+            return
+        }
         try {
             const res = await fetchWithAuth(`${API_URL}/api/patient-education-assignments/${assignTarget.id}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    patientId,
-                    patientName,   // backend DTO likely only needs patientId + notes
+                    patientId: Number(patientId),
+                    patientName,
                     notes: notes ?? ''
                 }),
             })
@@ -411,7 +415,8 @@ export default function PatientEducationPage() {
             })
         } catch (err) {
             console.error('Assign failed:', err)
-            setAlertData({ variant: 'error', title: 'Error', message: 'Failed to assign education to patient.' })
+            const msg = err instanceof Error ? err.message : 'Failed to assign education to patient.'
+            setAlertData({ variant: 'error', title: 'Error', message: msg })
         }
     }
     async function markDelivered(id: string) {
@@ -443,6 +448,14 @@ export default function PatientEducationPage() {
     /** Create topic (POST) */
     async function createTopic(payload: Partial<Topic>) {
         if (!payload.title || !payload.content) return
+        if (!payload.category || !payload.category.trim()) {
+            setAlertData({ variant: 'error', title: 'Validation Error', message: 'Category is required.' })
+            return
+        }
+        if (!payload.language || !payload.language.trim()) {
+            setAlertData({ variant: 'error', title: 'Validation Error', message: 'Language is required.' })
+            return
+        }
         setCreating(true)
         try {
             const res = await fetchWithAuth(`${API_URL}/api/patient-education`, {
@@ -452,21 +465,21 @@ export default function PatientEducationPage() {
                     title: payload.title,
                     summary: payload.summary ?? '',
                     content: payload.content,
-                    category: payload.category ?? '',
-                    language: payload.language ?? '',
+                    category: payload.category,
+                    language: payload.language,
                     readingLevel: payload.readingLevel ?? 'Basic',
                 }),
             })
             const json = await res.json()
             if (!res.ok || !json.success) throw new Error(json.message || 'Failed to create')
             const created: Topic = dtoToTopic(json.data)
-            // Prepend so user sees it immediately
             setTopics(prev => [created, ...prev])
             setShowCreateModal(false)
             setAlertData({ variant: 'success', title: 'Created', message: `Added “${created.title}”.` })
         } catch (err) {
             console.error('Create topic failed:', err)
-            setAlertData({ variant: 'error', title: 'Error', message: 'Failed to add patient education.' })
+            const msg = err instanceof Error ? err.message : 'Failed to add patient education.'
+            setAlertData({ variant: 'error', title: 'Error', message: msg })
         } finally {
             setCreating(false)
         }
@@ -493,10 +506,11 @@ export default function PatientEducationPage() {
             setTopics(prev => prev.map(t => (t.id === id ? updated : t)))
             setEditing(null)
             setPreview(updated)
-            setAlertData({ variant: 'success', title: 'Updated', message: `“${updated.title}” was updated.` })
+            setAlertData({ variant: 'success', title: 'Updated', message: `”${updated.title}” was updated.` })
         } catch (err) {
             console.error('Update topic failed:', err)
-            setAlertData({ variant: 'error', title: 'Error', message: 'Failed to update patient education.' })
+            const msg = err instanceof Error ? err.message : 'Failed to update patient education.'
+            setAlertData({ variant: 'error', title: 'Error', message: msg })
         }
     }
 
@@ -1032,8 +1046,9 @@ function AssignModal({
                             Cancel
                         </button>
                         <button
-                            onClick={() => onConfirm(patientId || 'p-demo', patientName || patientQuery || 'Patient', notes)}
-                            className="inline-flex items-center gap-2 rounded-2xl bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600"
+                            disabled={!patientId}
+                            onClick={() => onConfirm(patientId, patientName || patientQuery || '', notes)}
+                            className="inline-flex items-center gap-2 rounded-2xl bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <Send className="h-4 w-4" /> Assign
                         </button>
@@ -1139,7 +1154,7 @@ function CreateModal({
                     </button>
                     <button
                         onClick={() => onCreate({ title, summary, content, category, language, readingLevel: level })}
-                        disabled={!title || !content || busy}
+                        disabled={!title || !content || !category.trim() || !language.trim() || busy}
                         className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-60"
                     >
                         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
