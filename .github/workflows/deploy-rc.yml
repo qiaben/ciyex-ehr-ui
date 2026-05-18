@@ -59,7 +59,7 @@ jobs:
           sed -i "s|newTag: IMAGE_TAG|newTag: $VERSION|g" k8s/overlays/rc/kustomization.yaml
 
       - name: Install SSH client
-        run: which ssh || apt-get install -y openssh-client
+        run: which ssh || sudo apt-get install -y openssh-client
 
       - name: Set up SSH key
         run: |
