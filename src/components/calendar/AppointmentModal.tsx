@@ -754,35 +754,45 @@ const AppointmentModal: React.FC = () => {
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-400">
                             Appointment Start date
                         </label>
-                        <input
-                            type="text"
-                            placeholder="MM/DD/YYYY"
-                            value={startDateInput}
-                            maxLength={10}
-                            onChange={(e) => {
-                                const formatted = formatInputToMMDDYYYY(e.target.value);
-                                setStartDateInput(formatted);
-                                setStartDate(toISODateFromMMDDYYYY(formatted));
-                            }}
-                            className="h-9 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-gray-700 dark:bg-dark-900 dark:text-gray-100"
-                        />
+                        <div className="relative">
+                            <input
+                                type="text"
+                                placeholder="MM/DD/YYYY"
+                                value={startDateInput}
+                                maxLength={10}
+                                onChange={(e) => {
+                                    const formatted = formatInputToMMDDYYYY(e.target.value);
+                                    setStartDateInput(formatted);
+                                    setStartDate(toISODateFromMMDDYYYY(formatted));
+                                }}
+                                className="h-9 w-full rounded-lg border border-gray-300 px-2 py-1.5 pr-8 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-gray-700 dark:bg-dark-900 dark:text-gray-100"
+                            />
+                            <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </div>
                     </div>
                     <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-400">
                             Appointment End date
                         </label>
-                        <input
-                            type="text"
-                            placeholder="MM/DD/YYYY"
-                            value={endDateInput}
-                            maxLength={10}
-                            onChange={(e) => {
-                                const formatted = formatInputToMMDDYYYY(e.target.value);
-                                setEndDateInput(formatted);
-                                setEndDate(toISODateFromMMDDYYYY(formatted));
-                            }}
-                            className="h-9 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-gray-700 dark:bg-dark-900 dark:text-gray-100"
-                        />
+                        <div className="relative">
+                            <input
+                                type="text"
+                                placeholder="MM/DD/YYYY"
+                                value={endDateInput}
+                                maxLength={10}
+                                onChange={(e) => {
+                                    const formatted = formatInputToMMDDYYYY(e.target.value);
+                                    setEndDateInput(formatted);
+                                    setEndDate(toISODateFromMMDDYYYY(formatted));
+                                }}
+                                className="h-9 w-full rounded-lg border border-gray-300 px-2 py-1.5 pr-8 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-gray-700 dark:bg-dark-900 dark:text-gray-100"
+                            />
+                            <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </div>
                     </div>
 
                     {/* Times */}
