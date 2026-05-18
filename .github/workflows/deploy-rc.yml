@@ -58,6 +58,9 @@ jobs:
           sed -i "s|newName: IMAGE_URL|newName: $REGISTRY/$IMAGE_NAME|g" k8s/overlays/rc/kustomization.yaml
           sed -i "s|newTag: IMAGE_TAG|newTag: $VERSION|g" k8s/overlays/rc/kustomization.yaml
 
+      - name: Install SSH client
+        run: which ssh || apt-get install -y openssh-client
+
       - name: Set up SSH key
         run: |
           echo "${{ secrets.SSH_KEY_STAGE }}" > /tmp/stage_key
