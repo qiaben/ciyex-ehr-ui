@@ -58,9 +58,13 @@ jobs:
           sed -i "s|newName: IMAGE_URL|newName: $REGISTRY/$IMAGE_NAME|g" k8s/overlays/stage/kustomization.yaml
           sed -i "s|newTag: IMAGE_TAG|newTag: $VERSION|g" k8s/overlays/stage/kustomization.yaml
 
+      - name: Configure kubectl for stage
+        run: |
+          echo "${{ secrets.KUBE_CONFIG_STAGE }}" | base64 -d > /tmp/kube-stage.yaml
+          echo "KUBECONFIG=/tmp/kube-stage.yaml" >> $GITHUB_ENV
+
       - name: Create registry pull secret
         run: |
-          kubectl config use-context kube-stage
           kubectl create secret docker-registry regcred \
             --docker-server=$REGISTRY \
             --docker-username=${{ secrets.PROD_REGISTRY_USERNAME }} \
