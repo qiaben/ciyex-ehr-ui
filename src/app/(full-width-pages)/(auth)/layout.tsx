@@ -11,7 +11,7 @@ export default function AuthLayout({
     children: React.ReactNode;
 }) {
     return (
-        <div className="relative bg-white z-1 dark:bg-gray-900">
+        <div className="relative bg-gray-900 z-1">
             <ThemeProvider>
                 <div className="relative w-full min-h-screen">
                     {/* Auth content - full width */}
