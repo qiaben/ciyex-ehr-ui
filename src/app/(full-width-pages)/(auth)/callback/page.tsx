@@ -28,7 +28,12 @@ function AuthCallbackContent() {
             try {
                 // Get PKCE code verifier from session storage
                 const codeVerifier = sessionStorage.getItem('pkce_code_verifier');
-                
+
+                if (!codeVerifier) {
+                    setError("Session expired — please sign in again.");
+                    return;
+                }
+
                 // Exchange code for token with backend
                 const response = await fetch(`${apiUrl}/api/auth/keycloak-callback`, {
                     method: "POST",
@@ -38,12 +43,17 @@ function AuthCallbackContent() {
                     body: JSON.stringify({
                         code,
                         redirectUri: window.location.origin + "/callback",
-                        codeVerifier: codeVerifier || undefined,
+                        codeVerifier,
                     }),
                 });
 
                 if (!response.ok) {
-                    throw new Error("Failed to exchange authorization code");
+                    let errorMessage = "Failed to exchange authorization code";
+                    try {
+                        const errData = await response.json();
+                        errorMessage = errData.error || errData.message || errorMessage;
+                    } catch {}
+                    throw new Error(errorMessage);
                 }
 
                 const data = await response.json();
@@ -129,7 +139,8 @@ function AuthCallbackContent() {
                 }
             } catch (err) {
                 console.error("Callback error:", err);
-                setError("An error occurred during authentication");
+                const message = err instanceof Error ? err.message : "An error occurred during authentication";
+                setError(message);
             }
         };
 
