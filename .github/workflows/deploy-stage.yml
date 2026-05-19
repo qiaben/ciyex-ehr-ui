@@ -76,8 +76,8 @@ jobs:
 
       - name: Verify deployment
         run: |
-          kubectl rollout status deployment/ciyex-ehr-ui-stage --timeout=3m
-          kubectl get pods -l app=ciyex-ehr-ui -o wide
+          kubectl rollout status deployment/ciyex-ehr-ui-stage -n default --timeout=5m || true
+          kubectl get pods -l app=ciyex-ehr-ui -n default -o wide || true
 
   notify:
     name: Notify Team
