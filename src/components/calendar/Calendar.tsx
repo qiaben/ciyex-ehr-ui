@@ -1305,10 +1305,21 @@ const Calendar: React.FC = () => {
                 <div className="flex items-center gap-4">
                     {/* Providers */}
                     <div className="relative w-44">
+                        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-gray-400">
+                            {/* Half-person with stethoscope (outline) */}
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="5" r="3" />
+                                <path d="M7 21v-2a5 5 0 015-5h0a5 5 0 015 5v2" />
+                                <path d="M8 10 Q6 12 6 14.5 Q6 17.5 9 17.5 Q12 17.5 12 14.5 V12" />
+                                <circle cx="12" cy="11.5" r="1.2" />
+                                <path d="M12 10 Q14.5 9 14.5 6.5" />
+                                <circle cx="14.5" cy="6" r="0.8" />
+                            </svg>
+                        </span>
                         <select
                             value={provider}
                             onChange={(e) => setProvider(e.target.value)}
-                            className="h-9 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900
+                            className="h-9 w-full rounded-lg border border-gray-300 pl-7 pr-2 py-1.5 text-sm text-gray-900
       focus:outline-none focus:ring-2 focus:ring-brand-500
       dark:border-gray-700 dark:bg-dark-900 dark:text-gray-100"
                         >
@@ -1329,10 +1340,17 @@ const Calendar: React.FC = () => {
 
                     {/* Locations */}
                     <div className="relative w-52">
+                        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-gray-400">
+                            {/* Location pin (outline) */}
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 2C8.686 2 6 4.686 6 8c0 5.25 6 13 6 13s6-7.75 6-13c0-3.314-2.686-6-6-6z" />
+                                <circle cx="12" cy="8" r="2.25" />
+                            </svg>
+                        </span>
                         <select
                             value={location}
                             onChange={(e) => setLocation(e.target.value)}
-                            className="h-9 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900
+                            className="h-9 w-full rounded-lg border border-gray-300 pl-7 pr-2 py-1.5 text-sm text-gray-900
           focus:outline-none focus:ring-2 focus:ring-brand-500
           dark:border-gray-700 dark:bg-dark-900 dark:text-gray-100"
                         >

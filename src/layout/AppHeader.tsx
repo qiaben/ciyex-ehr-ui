@@ -224,14 +224,14 @@ const AppHeader: React.FC<AppHeaderProps> = ({ pageTitle }) => {
                         <span className="text-xl font-bold">+</span>
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30" className="w-5 h-5">
                             <path
-                                className="stroke-[#6C3DB7]"
+                                className="stroke-white fill-white"
                                 d="M24,28H6c-1.1,0-2-0.9-2-2v0c0-3.9,3.1-7,7-7h8c3.9,0,7,3.1,7,7v0C26,27.1,25.1,28,24,28z"
                             />
-                            <circle className="fill-[#6EBAFF]" cx="15" cy="9" r="6" />
+                            <circle className="fill-white" cx="15" cy="9" r="6" />
                         </svg>
                     </button>
 
-                    {/* Appointment button */}
+                    {/* Appointment button — hidden
                     <button
                         onClick={() => window.dispatchEvent(new Event("open-appointment-modal"))}
                         className="inline-flex items-center gap-1.5 rounded-md bg-blue-100 text-blue-700 px-3 py-1.5 text-sm font-medium hover:bg-blue-200"
@@ -251,6 +251,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ pageTitle }) => {
                             <line x1="16" y1="2" x2="16" y2="6" />
                         </svg>
                     </button>
+                    */}
 
                     <NotificationDropdown />
                     <UserDropdown />

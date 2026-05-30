@@ -59,11 +59,11 @@ const navItems: NavItem[] = [
     path: "/calendar",
   },
 
-{
-    icon: <AppointmentIcon />,
-    name: "Appointments",
-    path: "/appointments", //  top-level now
-  },
+  // {
+  //   icon: <AppointmentIcon />,
+  //   name: "Appointments",
+  //   path: "/appointments",
+  // },
 
   {
     // Updated Patients icon with SVG path

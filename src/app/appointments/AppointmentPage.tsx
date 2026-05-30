@@ -632,7 +632,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import AdminLayout from "@/app/(admin)/layout";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
-import { NotebookPen, Scissors, Activity, X, CheckCircle, XCircle, Loader2, Video } from "lucide-react";
+import { NotebookPen, Scissors, Activity, X, CheckCircle, XCircle, Loader2, Video, RefreshCw, Monitor } from "lucide-react";
 import VideoCallModal from "@/components/telehealth/VideoCallModal";
 
 // drawer content
@@ -994,9 +994,12 @@ export default function AppointmentPage() {
       case "SCHEDULED":  return "bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200";
       case "PENDING":    return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
       case "CANCELLED":  return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
-      case "CHECKED":    return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200";
-      case "UNCHECKED":  return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
-      default:           return "bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-200";
+      case "CHECKED":      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200";
+      case "UNCHECKED":    return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
+      case "CHECKED-IN":
+      case "IN PROGRESS":  return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+      case "COMPLETED":    return "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200";
+      default:             return "bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-200";
     }
   };
 
@@ -1183,6 +1186,28 @@ export default function AppointmentPage() {
               <span className="italic font-semibold">Total appointments:</span>{" "}
               {loadingAppointments ? "…" : total}
             </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setStatusFilter(statusFilter === "Checked-in" ? "All" : "Checked-in"); setCurrentPage(1); }}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  statusFilter === "Checked-in"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-200 dark:hover:bg-blue-800"
+                }`}
+              >
+                In Progress
+              </button>
+              <button
+                onClick={() => { setStatusFilter(statusFilter === "Completed" ? "All" : "Completed"); setCurrentPage(1); }}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  statusFilter === "Completed"
+                    ? "bg-teal-600 text-white shadow-sm"
+                    : "bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900 dark:text-teal-200 dark:hover:bg-teal-800"
+                }`}
+              >
+                Completed
+              </button>
+            </div>
           </div>
 
           {/* Filters */}
@@ -1223,6 +1248,8 @@ export default function AppointmentPage() {
               >
                 <option value="All">All Statuses</option>
                 <option value="Scheduled">Scheduled</option>
+                <option value="Checked-in">In Progress</option>
+                <option value="Completed">Completed</option>
                 <option value="Checked">Checked</option>
                 <option value="Unchecked">Unchecked</option>
               </select>
@@ -1233,14 +1260,15 @@ export default function AppointmentPage() {
 
             <div className="flex gap-2">
               <button onClick={onRefresh} disabled={loadingAppointments}
-                      className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60" title="Refresh table data">
-                Refresh
+                      className="flex items-center justify-center h-10 w-10 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-60 shadow-sm" title="Refresh">
+                <RefreshCw className="h-5 w-5" strokeWidth={1.5} />
               </button>
               <button onClick={onPrint} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
                 Print
               </button>
-              <button onClick={onKiosk} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
-                Kiosk
+              <button onClick={onKiosk}
+                      className="flex items-center justify-center h-10 w-10 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 shadow-sm" title="TV Display">
+                <Monitor className="h-5 w-5" strokeWidth={1.5} />
               </button>
             </div>
           </div>
