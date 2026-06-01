@@ -89,14 +89,10 @@ export class MediasoupStompProvider implements VideoCallProvider {
             }, 20000);
 
             const stompClient = new Client({
-                // XHR-polling only. WebSocket upgrade through Cloudflare Tunnel fails
-                // because Chrome uses HTTP/2 extended CONNECT (RFC 8441) and cloudflared
-                // mistranslates it to the origin (Tomcat returns 400 "Can 'Upgrade' only
-                // to 'WebSocket'"). HTTP/1.1 WS works but browsers can't be forced down
-                // to it. XHR-polling is plain HTTP and survives the HTTP/2 path.
-                // XHR-streaming is also excluded — Cloudflare's QUIC kills long-lived
-                // streaming connections.
-                webSocketFactory: () => new SockJS(sockjsUrl, null, { transports: ["xhr-polling"] }) as any,
+                // Use SockJS with WebSocket first (Cloudflare Tunnel proxies WS natively),
+                // then XHR-polling as fallback. XHR-streaming is excluded because Cloudflare
+                // Tunnel's QUIC protocol kills long-lived HTTP streaming connections.
+                webSocketFactory: () => new SockJS(sockjsUrl, null, { transports: ["websocket", "xhr-polling"] }) as any,
                 reconnectDelay: 5000,
                 heartbeatIncoming: 10000,
                 heartbeatOutgoing: 10000,
