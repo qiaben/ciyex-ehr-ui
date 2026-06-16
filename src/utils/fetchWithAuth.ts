@@ -9,10 +9,14 @@ export async function fetchWithAuth(
   const orgId = get("orgId");
   const facilityId = get("facilityId");
   const role = get("role");
+  // Current practice/tenant. Without this the backend can't scope the request,
+  // so data (e.g. providers) leaks across practices after a switch/creation.
+  const selectedTenant = get("selectedTenant");
 
   const authHeaders: Record<string, string> = {
     "Accept": "application/json",
     ...(token && { Authorization: `Bearer ${token}` }),
+    ...(selectedTenant && { "X-Tenant-Name": selectedTenant }),
     ...(orgId && { "X-Org-Id": orgId, "orgId": orgId }), // keep both while migrating
     ...(facilityId && { "X-Facility-Id": facilityId }),
     ...(role && { "X-Role": role }),
@@ -34,6 +38,9 @@ export async function fetchWithAuth(
   const url = typeof input === 'string' && input.startsWith('/') ? `${base}${input}` : input;
 
   const res = await fetch(url, {
+    // Default to "no-store" so per-practice data isn't served from a stale
+    // browser cache after switching/creating a practice (callers can override).
+    cache: init?.cache ?? "no-store",
     credentials: init?.credentials ?? "include",
     ...init,
     headers,
