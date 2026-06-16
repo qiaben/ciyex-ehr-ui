@@ -617,6 +617,9 @@ span.flatpickr-weekday,
   border: none;
   color: black;
 }
+.dark .custom-calendar .fc-h-event {
+  color: white;
+}
 .fc.fc-media-screen {
   @apply min-h-screen;
 }
@@ -746,5 +749,31 @@ span.flatpickr-weekday,
 .provider-col:not(:first-child) .fc-timegrid-axis,
 .provider-col:not(:first-child) .fc-timegrid-slot-label {
     display: none !important;
+}
+
+/* ===== TV Display (Fullscreen) - Theme-Aware ===== */
+:root {
+  color-scheme: light;
+  --tv-bg: #ffffff;
+  --tv-fg: #1e293b;
+}
+
+.dark {
+  color-scheme: dark;
+  --tv-bg: #111827;
+  --tv-fg: #f9fafb;
+}
+
+:fullscreen,
+:-webkit-full-screen {
+  overflow-y: auto !important;
+  border-radius: 0 !important;
+  background-color: var(--tv-bg) !important;
+  color: var(--tv-fg) !important;
+}
+
+:fullscreen::backdrop,
+:-webkit-full-screen::backdrop {
+  background-color: var(--tv-bg);
 }
 
