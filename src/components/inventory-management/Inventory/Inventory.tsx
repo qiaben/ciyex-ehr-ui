@@ -1,6 +1,6 @@
 "use client";
 
-import React, {useEffect, useMemo, useState} from "react";
+import React, {useCallback, useEffect, useMemo, useState} from "react";
 import Button from "@/components/ui/button/Button";
 import Label from "@/components/form/Label";
 import { Input } from "@/components/ui/input";
@@ -154,24 +154,45 @@ export default function Inventory() {
 
 
 
-    useEffect(() => {
-        (async () => {
-            try {
-                const res = await fetchWithAuth(`${API_URL}/api/suppliers`);
-                const json = await res.json();
-                if (res.ok && json.success && Array.isArray(json.data?.content)) {
-                    setSupplierOptions(
-                        (json.data.content as SupplierApiResponse[]).map((s) => ({
-                            id: String(s.id),
-                            name: s.name,
-                        }))
-                    );
-                }
-            } catch (err) {
-                console.error("Failed to load suppliers:", err);
+    const loadSuppliers = useCallback(async () => {
+        try {
+            // size=1000 so the dropdown gets the full list, not just the
+            // paginated default (10/20). Re-fetched when the Add modal opens
+            // so a transient failure or tenant switch self-heals.
+            const res = await fetchWithAuth(`${API_URL}/api/suppliers?page=0&size=1000`);
+            const json = await res.json();
+            if (!res.ok || json?.success === false) {
+                console.error("Failed to load suppliers:", res.status, json?.message);
+                return;
             }
-        })();
+            // Accept both the paginated shape ({ data: { content: [...] } })
+            // and a plain array ({ data: [...] }) depending on backend.
+            const list: SupplierApiResponse[] = Array.isArray(json?.data?.content)
+                ? json.data.content
+                : Array.isArray(json?.data)
+                    ? json.data
+                    : [];
+            setSupplierOptions(
+                list.map((s) => ({
+                    id: String(s.id),
+                    name: s.name,
+                }))
+            );
+        } catch (err) {
+            console.error("Failed to load suppliers:", err);
+        }
     }, []);
+
+    useEffect(() => {
+        loadSuppliers();
+    }, [loadSuppliers]);
+
+    // Refresh suppliers each time the Add modal opens, so the dropdown is
+    // populated even if the initial mount fetch failed or suppliers were
+    // added since.
+    useEffect(() => {
+        if (addOpen) loadSuppliers();
+    }, [addOpen, loadSuppliers]);
 
     useEffect(() => {
         (async () => {
@@ -1042,7 +1063,11 @@ export default function Inventory() {
                                                 }
                                             }}
                                         >
-                                            <option value="" disabled>Select supplier</option>
+                                            <option value="" disabled>
+                                                {supplierOptions.length === 0
+                                                    ? "No suppliers found — add one in Suppliers"
+                                                    : "Select supplier"}
+                                            </option>
                                             {supplierOptions.map(s => (
                                                 <option key={s.id} value={s.name}>
                                                     {s.name}
